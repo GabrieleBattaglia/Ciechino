@@ -15,6 +15,9 @@ anche questi numeri si confrontano con costanti.py.
 Con la scelta della scheda audio (D20) il menu Impostazioni ha il suo primo tasto rapido, Ctrl+Maiusc+X: il
 manuale dice ogni voce dei menu che ha un tasto, col tasto come lo scrive la guida F1, e la prova lo legge dalla
 tabella dei menu della finestra, senza aprirla.
+Col sommario del resoconto (D21) e la palestra delle attese (D22) il manuale dice fino a quale livello vanno i
+numeri, le parole, le attese e la pausa di Ctrl+P, con le soglie del sommario e la grazia dello spazio: anche
+questi si confrontano con costanti.py, e l'avviso di Ctrl+P fuori dalla palestra con quello di resoconti.py.
 """
 
 import re
@@ -22,6 +25,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
+import resoconti
 import suoni
 import testi
 from bersagli import raggio_del_livello, velocita_del_livello
@@ -29,10 +33,18 @@ from costanti import (
     ALZO_FREQUENZE,
     ESCURSIONE_A_CASO,
     FORME_LFO,
+    GRAZIA_DELL_ATTESA,
     LIVELLO_DEI_BONUS,
+    PALESTRA_FINO_AL_LIVELLO,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
     RAGGIO_BONUS_FATTORE,
+    SOMMARIO_NUMERI_FINO_AL_LIVELLO,
+    SOMMARIO_PAROLE_FINO_AL_LIVELLO,
+    SOMMARIO_SOGLIA_INCLINAZIONE,
+    SOMMARIO_SOGLIA_LATERALE,
+    SOMMARIO_SOGLIA_PROFONDITA,
+    SOMMARIO_SOGLIA_VERTICALE,
     VERSIONE,
 )
 from partita import punti_del_centro
@@ -45,6 +57,12 @@ A_PAROLE = ("zero", "una", "due", "tre", "quattro", "cinque", "sei", "sette", "o
             "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove", "venti")
 # Come il manuale dice le forme del proiettile, nell'elenco delle Impostazioni.
 PROIETTILI_A_PAROLE = {"seno": "il seno", "triangolo": "il triangolo", "sega_morbida": "la sega morbida"}
+# I livelli come il manuale li conta, per la palestra e il sommario: «dal settimo livello».
+ORDINALI = ("", "primo", "secondo", "terzo", "quarto", "quinto", "sesto", "settimo", "ottavo", "nono", "decimo", "undicesimo", "dodicesimo")
+# Come il manuale dice la soglia in metri del sommario, uguale per i tre assi, e la grazia dello spazio nella palestra: un
+# valore nuovo va scritto anche qui, e nel manuale.
+SOGLIE_A_PAROLE = {0.5: "Uno scarto sotto il mezzo metro"}
+GRAZIE_A_PAROLE = {0.5: "o nel mezzo secondo che segue"}
 # Gli elementi HTML che non si chiudono.
 VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
@@ -197,6 +215,35 @@ def test_il_manuale_dice_ogni_voce_dei_menu_col_suo_tasto():
     assert ("Scheda audio", "Ctrl+Maiusc+X") in con_tasto, "nei menu manca Scheda audio con Ctrl+Maiusc+X"
     mancanti = [f"{voce}, {tasto}" for voce, tasto in con_tasto if f"<li>{voce}, <kbd>{tasto}</kbd>" not in manuale]
     assert not mancanti, f"voci dei menu che il manuale non dice col loro tasto: {mancanti}"
+
+
+def test_il_manuale_dice_i_livelli_della_palestra_e_del_sommario():
+    """D21 e D22: i livelli del sommario coi numeri e a parole, la palestra delle attese e di Ctrl+P, le soglie del
+    sommario e la grazia dello spazio, detti nel manuale coi valori di costanti.py; e l'avviso di Ctrl+P fuori dalla
+    palestra, citato con le parole della vista."""
+    manuale = _leggi("manuale.html")
+    numeri, parole, palestra = SOMMARIO_NUMERI_FINO_AL_LIVELLO, SOMMARIO_PAROLE_FINO_AL_LIVELLO, PALESTRA_FINO_AL_LIVELLO
+    frasi = [
+        f"Nei primi {A_PAROLE[parole]} livelli il resoconto di ogni tiro comincia con un sommario",
+        f"Nella palestra, i primi {A_PAROLE[numeri]} livelli, il sommario dà i numeri, in metri e in gradi, con un decimale e il segno",
+        f"Dal {ORDINALI[numeri + 1]} al {ORDINALI[parole]} livello restano soltanto le parole",
+        f"Dal {ORDINALI[parole + 1]} livello il sommario non c'è più",
+        f'<h3 id="palestra">La palestra, i primi {A_PAROLE[palestra]} livelli</h3>',
+        f"I primi {A_PAROLE[palestra]} livelli sono una palestra",
+        f"Dal primo tiro del {ORDINALI[palestra + 1]} livello la palestra è finita",
+        resoconti.pausa_solo_in_palestra(palestra).testo,
+        f"un'inclinazione sotto i {testi.intero(SOMMARIO_SOGLIA_INCLINAZIONE)} gradi",
+    ]
+    soglie = {SOMMARIO_SOGLIA_LATERALE, SOMMARIO_SOGLIA_VERTICALE, SOMMARIO_SOGLIA_PROFONDITA}
+    assert len(soglie) == 1, "il manuale dice una soglia sola per laterale, verticale e profondità"
+    soglia = soglie.pop()
+    assert soglia in SOGLIE_A_PAROLE, f"la soglia del sommario di {soglia} metri va detta nel manuale, e in SOGLIE_A_PAROLE"
+    assert GRAZIA_DELL_ATTESA in GRAZIE_A_PAROLE, f"la grazia di {GRAZIA_DELL_ATTESA} secondi va detta nel manuale, e in GRAZIE_A_PAROLE"
+    frasi.extend((SOGLIE_A_PAROLE[soglia], GRAZIE_A_PAROLE[GRAZIA_DELL_ATTESA]))
+    mancanti = [frase for frase in frasi if frase not in manuale]
+    assert not mancanti, f"frasi della palestra e del sommario che il manuale non dice: {mancanti}"
+    # La palestra delle attese e quella dei numeri del sommario oggi coincidono, e il manuale lo dà per inteso.
+    assert numeri == palestra, "il sommario coi numeri e la palestra non vanno più fino allo stesso livello: rileggi il manuale"
 
 
 def test_niente_separatori_grafici_nei_documenti():

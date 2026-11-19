@@ -24,7 +24,8 @@ La finestra ha la vista della partita, dove arriva il resoconto di ogni tiro, e 
 3. La barra spaziatrice avvia la mira: il tempo si ferma, e i bersagli restano dove sono, più piano.
 4. Tre scivolate, direzione, alzo e potenza: ognuna comincia dopo un secondo di silenzio con tre bip, poi scivola per tre secondi con dieci tacche, e la barra spaziatrice la ferma sul valore che vuoi. Lo spazio nei bip sceglie il minimo, nessuno spazio il massimo.
 5. Parte il colpo: senti lo sparo, il proiettile che vola e l'impatto, dal punto in cui avviene; un centro finisce con un breve jingle, e quello del bonus è più lungo e più acuto.
-6. Il resoconto dice l'esito, i valori del tiro e dove è passato il colpo; nei primi livelli, dopo un tiro a vuoto, anche di quanto e dove hai mancato il bersaglio.
+6. Finito il suono dell'impatto, arriva il resoconto. Nei primi sei livelli comincia con il sommario, Dal bersaglio: dove il proiettile è passato rispetto al centro del bersaglio, di lato, in altezza e in profondità, e se saliva o scendeva, coi numeri fino al terzo livello e a parole fino al sesto. Poi dice l'esito, i valori del tiro e dove è passato il colpo; nei primi livelli, dopo un tiro a vuoto, anche di quanto e dove hai mancato il bersaglio.
+7. Nei primi tre livelli, la palestra, la partita poi si ferma e tace, per leggere il resoconto con calma: la barra spaziatrice chiama il bersaglio nuovo dopo un centro, o riporta all'ascolto dopo un tiro a vuoto. Dal quarto livello si torna subito ad ascoltare.
 
 Un tiro a vuoto costa un colpo, un centro non costa niente e vale fino al doppio per la precisione. Dieci centri chiudono il livello e danno altri dieci colpi; a riserva vuota la partita finisce.
 
@@ -32,7 +33,7 @@ Proiettile, nel menu Impostazioni, sceglie il timbro del proiettile in volo, sen
 
 Scheda audio, nel menu Impostazioni, o Ctrl+Maiusc+X, sceglie dove suona Ciechino: rilegge le schede, così nell'elenco ci sono anche le cuffie Bluetooth accese dopo l'avvio, e dice la latenza di ognuna. La scheda scelta vale da subito e resta per i prossimi avvii; se manca, Ciechino suona su quella automatica, la scheda di Windows, e lo dice. Lo stesso tasto ridà il suono quando la scheda si stacca durante il gioco.
 
-Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere. La partita si ferma da sola, in silenzio, anche quando si apre un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
+Nella palestra, i primi tre livelli, Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere; dal quarto livello la pausa con Ctrl+P non c'è più. La partita si ferma da sola, in silenzio e in tutti i livelli, quando apri un menu o un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
 
 ## Aiuto
 

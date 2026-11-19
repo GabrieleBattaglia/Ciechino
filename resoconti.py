@@ -11,8 +11,13 @@ coprirebbe il loro suono. Ogni misura è in metri, gradi e secondi (D7), coi num
 testi.py; ogni parola passa da lingua.py, e nessun testo contiene separatori grafici.
 Le misure si arrotondano prima di scriverle: così 1,04 metri diventa «1 metro» e non «1,0 metri», e
 uno scarto di tre centimetri a destra si dice «al centro» invece di «0,0 metri a destra».
-Il resoconto di un tiro comincia col sommario di D21, che nei primi livelli dà i numeri con un
-decimale e il segno, sempre allo stesso posto e nello stesso ordine, poi soltanto le parole, poi tace.
+Il resoconto di un tiro comincia col sommario di D21, «Dal bersaglio: », con le misure
+dell'artigliere di volo.Misure, sempre nello stesso ordine, laterale, verticale, profondità e
+inclinazione: nei primi livelli i numeri con un decimale e il segno, poi soltanto le parole, poi
+tace. Nell'annuncio il sommario viene dopo l'esito. La riga del mancato di D6 dice le stesse misure,
+nello stesso ordine.
+Nella palestra delle attese di D22 i messaggi di un tiro finiscono con la riga che dice che cosa farà
+lo spazio, e la barra di stato lo ripete; fuori dalla palestra Ctrl+P ha il suo messaggio di rifiuto.
 """
 
 import math
@@ -33,7 +38,7 @@ from costanti import (
     SOMMARIO_SOGLIA_VERTICALE,
 )
 from fisica import CANNONE
-from lingua import _, plurale
+from lingua import _, ngettext, plurale
 from statistiche import NOMI_DEI_PARAMETRI, NOMI_DELLE_FORME
 
 # I tipi dei messaggi, come li vuole il contratto in docs/progetto.txt: la finestra può trattarli in
@@ -137,18 +142,15 @@ def direzione(azimut):
 
 
 def scarti(scarto):
-    """Le parti dello scarto di un tiro a vuoto rispetto al centro del bersaglio, (radiale, laterale,
-    verticale) come le dà fisica.scomponi, a parole e in quest'ordine: «lungo di 1,2 metri» o «corto
-    di»; «a destra di 0,8 metri» o «a sinistra di»; «sopra di 1,7 metri» o «sotto di». Le parti che si
-    arrotondano a zero non si dicono."""
-    radiale, laterale, verticale = (_arrotondato(c) for c in scarto)
+    """Le parti dello scarto di un tiro a vuoto rispetto al centro del bersaglio, dato come
+    (radiale, laterale, verticale), l'ordine di fisica.scomponi, e detto a parole nell'ordine del
+    sommario di D21: «a destra di 0,8 metri» o «a sinistra di»; «sopra di 1,7 metri» o «sotto di»;
+    «lungo di 1,2 metri» o «corto di». Le parti che mancano, None, e quelle che si arrotondano a zero
+    non si dicono."""
+    radiale, laterale, verticale = (0.0 if c is None else _arrotondato(c) for c in scarto)
     parti = []
-    # Traduttori: da qui, le parti dello scarto di un tiro a vuoto; misura è come «1,2 metri».
-    if radiale > 0:
-        parti.append(_("lungo di {misura}").format(misura=metri(radiale)))
-    elif radiale < 0:
-        parti.append(_("corto di {misura}").format(misura=metri(-radiale)))
     if laterale > 0:
+        # Traduttori: da qui, le parti dello scarto di un tiro a vuoto, dette nell'ordine laterale, verticale, profondità; misura è come «0,8 metri».
         parti.append(_("a destra di {misura}").format(misura=metri(laterale)))
     elif laterale < 0:
         parti.append(_("a sinistra di {misura}").format(misura=metri(-laterale)))
@@ -156,6 +158,10 @@ def scarti(scarto):
         parti.append(_("sopra di {misura}").format(misura=metri(verticale)))
     elif verticale < 0:
         parti.append(_("sotto di {misura}").format(misura=metri(-verticale)))
+    if radiale > 0:
+        parti.append(_("lungo di {misura}").format(misura=metri(radiale)))
+    elif radiale < 0:
+        parti.append(_("corto di {misura}").format(misura=metri(-radiale)))
     return parti
 
 
@@ -169,15 +175,29 @@ def con_segno(x, decimali=1):
 
 
 def scarto_principale(scarto):
-    """La parte più grande dello scarto, a parole, come «corto di 3,4 metri»; vuoto se non c'è."""
+    """La parte più grande dello scarto (radiale, laterale, verticale), a parole, come «corto di 3,4
+    metri»; le parti che mancano, None, non contano, e a parità vince la prima nell'ordine del
+    sommario, laterale, verticale, profondità. Vuoto se non c'è."""
     if scarto is None:
         return ""
-    componenti = [float(c) for c in scarto]
-    indice = max(range(len(componenti)), key=lambda i: abs(componenti[i]))
-    sola = [0.0] * len(componenti)
-    sola[indice] = componenti[indice]
+    presenti = [(indice, float(scarto[indice])) for indice in (1, 2, 0) if scarto[indice] is not None]
+    if not presenti:
+        return ""
+    indice, valore = max(presenti, key=lambda presente: abs(presente[1]))
+    sola = [None, None, None]
+    sola[indice] = valore
     parti = scarti(sola)
     return parti[0] if parti else ""
+
+
+def scarto_del_tiro(volo):
+    """Lo scarto di un tiro a vuoto come lo dicono la riga del mancato di D6 e l'annuncio: da D21
+    quello delle misure dell'artigliere, (profondità, laterale, verticale) con None per la misura che
+    manca, così torna coi numeri del sommario; per un volo senza misure, come quelli costruiti a mano,
+    lo scarto nel punto più vicino. None se non c'è nessuno dei due."""
+    if volo.misure is not None:
+        return volo.misure.scarto
+    return volo.scarto
 
 
 # I bersagli.
@@ -232,7 +252,10 @@ def grado_della_palestra(livello):
 
 def _parola(valore, soglia, positiva, negativa, giusta):
     """La parola di un asse del sommario: positiva da soglia in su, negativa da meno soglia in giù,
-    giusta in mezzo. Con la soglia a zero lo zero esatto resta giusto."""
+    giusta in mezzo. Con la soglia a zero lo zero esatto resta giusto. Una misura che manca, None,
+    non ha parola: None."""
+    if valore is None:
+        return None
     if valore > 0 and valore >= soglia:
         return positiva
     if valore < 0 and valore <= -soglia:
@@ -240,36 +263,37 @@ def _parola(valore, soglia, positiva, negativa, giusta):
     return giusta
 
 
-def parole_del_passaggio(passaggio):
-    """Le quattro parole del sommario a parole, nell'ordine laterale, verticale, profondità e
-    inclinazione: «a destra», «a sinistra» o «in linea»; «sopra», «sotto» o «all'altezza giusta»;
-    «lungo», «corto» o «alla distanza giusta»; «in salita», «in discesa» o «in cima». Le soglie
-    sotto le quali un asse va bene stanno in costanti.py (D21).
+def parole_delle_misure(misure):
+    """Le quattro parole del sommario a parole, per le volo.Misure, nell'ordine laterale, verticale,
+    profondità e inclinazione: «a destra», «a sinistra» o «in linea»; «sopra», «sotto» o «all'altezza
+    giusta»; «lungo», «corto» o «alla distanza giusta»; «in salita», «in discesa» o «in cima». Le
+    soglie sotto le quali un asse va bene stanno in costanti.py (D21). Al posto della parola di una
+    misura che manca c'è None.
     pybabel attacca un commento per i traduttori soltanto al primo testo della riga che lo segue: per
     questo ogni parola ha la sua riga e il suo commento."""
     return [
-        _parola(passaggio.laterale, SOMMARIO_SOGLIA_LATERALE,
+        _parola(misure.laterale, SOMMARIO_SOGLIA_LATERALE,
                 # Traduttori: da qui, le dodici parole del sommario di un tiro (D21), che dicono dove il proiettile è passato rispetto al centro del bersaglio, e come andava in quel punto. Di lato: passato a destra del bersaglio.
                 _("a destra"),
                 # Traduttori: sommario di un tiro, di lato: passato a sinistra del bersaglio.
                 _("a sinistra"),
                 # Traduttori: sommario di un tiro, di lato: né a destra né a sinistra del bersaglio.
                 _("in linea")),
-        _parola(passaggio.verticale, SOMMARIO_SOGLIA_VERTICALE,
+        _parola(misure.verticale, SOMMARIO_SOGLIA_VERTICALE,
                 # Traduttori: sommario di un tiro, in altezza: passato più in alto del centro del bersaglio.
                 _("sopra"),
                 # Traduttori: sommario di un tiro, in altezza: passato più in basso del centro del bersaglio.
                 _("sotto"),
                 # Traduttori: sommario di un tiro, in altezza: né sopra né sotto il bersaglio.
                 _("all'altezza giusta")),
-        _parola(passaggio.profondita, SOMMARIO_SOGLIA_PROFONDITA,
+        _parola(misure.profondita, SOMMARIO_SOGLIA_PROFONDITA,
                 # Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato oltre il bersaglio visto dal cannone, non la preposizione.
                 _("lungo"),
                 # Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato prima del bersaglio visto dal cannone.
                 _("corto"),
                 # Traduttori: sommario di un tiro, in profondità: né lungo né corto.
                 _("alla distanza giusta")),
-        _parola(passaggio.inclinazione, SOMMARIO_SOGLIA_INCLINAZIONE,
+        _parola(misure.inclinazione, SOMMARIO_SOGLIA_INCLINAZIONE,
                 # Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile saliva.
                 _("in salita"),
                 # Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile scendeva.
@@ -279,29 +303,67 @@ def parole_del_passaggio(passaggio):
     ]
 
 
+def _sommario_coi_numeri(misure):
+    """Il sommario al grado «numeri»: le misure con un decimale e il segno, metri e gradi detti una
+    volta sola, dopo il primo numero in metri e dopo l'inclinazione."""
+    if misure.arrivo is not None and misure.ricaduta is not None:
+        # Traduttori: il sommario di un tiro nei primi livelli (D21), che dice dove è passato il proiettile rispetto al centro del bersaglio; laterale, verticale e profondita sono in metri, inclinazione l'angolo del proiettile in gradi, tutti già scritti col segno, come «+13,2», «-2,4» o «0,0». Il laterale è positivo a destra, il verticale sopra, la profondità se il tiro è lungo, l'inclinazione in salita.
+        return _("Dal bersaglio: laterale {laterale} metri, verticale {verticale}, profondità {profondita}, inclinazione {inclinazione} gradi.").format(
+            laterale=con_segno(misure.laterale), verticale=con_segno(misure.verticale), profondita=con_segno(misure.profondita),
+            inclinazione=con_segno(misure.inclinazione))
+    if misure.arrivo is not None:
+        # Traduttori: il sommario coi numeri di un tiro che, scendendo, resta sempre sotto il centro del bersaglio, e così non ha la profondità; gli altri come nel sommario intero.
+        return _("Dal bersaglio: laterale {laterale} metri, verticale {verticale}, profondità non misurabile, inclinazione {inclinazione} gradi.").format(
+            laterale=con_segno(misure.laterale), verticale=con_segno(misure.verticale), inclinazione=con_segno(misure.inclinazione))
+    if misure.ricaduta is not None:
+        # Traduttori: il sommario coi numeri di un tiro che cade a terra prima di arrivare alla distanza del bersaglio dal cannone, e così non ha laterale, verticale né inclinazione; profondita è in metri, col segno, come «-12,3».
+        return _("Dal bersaglio: cade prima della sua distanza, profondità {profondita} metri.").format(profondita=con_segno(misure.profondita))
+    return _sommario_senza_misure()
+
+
+def _sommario_senza_misure():
+    """Il sommario di un tiro che non ha nessuna misura, a tutti e due i gradi."""
+    # Traduttori: il sommario di un tiro che cade prima di arrivare alla distanza del bersaglio dal cannone e, scendendo, resta sempre sotto il suo centro: non ha nessuna misura.
+    return _("Dal bersaglio: cade prima della sua distanza, profondità non misurabile.")
+
+
+def _sommario_a_parole(misure):
+    """Il sommario al grado «parole»: le parole di parole_delle_misure, con le stesse frasi del grado
+    «numeri» per le misure che mancano."""
+    laterale, verticale, profondita, inclinazione = parole_delle_misure(misure)
+    if misure.arrivo is not None and misure.ricaduta is not None:
+        # Traduttori: il sommario a parole di un tiro nei livelli di mezzo (D21), come «Dal bersaglio: a destra, sopra, lungo, in discesa.».
+        return _("Dal bersaglio: {laterale}, {verticale}, {profondita}, {inclinazione}.").format(laterale=laterale, verticale=verticale, profondita=profondita,
+                                                                                                  inclinazione=inclinazione)
+    if misure.arrivo is not None:
+        # Traduttori: il sommario a parole di un tiro che, scendendo, resta sempre sotto il centro del bersaglio, come «Dal bersaglio: a destra, sotto, profondità non misurabile, in salita.».
+        return _("Dal bersaglio: {laterale}, {verticale}, profondità non misurabile, {inclinazione}.").format(laterale=laterale, verticale=verticale,
+                                                                                                             inclinazione=inclinazione)
+    if misure.ricaduta is not None:
+        # Traduttori: il sommario a parole di un tiro che cade a terra prima di arrivare alla distanza del bersaglio dal cannone, come «Dal bersaglio: cade prima della sua distanza, corto.».
+        return _("Dal bersaglio: cade prima della sua distanza, {profondita}.").format(profondita=profondita)
+    return _sommario_senza_misure()
+
+
 def riga_del_sommario(volo, grado="numeri"):
     """Il sommario del tiro (D21), la prima riga del resoconto: dove il proiettile è passato rispetto al
-    centro del bersaglio, quello colpito o quello passato più vicino, nel passaggio più vicino al
-    centro, di lato, in altezza e in profondità, poi la sua inclinazione in quel punto. Al grado
-    «numeri», con un decimale e il segno: «Laterale +13,2 metri, verticale -2,4, profondità +1,0,
-    inclinazione -31,4 gradi.»; al grado «parole»: «A destra, sotto, lungo, in discesa.»; al grado
-    «niente», o se nessun bersaglio vivo c'era, vuoto. Un grado fuori da GRADI_DELLA_PALESTRA solleva
-    ValueError."""
+    centro del bersaglio, quello colpito o quello passato più vicino, con le misure dell'artigliere di
+    volo.Misure, sempre in quest'ordine: il laterale, il verticale, la profondità e l'inclinazione.
+    Al grado «numeri», con un decimale e il segno: «Dal bersaglio: laterale +8,8 metri, verticale
+    +4,5, profondità +3,9, inclinazione -45,8 gradi.»; al grado «parole»: «Dal bersaglio: a destra,
+    sopra, lungo, in discesa.»; al grado «niente», o se nessun bersaglio vivo c'era, vuoto.
+    Le misure che mancano si dicono a parole, ai due gradi. Il tiro che cade prima di arrivare alla
+    distanza del bersaglio dice «cade prima della sua distanza» al posto del laterale e del verticale,
+    e niente inclinazione; il tiro che, scendendo, resta sempre sotto il centro del bersaglio dice
+    «profondità non misurabile». Un grado fuori da GRADI_DELLA_PALESTRA solleva ValueError."""
     if grado not in GRADI_DELLA_PALESTRA:
         raise ValueError(f"grado della palestra sconosciuto: {grado!r}; i gradi sono {', '.join(GRADI_DELLA_PALESTRA)}")
-    passaggio = volo.passaggio
-    if passaggio is None or grado == "niente":
+    misure = volo.misure
+    if misure is None or grado == "niente":
         return ""
     if grado == "numeri":
-        # Traduttori: il sommario di un tiro nei primi livelli (D21); laterale, verticale e profondita sono gli scarti dal centro del bersaglio in metri, inclinazione l'angolo del proiettile in gradi, tutti già scritti col segno, come «+13,2», «-2,4» o «0,0». Il laterale è positivo a destra, il verticale sopra, la profondità se il tiro è lungo, l'inclinazione in salita.
-        return _("Laterale {laterale} metri, verticale {verticale}, profondità {profondita}, inclinazione {inclinazione} gradi.").format(
-            laterale=con_segno(passaggio.laterale), verticale=con_segno(passaggio.verticale), profondita=con_segno(passaggio.profondita),
-            inclinazione=con_segno(passaggio.inclinazione))
-    laterale, verticale, profondita, inclinazione = parole_del_passaggio(passaggio)
-    # Traduttori: il sommario a parole di un tiro nei livelli di mezzo (D21), come «A destra, sotto, lungo, in discesa.»; la prima lettera si fa maiuscola da sé.
-    frase = _("{laterale}, {verticale}, {profondita}, {inclinazione}.").format(laterale=laterale, verticale=verticale, profondita=profondita,
-                                                                             inclinazione=inclinazione)
-    return frase[:1].upper() + frase[1:]
+        return _sommario_coi_numeri(misure)
+    return _sommario_a_parole(misure)
 
 
 # Il resoconto di un tiro.
@@ -358,17 +420,20 @@ def riga_del_bersaglio(punto):
 
 
 def riga_del_mancato(volo):
-    """Di quanto e dove si è mancato il bersaglio più vicino (D6): la distanza dalla sua superficie, poi
-    lo scarto dal suo centro, lungo o corto, a destra o a sinistra, sopra o sotto. Vuoto se nessun
-    bersaglio vivo è passato vicino al tiro."""
-    if volo.vicino is None or volo.scarto is None:
+    """Di quanto e dove si è mancato il bersaglio più vicino (D6): la distanza dalla sua superficie, nel
+    punto più vicino, poi lo scarto dal suo centro nell'ordine del sommario, a destra o a sinistra,
+    sopra o sotto, lungo o corto, con le stesse misure dell'artigliere del sommario (D21), così i due
+    dicono gli stessi numeri; le misure che mancano non si dicono. Vuoto se nessun bersaglio vivo è
+    passato vicino al tiro."""
+    scarto = scarto_del_tiro(volo)
+    if volo.vicino is None or scarto is None:
         return ""
     distanza = metri(max(0.0, float(volo.distanza_dal_vicino or 0.0)))
-    parti = scarti(volo.scarto)
+    parti = scarti(scarto)
     if not parti:
         # Traduttori: distanza è come «2,3 metri».
         return _("Il bersaglio più vicino è stato mancato di {distanza}.").format(distanza=distanza)
-    # Traduttori: distanza è come «2,3 metri»; scarti è un elenco come «lungo di 1,2 metri, a sinistra di 0,8 metri e sopra di 1,7 metri».
+    # Traduttori: distanza è come «2,3 metri»; scarti è un elenco come «a sinistra di 0,8 metri, sopra di 1,7 metri e lungo di 1,2 metri».
     return _("Il bersaglio più vicino è stato mancato di {distanza}: rispetto al suo centro il tiro è passato {scarti}.").format(distanza=distanza,
                                                                                                                               scarti=testi.elenco(parti))
 
@@ -383,8 +448,9 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
     e se è None vale fino al livello AIUTO_MANCATO_FINO_AL_LIVELLO (D6); serve anche all'annuncio,
     che allora aggiunge lo scarto principale. palestra è il grado del sommario, uno di
     GRADI_DELLA_PALESTRA, e se è None lo dà il livello del tiro con grado_della_palestra; il sommario,
-    quando c'è, è la prima riga del testo e apre anche l'annuncio, così arriva per primo alla voce e
-    al braille."""
+    quando c'è, è la prima riga del testo. L'annuncio per la voce e il braille dice prima l'esito,
+    poi il sommario, per scelta di Gabriele; col sommario coi numeri l'esito non ripete lo scarto
+    principale, che il sommario dice già. Senza sommario l'annuncio è quello di prima di D21."""
     if aiuto is None:
         aiuto = livello <= AIUTO_MANCATO_FINO_AL_LIVELLO
     if palestra is None:
@@ -408,7 +474,8 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
         mancato = riga_del_mancato(volo) if aiuto else ""
         if mancato:
             righe.append(mancato)
-        principale = scarto_principale(volo.scarto) if aiuto else ""
+        # Il sommario coi numeri dice già lo scarto: l'annuncio non lo ripete (D21).
+        principale = scarto_principale(scarto_del_tiro(volo)) if aiuto and not (sommario_del_tiro and palestra == "numeri") else ""
         if riserva <= 0:
             annuncio = _("A vuoto, riserva vuota.")
         elif principale:
@@ -418,8 +485,8 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
             # Traduttori: l'annuncio breve di un tiro a vuoto; riserva è un numero.
             annuncio = _("A vuoto, riserva {riserva}.").format(riserva=testi.intero(riserva))
     if sommario_del_tiro:
-        # Traduttori: l'annuncio di un tiro col sommario in testa (D21); sommario è come «A destra, sotto, lungo, in discesa.», annuncio come «A vuoto, riserva 8.».
-        annuncio = _("{sommario} {annuncio}").format(sommario=sommario_del_tiro, annuncio=annuncio)
+        # Traduttori: l'annuncio di un tiro col sommario (D21): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi il sommario, come «Dal bersaglio: a destra, sopra, lungo, in discesa.».
+        annuncio = _("{annuncio} {sommario}").format(annuncio=annuncio, sommario=sommario_del_tiro)
     dati = {"tiro": numero, "livello": livello, "colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "punti": punti,
             "totale": totale, "riserva": riserva, "precisione": volo.precisione}
     return Messaggio("resoconto", "\n".join(righe), annuncio, dati)
@@ -589,16 +656,58 @@ def nessuna_partita():
     return Messaggio("avviso", _("Nessuna partita in corso: Spazio per cominciare."), _("Nessuna partita in corso."))
 
 
+def pausa_solo_in_palestra(fino_al_livello):
+    """Ctrl+P fuori dalla palestra delle attese (D22), quando la pausa non c'è: la pausa con Ctrl+P si
+    prende soltanto fino al livello fino_al_livello, mentre quella automatica resta sempre."""
+    # Traduttori: livello è un numero, l'ultimo livello della palestra, dove dopo ogni tiro la partita aspetta lo Spazio.
+    testo = _("La pausa con Ctrl+P c'è soltanto nei livelli della palestra, fino al livello {livello}.").format(livello=testi.intero(fino_al_livello))
+    return Messaggio("avviso", testo, _("Pausa solo in palestra."), {"fino_al_livello": fino_al_livello})
+
+
+# La palestra delle attese (D22).
+
+def attesa_della_palestra(nasceranno=0):
+    """L'ultimo messaggio di un tiro nella palestra delle attese (D22): la partita aspetta lo spazio, e
+    lo spazio chiamerà i bersagli nuovi, nasceranno, uno dopo un centro, tutti quelli del livello dopo
+    il centro che lo chiude; o riporterà all'ascolto, dopo un tiro a vuoto o un centro sul bonus.
+    Senza annuncio: la sintesi ha già letto il resoconto, e la barra di stato dice lo stesso."""
+    if nasceranno == 1:
+        testo = _("Palestra: la partita aspetta lo Spazio, che chiama il bersaglio nuovo.")
+    elif nasceranno > 1:
+        # Traduttori: n è un numero, almeno 2: i bersagli del livello nuovo, che nascono allo Spazio.
+        testo = ngettext("Palestra: la partita aspetta lo Spazio, che chiama {n} bersaglio nuovo.",
+                         "Palestra: la partita aspetta lo Spazio, che chiama {n} bersagli nuovi.", nasceranno).format(n=testi.intero(nasceranno))
+    else:
+        testo = _("Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto.")
+    return Messaggio("info", testo, "", {"nasceranno": nasceranno})
+
+
+def riga_dell_attesa(attesa_ferma=False, nasceranno=0):
+    """La riga della fase nell'attesa della palestra (D22): prima che la partita si fermi, mentre l'effetto
+    e gli avvisi suonano ancora, che cosa si sta ascoltando; poi che cosa fa lo spazio."""
+    if not attesa_ferma:
+        return _("Palestra: ascolta l'esito del tiro")
+    if nasceranno == 1:
+        return _("Palestra: Spazio per il bersaglio nuovo")
+    if nasceranno > 1:
+        # Traduttori: n è un numero, almeno 2; la riga sta nella barra di stato, e deve restare breve.
+        return ngettext("Palestra: Spazio per {n} bersaglio nuovo", "Palestra: Spazio per {n} bersagli nuovi", nasceranno).format(n=testi.intero(nasceranno))
+    return _("Palestra: Spazio per tornare all'ascolto")
+
+
 # La barra di stato.
 
-def riga_della_fase(fase, in_pausa=False, parametro=None, sottofase=None):
-    """La riga della fase, l'ultima della barra di stato."""
+def riga_della_fase(fase, in_pausa=False, parametro=None, sottofase=None, attesa_ferma=False, nasceranno=0):
+    """La riga della fase, l'ultima della barra di stato; nell'attesa della palestra, quella di
+    riga_dell_attesa."""
     if fase == "pronta":
         return _("Nessuna partita: Spazio per cominciare")
     if fase == "finita":
         return _("Partita finita: Spazio per ricominciare")
     if in_pausa:
         return _("In pausa: Ctrl+P per riprendere")
+    if fase == "attesa":
+        return riga_dell_attesa(attesa_ferma, nasceranno)
     if fase == "ascolto":
         return _("Ascolto: Spazio per mirare")
     if fase == "mira":
@@ -611,10 +720,12 @@ def riga_della_fase(fase, in_pausa=False, parametro=None, sottofase=None):
     return _("Volo")
 
 
-def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centri_del_livello=0, bersagli=0, bonus=False, parametro=None, sottofase=None):
+def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centri_del_livello=0, bersagli=0, bonus=False, parametro=None, sottofase=None,
+                      attesa_ferma=False, nasceranno=0):
     """Le righe della barra di stato, brevi, una cosa per riga: livello e punti; riserva e centri del
     livello su CENTRI_PER_LIVELLO; i bersagli in volo, col bonus se c'è; la fase. Senza partita c'è
-    soltanto la fase; a partita finita i bersagli non ci sono più, e la riga si omette."""
+    soltanto la fase; a partita finita i bersagli non ci sono più, e la riga si omette. attesa_ferma
+    e nasceranno servono alla fase «attesa» della palestra (D22), come in riga_dell_attesa."""
     if fase == "pronta":
         return [riga_della_fase(fase)]
     righe = [
@@ -629,5 +740,5 @@ def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centr
             righe.append(_("Bersagli in volo: {n} e il bonus").format(n=testi.intero(bersagli)))
         else:
             righe.append(_("Bersagli in volo: {n}").format(n=testi.intero(bersagli)))
-    righe.append(riga_della_fase(fase, in_pausa, parametro, sottofase))
+    righe.append(riga_della_fase(fase, in_pausa, parametro, sottofase, attesa_ferma, nasceranno))
     return righe

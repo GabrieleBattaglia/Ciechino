@@ -193,6 +193,14 @@ def distanza_dal_cannone(posizioni):
     return scalare_o_array(np.sqrt(np.sum(differenze * differenze, axis=-1)))
 
 
+def distanza_orizzontale(posizioni):
+    """La distanza orizzontale dal cannone, senza l'altezza: quella della gittata e delle misure
+    dell'artigliere del sommario (D21). Uno scalare per un punto (3,), un array di N per posizioni
+    (N, 3)."""
+    posizioni = _array(posizioni)
+    return scalare_o_array(np.hypot(posizioni[..., 0] - CANNONE[0], posizioni[..., 2] - CANNONE[2]))
+
+
 def suono_di(posizioni):
     """Il suono dello spazio, uguale per proiettile, bersagli ed effetti: per posizioni (N, 3)
     restituisce (frequenze, pan, guadagni lineari), tre array di N; per un punto (3,) tre float."""
@@ -204,11 +212,12 @@ def suono_di(posizioni):
 
 
 def scomponi(delta, punto_del_bersaglio):
-    """Lo scarto delta = proiettile meno bersaglio, scomposto come lo dice il resoconto:
-    (radiale, laterale, verticale). Il radiale è lungo la direzione orizzontale del bersaglio vista
-    dal cannone, positivo se lungo e negativo se corto; il laterale è orizzontale e perpendicolare,
-    positivo a destra; il verticale è positivo sopra. Un bersaglio proprio sopra il cannone, che
-    non ha una direzione orizzontale, si legge come se stesse davanti."""
+    """Lo scarto delta = proiettile meno bersaglio, scomposto: (radiale, laterale, verticale). Il
+    radiale è lungo la direzione orizzontale del bersaglio vista dal cannone, positivo se lungo e
+    negativo se corto; il laterale è orizzontale e perpendicolare, positivo a destra; il verticale è
+    positivo sopra. Un bersaglio proprio sopra il cannone, che non ha una direzione orizzontale, si
+    legge come se stesse davanti. Il volo lo usa per lo scarto nel punto più vicino, e il sommario
+    di D21 per il laterale e il verticale delle misure dell'artigliere."""
     delta, punto = _array(delta), _array(punto_del_bersaglio)
     avanti_x = punto[..., 0] - CANNONE[0]
     avanti_z = punto[..., 2] - CANNONE[2]

@@ -350,12 +350,18 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     s.conta("partite_con_la_sega_morbida", 10)
     s.conta("scheda_cambiata", 11)
     s.conta("scheda_non_aperta", 12)
+    s.conta("pause_rifiutate", 13)
+    s.conta("attese_della_palestra", 14)
     righe = s.righe()
     for riga in ("Cambi di lingua: 1.", "Mail al PUB preparate: 3.", "Mail d'aiuto al PUB coi registri allegati: 2.", "Partite entrate in classifica: 4.",
-                 "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo aperto o un'altra finestra: 6.", "Cambi della forma del proiettile: 7.",
+                 "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo o un menu aperto o un'altra finestra: 6.", "Cambi della forma del proiettile: 7.",
                  "Partite col proiettile in seno: 8.", "Partite col proiettile in triangolo: 9.", "Partite col proiettile in sega morbida: 10.",
-                 "Cambi della scheda audio: 11.", "Schede audio scelte che non si sono aperte: 12."):
+                 "Cambi della scheda audio: 11.", "Schede audio scelte che non si sono aperte: 12.",
+                 "Pause rifiutate, chieste con Ctrl+P fuori dalla palestra: 13.", "Attese della palestra dopo un tiro: 14."):
         assert riga in righe
+    # D22: le due voci della palestra stanno con le pause, il rifiuto subito dopo quelle chieste, le attese dopo quelle automatiche.
+    assert righe.index("Pause rifiutate, chieste con Ctrl+P fuori dalla palestra: 13.") == righe.index("Pause chieste con Ctrl+P: 5.") + 1
+    assert righe.index("Attese della palestra dopo un tiro: 14.") == righe.index("Pause automatiche, per un dialogo o un menu aperto o un'altra finestra: 6.") + 1
     # Il cambio del proiettile sta in breve, subito dopo quello della lingua (D17), e dopo di lui le due voci della scheda audio (D20).
     assert righe.index("Cambi della forma del proiettile: 7.") == righe.index("Cambi di lingua: 1.") + 1
     assert righe.index("Cambi della scheda audio: 11.") == righe.index("Cambi della forma del proiettile: 7.") + 1

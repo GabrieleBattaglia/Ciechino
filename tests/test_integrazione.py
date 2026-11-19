@@ -51,12 +51,16 @@ import suoni
 import testi
 from costanti import AIUTO_MANCATO_FINO_AL_LIVELLO, CENTRI_PER_LIVELLO, COLPI_INIZIALI, COLPI_PER_LIVELLO, COMPENSAZIONE_DEL_TASTO, PARAMETRI
 from gui import dialoghi
+from gui import finestra as modulo_finestra
 from gui.finestra import FinestraPrincipale
 from partita import Partita, punti_del_centro
 from statistiche import NOMI_DEI_PARAMETRI
 
 SEME = 2026
 NOME = "Gabriele"
+# Il sommario di D21 del tiro a vuoto voluto, rasoterra e piano, che cade a pochi metri dal cannone:
+# né alla distanza né all'altezza del bersaglio, e così nessuna misura.
+VUOTO = "Dal bersaglio: cade prima della sua distanza, profondità non misurabile."
 # Il buffer finto di ogni preset: breve e costante, così ogni effetto finisce presto e non resta voce.
 LUNGHEZZA_FINTA = 256
 AMPIEZZA_FINTA = 0.1
@@ -166,6 +170,13 @@ def _menu(finestra, comando):
     finestra.GetEventHandler().ProcessEvent(evento)
 
 
+def _evento_del_menu(finestra, tipo):
+    """L'evento che wx manda alla finestra quando il primo menu della barra si apre o si chiude (D22)."""
+    evento = wx.MenuEvent(tipo, 0, finestra.GetMenuBar().GetMenu(0))
+    evento.SetEventObject(finestra)
+    finestra.GetEventHandler().ProcessEvent(evento)
+
+
 def _riga_del_cursore(controllo):
     _trovata, colonna, riga = controllo.PositionToXY(controllo.GetInsertionPoint())
     return controllo.GetLineText(riga), colonna
@@ -207,6 +218,10 @@ class Tavolo:
         self.orologio = orologio
         self.blocchi_per_battito = 1 if flusso is not None else BLOCCHI_PER_BATTITO_MUTO
         self.ricevuti = []
+        # I secondi del mondo della prova in cui la partita è rimasta ferma ad aspettare lo spazio, nella palestra di D22,
+        # e l'ora del battito che ha risolto l'ultimo tiro, che i messaggi seguono alla fine dell'effetto.
+        self.in_attesa = 0.0
+        self.risolto_alle = None
         # I messaggi dell'ultimo battito, o comando, che ne ha portati.
         self.ultimo_lotto = []
         self.suonati = []
@@ -379,27 +394,62 @@ def _mira(tavolo, valori):
 
 
 def _volo(tavolo):
-    """Il volo, qualche blocco e un battito alla volta, finché il tiro si risolve; restituisce i messaggi nuovi."""
+    """Il volo, qualche blocco e un battito alla volta, finché il tiro si risolve e i suoi messaggi
+    arrivano, quando l'effetto dell'impatto ha finito di suonare (D22); restituisce i messaggi nuovi."""
     partita = tavolo.partita
     da = len(tavolo.ricevuti)
+    tavolo.risolto_alle = None
     for _giro in range(SECONDI_MASSIMI * costanti.FS // (costanti.AUDIO_BLOCCO * tavolo.blocchi_per_battito)):
         tavolo.avanza(tavolo.blocchi_per_battito)
         tavolo.battito()
-        if partita.fase != "volo":
+        if partita.fase == "volo":
+            assert tavolo.fase_della_barra() in ("Volo", "In pausa: Ctrl+P per riprendere")
+            continue
+        if tavolo.risolto_alle is None:
+            tavolo.risolto_alle = tavolo.adesso()
+        if len(tavolo.ricevuti) > da:
             return tavolo.ricevuti[da:]
-        assert tavolo.fase_della_barra() in ("Volo", "In pausa: Ctrl+P per riprendere")
     raise AssertionError("il tiro non si è risolto")
 
 
 def _riposo(tavolo):
     """Lascia finire gli effetti dell'ultimo tiro, e gli avvisi che la partita ha messo in fila dopo
     l'impatto, come l'ultimo colpo o il livello nuovo: poi nel motore restano soltanto le voci dei
-    bersagli."""
+    bersagli. Nella palestra (D22) la partita si ferma e aspetta lo spazio, e la prova lo dà, come
+    Gabriele dopo aver letto il resoconto, con _fuori_dall_attesa."""
     dopo = tavolo.partita.dopo_gli_avvisi()
     if dopo is not None:
         tavolo.avanza(-(-(dopo - tavolo.motore.campione_scritto) // tavolo.motore.blocco))
     tavolo.avanza(BLOCCHI_DEGLI_EFFETTI)
     assert tavolo.motore.stato()["voci"] == len(tavolo.partita.bersagli)
+    if tavolo.partita.fase == "attesa":
+        _fuori_dall_attesa(tavolo)
+
+
+def _fuori_dall_attesa(tavolo):
+    """Nella palestra (D22), con l'effetto e gli avvisi finiti: il battito ferma la partita, e la barra dice
+    che cosa fa lo spazio; lo spazio dato subito, nella grazia, non conta e non suona; passata la grazia
+    fa ripartire la partita, coi bersagli nuovi dopo un centro. Il tempo dell'attesa va in
+    tavolo.in_attesa, perché la durata della partita non lo conta."""
+    partita = tavolo.partita
+    tavolo.battito()
+    assert partita.fase == "attesa" and partita.attesa_ferma
+    assert tavolo.fase_della_barra() in ("Palestra: Spazio per il bersaglio nuovo", "Palestra: Spazio per tornare all'ascolto")
+    dal = tavolo.adesso()
+    # La grazia si conta dal campione udibile a cui la partita si è fermata, che può cadere fra due campioni:
+    # un campione prima non basta, uno dopo sì, anche con gli arrotondamenti dell'orologio finto.
+    grazia = partita._attesa_dal + round(costanti.GRAZIA_DELL_ATTESA * tavolo.motore.fs)
+    suonati = len(tavolo.suonati)
+    tavolo.spazio()
+    tavolo.porta_udibile_a(math.floor(grazia) - 1)
+    tavolo.battito()
+    tavolo.spazio()
+    assert partita.fase == "attesa" and len(tavolo.suonati) == suonati
+    tavolo.porta_udibile_a(math.ceil(grazia) + 1)
+    tavolo.battito()
+    tavolo.spazio()
+    assert partita.fase == "ascolto" and tavolo.fase_della_barra() == "Ascolto: Spazio per mirare" and partita.bersagli
+    tavolo.in_attesa += tavolo.adesso() - dal
 
 
 def _centro(tavolo, numero, totale):
@@ -415,11 +465,11 @@ def _centro(tavolo, numero, totale):
     resoconto = nuovi[0]
     assert resoconto.tipo == "resoconto" and resoconto.dati["tiro"] == numero and resoconto.dati["colpito"]
     assert resoconto.dati["punti"] == punti and resoconto.dati["totale"] == totale == partita.punti
-    # Al livello 1 il resoconto comincia col sommario dei numeri (D21), anche nell'annuncio.
+    # Al livello 1 il resoconto comincia col sommario dei numeri (D21), che nell'annuncio segue l'esito.
     sommario, esito = resoconto.testo.splitlines()[:2]
-    assert sommario.startswith("Laterale ") and sommario.endswith(" gradi.")
+    assert sommario.startswith("Dal bersaglio: laterale ") and sommario.endswith(" gradi.")
     assert esito.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
-    assert resoconto.annuncio == f"{sommario} Colpito, {testi.intero(punti)} punti."
+    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {sommario}"
     tavolo.cursore_sul_nuovo()
     return totale, nuovi
 
@@ -471,8 +521,10 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
                 tavolo.cursore_sul_nuovo()
             else:
                 totale, nuovi = _centro(tavolo, numero, totale)
+            # Il livello 1 è della palestra (D22): dopo ogni centro la partita aspetta lo spazio, che chiama il bersaglio nuovo.
+            assert partita.fase == "attesa" and nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che chiama il bersaglio nuovo."
             if numero < CENTRI_PER_LIVELLO:
-                assert partita.livello == 1 and partita.fase == "ascolto"
+                assert partita.livello == 1 and partita.bersagli == []
                 assert tavolo.barra()[:2] == [f"Livello 1, {testi.intero(totale)} punti", f"Riserva {COLPI_INIZIALI}, centri {numero} su {CENTRI_PER_LIVELLO}"]
             _riposo(tavolo)
         riserva = COLPI_INIZIALI + COLPI_PER_LIVELLO
@@ -503,22 +555,29 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             assert resoconto.dati["riserva"] == riserva - vuoto == partita.riserva
             # Al livello 2 il resoconto dice ancora di quanto si è mancato il bersaglio più vicino (D6).
             assert AIUTO_MANCATO_FINO_AL_LIVELLO >= 2 and "Il bersaglio più vicino è stato mancato di " in resoconto.testo
+            # Al livello 2 il sommario c'è ancora, coi numeri (D21); il tiro rasoterra cade prima della
+            # distanza del bersaglio e sotto la sua altezza, e il sommario lo dice senza numeri.
+            assert resoconto.testo.splitlines()[0] == VUOTO
+            # Anche il livello 2 è della palestra (D22): dopo il tiro a vuoto lo spazio riporta all'ascolto.
             if partita.riserva > 1:
-                assert [m.tipo for m in nuovi] == ["resoconto"] and partita.fase == "ascolto"
-                # Al livello 2 il sommario coi numeri apre ancora l'annuncio (D21).
-                assert resoconto.annuncio.startswith("Laterale ") and f" gradi. A vuoto, riserva {partita.riserva}, " in resoconto.annuncio
+                assert [m.tipo for m in nuovi] == ["resoconto", "info"] and partita.fase == "attesa"
+                assert resoconto.annuncio == f"A vuoto, riserva {partita.riserva}. {VUOTO}"
+                assert nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
             elif partita.riserva == 1:
-                assert [m.tipo for m in nuovi] == ["resoconto", "avviso"] and nuovi[1].annuncio == "Ultimo colpo."
+                assert [m.tipo for m in nuovi] == ["resoconto", "avviso", "info"] and nuovi[1].annuncio == "Ultimo colpo."
             if partita.riserva:
                 tavolo.cursore_sul_nuovo()
                 _riposo(tavolo)
-        fine = tavolo.adesso()
+        # La partita è finita al battito che ha risolto l'ultimo tiro; i messaggi sono arrivati alla fine del tonfo (D22).
+        fine = tavolo.risolto_alle
 
         # La fine: il resoconto, la fine col riepilogo, il nome e la classifica in coda alla vista.
         assert partita.fase == "finita" and not partita.in_corso()
-        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.endswith(" gradi. A vuoto, riserva vuota.")
+        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio == f"A vuoto, riserva vuota. {VUOTO}"
         tiri = CENTRI_PER_LIVELLO + riserva
-        durata = round(fine - inizio - in_pausa, 1)
+        # La durata non conta né la pausa né le attese della palestra, una dopo ogni tiro tranne l'ultimo (D22).
+        assert tavolo.in_attesa > 0
+        durata = round(fine - inizio - in_pausa - tavolo.in_attesa, 1)
         riepilogo = {"punteggio": totale, "livello": 2, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "durata_s": durata}
         assert nuovi[1].dati == riepilogo == partita.riepilogo()
         assert nuovi[1].annuncio == f"Partita finita, {testi.intero(totale)} punti."
@@ -563,7 +622,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica.
         assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
-        assert sum(1 for detto in voce_finta if " gradi. Colpito, " in detto) == CENTRI_PER_LIVELLO
+        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. Dal bersaglio: laterale " in detto) == CENTRI_PER_LIVELLO
 
         # Le statistiche, sul disco, coi numeri della partita.
         statistiche = _leggi(costanti.FILE_STATISTICHE)
@@ -572,8 +631,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         assert {chiave: n for chiave, n in statistiche["conti"].items() if n} == {
             "avvii": 1, "partite_iniziate": 1, "partite_finite": 1, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "tiri_a_vuoto": riserva, "punti": totale,
             "livelli_superati": 1, "colpi_guadagnati": COLPI_PER_LIVELLO, "mire_avviate": tiri, "ingressi_in_classifica": 1, "pause": 1,
-            # La partita si è giocata col proiettile di serie, il seno (D17).
-            "partite_col_seno": 1}
+            # La partita si è giocata col proiettile di serie, il seno (D17), e tutta nella palestra (D22).
+            "partite_col_seno": 1, "attese_della_palestra": tiri - 1}
         assert statistiche["suoni"] == {"nuova_partita": 1, "mira_avviata": tiri, "valore_preso": 3 * tiri, "sparo": tiri, "colpito": CENTRI_PER_LIVELLO,
                                         "a_terra": riserva, "livello_su": 1, "non_ora": 1, "pausa": 1, "ripresa": 1, "ultimo_colpo": 1,
                                         "partita_finita": 1, "in_classifica": 1, "confermato": 1}
@@ -628,7 +687,8 @@ def test_una_partita_col_motore_muto(app_wx, preset_finti, messaggi_wx, nomi, vo
                 tavolo.cursore_sul_nuovo()
                 _riposo(tavolo)
         assert partita.fase == "finita" and [m.tipo for m in nuovi] == ["resoconto", "fine"]
-        riepilogo = {"punteggio": totale, "livello": 1, "tiri": COLPI_INIZIALI + 1, "centri": 1, "durata_s": round(tavolo.adesso() - inizio, 1)}
+        # Le attese della palestra (D22) non contano nella durata.
+        riepilogo = {"punteggio": totale, "livello": 1, "tiri": COLPI_INIZIALI + 1, "centri": 1, "durata_s": round(tavolo.risolto_alle - inizio - tavolo.in_attesa, 1)}
         assert partita.riepilogo() == riepilogo == nuovi[-1].dati
         assert len(nomi) == 1
         voci = _leggi(costanti.FILE_CLASSIFICA)["voci"]
@@ -806,9 +866,9 @@ def test_il_proiettile_delle_impostazioni_nella_partita_vera(app_wx, preset_fint
         assert not partita.in_pausa and partita.fase == "volo"
         nuovi = _volo(tavolo)
         assert nuovi[0].dati["colpito"]
-        # Il bersaglio nato al posto del colpito evita ancora la forma della partita in corso.
-        assert partita.bersagli and all(partita._voci[b].forma == b.portante != "sega_morbida" for b in partita.bersagli)
+        # Il bersaglio nato al posto del colpito, allo spazio della palestra (D22), evita ancora la forma della partita in corso.
         _riposo(tavolo)
+        assert partita.bersagli and all(partita._voci[b].forma == b.portante != "sega_morbida" for b in partita.bersagli)
         _a_vuoto(tavolo)
         assert partita._voce_proiettile.forma == "sega_morbida"
         _volo(tavolo)
@@ -838,8 +898,10 @@ def test_il_proiettile_delle_impostazioni_nella_partita_vera(app_wx, preset_fint
 def test_il_livello_nuovo_e_il_bonus_suonano_in_fila(app_wx, preset_finti, messaggi_wx, nomi, voce_finta, monkeypatch):
     """Il centro che chiude il livello prima del livello dei bonus: il livello nuovo e il bonus che appare
     nascono nello stesso battito, e i loro avvisi suonano uno dopo l'altro, staccati; la vista e la
-    sintesi li dicono nello stesso ordine."""
+    sintesi li dicono nello stesso ordine. Fuori dalla palestra di D22, che qui la costante a zero
+    toglie: nella palestra il bonus nascerebbe allo spazio dell'attesa."""
     monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 1.0)
+    monkeypatch.setattr(modulo_partita, "PALESTRA_FINO_AL_LIVELLO", 0)
     motore, flusso = motore_finto()
     finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([]), motore=motore)
     try:
@@ -866,6 +928,160 @@ def test_il_livello_nuovo_e_il_bonus_suonano_in_fila(app_wx, preset_finti, messa
         assert partita.dopo_gli_avvisi() is None
     finally:
         _chiudi(finestra)
+
+
+def test_la_palestra_e_i_menu_nella_finestra_vera(app_wx, messaggi_wx, nomi, voce_finta, monkeypatch):
+    """D22 coi pezzi veri sul flusso finto. Il menu aperto con Alt ferma la partita, in silenzio, e la
+    chiusura la riprende; Pausa scelta dal menu fa la pausa chiesta, che resta col menu chiuso. Un
+    centro nella palestra: il resoconto arriva quando il jingle ha finito di suonare, nella vista e alla
+    sintesi; la partita si ferma finiti gli avvisi, lo spazio nella grazia non conta, poi chiama il
+    bersaglio nuovo; la durata non conta né l'attesa né le pause. Fuori dalla palestra Ctrl+P suona il
+    non ora e la vista lo dice, il menu ferma la partita lo stesso, e il tiro a vuoto non ha attesa."""
+    lungo = np.full((round(0.6 * costanti.FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
+    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
+    effetti = {suoni.EVENTI["colpito"], suoni.EVENTI["a_terra"]}
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: lungo if nome in effetti else corto)
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    # Il menu aperto come lo dice Windows: la prova lo apre e lo chiude insieme agli eventi di wx.
+    aperto = [False]
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: aperto[0])
+    motore, flusso = motore_finto()
+    finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([], orologio=lambda: flusso.time), motore=motore)
+    try:
+        finestra.Show()
+        tavolo = Tavolo(finestra, monkeypatch, flusso=flusso)
+        partita = tavolo.partita
+        tavolo.spazio()
+        inizio = tavolo.adesso()
+        _riposo(tavolo)
+        suonati = len(tavolo.suonati)
+
+        # Il menu aperto con Alt ferma la partita, e il battito la tiene ferma finché resta aperto.
+        aperto[0] = True
+        _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+        assert partita.in_pausa
+        dal = tavolo.adesso()
+        fermo = motore.tempo_di_gioco(motore.prossimo_campione())
+        for _blocco in range(costanti.FS // costanti.AUDIO_BLOCCO):
+            tavolo.avanza(1)
+            tavolo.battito()
+        assert partita.in_pausa and motore.tempo_di_gioco() == pytest.approx(fermo)
+        aperto[0] = False
+        _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+        wx.Yield()
+        assert not partita.in_pausa
+        in_pausa = tavolo.adesso() - dal
+        # Pausa dal menu: wx chiude il menu prima del comando, e la pausa del menu diventa quella chiesta, che resta.
+        aperto[0] = True
+        _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+        aperto[0] = False
+        _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+        _menu(finestra, finestra.pausa)
+        wx.Yield()
+        tavolo.battito()
+        assert partita.in_pausa and tavolo.fase_della_barra() == "In pausa: Ctrl+P per riprendere"
+        _menu(finestra, finestra.pausa)
+        assert not partita.in_pausa and [nome for nome, _voce in tavolo.suonati[suonati:]] == ["pausa", "ripresa"]
+
+        # Un centro nella palestra: il resoconto aspetta la fine del jingle.
+        _bersaglio, valori = _valori_sul_centro(tavolo)
+        _mira(tavolo, valori)
+        evento = partita._evento_impatto
+        da = len(tavolo.ricevuti)
+        while partita.fase == "volo":
+            tavolo.avanza(1)
+            tavolo.battito()
+        assert len(tavolo.ricevuti) == da and partita.fase == "attesa" and tavolo.fase_della_barra() == "Palestra: ascolta l'esito del tiro"
+        fine_del_jingle = evento.campione + len(lungo)
+        tavolo.porta_udibile_a(fine_del_jingle - 1)
+        tavolo.battito()
+        assert len(tavolo.ricevuti) == da
+        tavolo.porta_udibile_a(fine_del_jingle)
+        tavolo.battito()
+        nuovi = tavolo.ricevuti[da:]
+        assert [m.tipo for m in nuovi] == ["resoconto", "info"] and nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che chiama il bersaglio nuovo."
+        assert voce_finta[-1] == nuovi[0].annuncio and finestra.vista.GetValue().endswith("\n" + nuovi[-1].testo)
+        tavolo.cursore_sul_nuovo()
+        # Lo spazio mentre gli avvisi e lo stacco suonano ancora non conta e non suona.
+        suonati = len(tavolo.suonati)
+        tavolo.spazio()
+        assert partita.fase == "attesa" and len(tavolo.suonati) == suonati
+        tavolo.porta_udibile_a(partita._fine_degli_avvisi)
+        _fuori_dall_attesa(tavolo)
+        assert len(partita.bersagli) == 1 and partita.attesa_ferma is False
+        # In gioco fin qui: dall'inizio, meno il menu tenuto aperto e l'attesa della palestra.
+        assert tavolo.in_attesa > 0 and in_pausa > 0
+        assert partita.riepilogo()["durata_s"] == round(tavolo.adesso() - inizio - in_pausa - tavolo.in_attesa, 1)
+
+        # Fuori dalla palestra: Ctrl+P suona il non ora, e la vista dice perché.
+        partita.livello = costanti.PALESTRA_FINO_AL_LIVELLO + 1
+        rifiuto = f"La pausa con Ctrl+P c'è soltanto nei livelli della palestra, fino al livello {costanti.PALESTRA_FINO_AL_LIVELLO}."
+        _menu(finestra, finestra.pausa)
+        assert not partita.in_pausa and tavolo.suonati[-1][0] == "non_ora"
+        assert finestra.vista.GetValue().endswith("\n" + rifiuto) and voce_finta[-1] == "Pausa solo in palestra."
+        # Il menu ferma la partita in ogni livello.
+        aperto[0] = True
+        _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+        tavolo.battito()
+        assert partita.in_pausa
+        aperto[0] = False
+        _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+        wx.Yield()
+        assert not partita.in_pausa
+        # Il tiro a vuoto fuori dalla palestra non ha attesa: subito l'ascolto.
+        _a_vuoto(tavolo)
+        nuovi = _volo(tavolo)
+        assert [m.tipo for m in nuovi] == ["resoconto"] and partita.fase == "ascolto" and tavolo.fase_della_barra() == "Ascolto: Spazio per mirare"
+        conti = finestra.statistiche.dati["conti"]
+        assert (conti["pause"], conti["pause_rifiutate"], conti["pause_automatiche"], conti["attese_della_palestra"]) == (1, 1, 3, 1)
+        assert messaggi_wx == []
+    finally:
+        _chiudi(finestra)
+    assert motore.chiuso
+
+
+def test_ctrl_p_dal_tasto_rapido_nella_finestra_vera(app_wx, preset_finti, messaggi_wx, nomi, voce_finta, monkeypatch):
+    """Ctrl+P da tastiera passa da TranslateAccelerator di Windows, e wx manda l'apertura del menu Partita,
+    il comando e la chiusura, misurati su un desktop nascosto, ma per Windows nessun menu è aperto (D22).
+    Fuori dalla palestra, nella mira, il rifiuto non tocca la barra in corso, che non riparte, e nessuna
+    pausa automatica si conta; nella palestra la pausa è quella chiesta, contata una volta, e resta."""
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: False)
+    motore, flusso = motore_finto()
+    finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([], orologio=lambda: flusso.time), motore=motore)
+
+    def ctrl_p():
+        _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+        _menu(finestra, finestra.pausa)
+        _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+        wx.Yield()
+        tavolo.battito()
+
+    try:
+        finestra.Show()
+        tavolo = Tavolo(finestra, monkeypatch, flusso=flusso)
+        partita = tavolo.partita
+        tavolo.spazio()
+        _riposo(tavolo)
+        partita.livello = costanti.PALESTRA_FINO_AL_LIVELLO + 1
+        tavolo.spazio()
+        assert partita.fase == "mira" and partita.barra == 0
+        barra, inizio = partita._voce_barra, partita.inizio_barra
+        ctrl_p()
+        assert not partita.in_pausa and tavolo.suonati[-1][0] == "non_ora" and voce_finta[-1] == "Pausa solo in palestra."
+        assert partita._voce_barra is barra and partita.inizio_barra == inizio and not barra.finita
+        conti = finestra.statistiche.dati["conti"]
+        assert (conti.get("pause", 0), conti.get("pause_rifiutate", 0), conti.get("pause_automatiche", 0)) == (0, 1, 0)
+        # Nella palestra Ctrl+P mette la pausa chiesta, col suo suono, e la toglie.
+        partita.livello = 1
+        ctrl_p()
+        assert partita.in_pausa and not partita._pausa_automatica and tavolo.suonati[-1][0] == "pausa"
+        ctrl_p()
+        assert not partita.in_pausa and tavolo.suonati[-1][0] == "ripresa"
+        assert (conti.get("pause", 0), conti.get("pause_rifiutate", 0), conti.get("pause_automatiche", 0)) == (1, 1, 0)
+    finally:
+        _chiudi(finestra)
+    assert motore.chiuso
 
 
 def test_lo_spazio_della_partita_nuova_riavvia_il_battito_guasto(app_wx, preset_finti, messaggi_wx, monkeypatch):

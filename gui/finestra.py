@@ -21,11 +21,14 @@ degli errori e l'aggiornamento automatico, coi quattro metodi che aggiornamento.
 l'attributo chiusa, che diventa vero quando la finestra comincia a chiudersi.
 Il dialogo del nome si apre quando il suono dell'ingresso in classifica è finito: nell'attesa conta
 già come un dialogo aperto, così lo spazio non comincia una partita nuova.
-La partita si ferma da sola, in silenzio, quando si apre un dialogo o un messaggio, o quando la
-finestra perde l'attivazione, e riprende da sola al ritorno, ma soltanto se la pausa l'aveva messa la
-finestra: una pausa chiesta con Ctrl+P resta (D14). A ogni battito la finestra chiede anche al motore
-audio se il flusso è vivo, e ne legge le notizie: gli errori del filo dell'audio, i buchi e il flusso
-perso finiscono nel registro, riassunti, perché il filo di PortAudio non arriva alla rete degli errori.
+La partita si ferma da sola, in silenzio, quando si apre un dialogo o un messaggio, o un menu, con
+Alt, F10 o il mouse (D22), o quando la finestra perde l'attivazione, e riprende da sola al ritorno, ma
+soltanto se la pausa l'aveva messa la finestra: una pausa chiesta con Ctrl+P resta (D14). Il menu
+aperto lo dicono gli eventi dei menu di wx e, a ogni battito, Windows stesso, così un evento perso o
+due eventi che non si appaiano non lasciano la partita ferma, né la fanno ripartire a menu aperto.
+A ogni battito la finestra chiede anche al motore audio se il flusso è vivo, e ne legge le notizie:
+gli errori del filo dell'audio, i buchi e il flusso perso finiscono nel registro, riassunti, perché il
+filo di PortAudio non arriva alla rete degli errori.
 La scheda audio la sceglie chi gioca (D20, sul modello della voce Scheda audio di MeTeOra): il motore
 nasce con la scheda delle impostazioni, e se quella non c'è o non si apre la vista e la sintesi lo
 dicono, e Ciechino suona su quella automatica, senza cancellare la scelta, perché le cuffie possono
@@ -35,6 +38,7 @@ compaiono anche le cuffie Bluetooth accese dopo l'avvio, e il suono perso torna;
 
 import contextlib
 import datetime
+import functools
 import os
 import sys
 import time
@@ -102,6 +106,13 @@ ICONE_DEGLI_ESITI = {aggiornamento.NON_RIUSCITO: wx.ICON_ERROR, aggiornamento.NO
 USCITA = "uscita"
 RIAPERTURA = "riapertura"
 PER_AGGIORNARE = "aggiornamento"
+# I segni di GetGUIThreadInfo di Windows che dicono un menu aperto (D22): il filo è nel giro di un menu,
+# anche soltanto con la barra dei menu evidenziata da Alt o da F10, senza tendina; nel menu di sistema,
+# Alt+Spazio; in un menu a comparsa, come quello del tasto Applicazioni.
+GUI_INMENUMODE = 0x4
+GUI_SYSTEMMENUMODE = 0x8
+GUI_POPUPMENUMODE = 0x10
+SEGNI_DEL_MENU = GUI_INMENUMODE | GUI_SYSTEMMENUMODE | GUI_POPUPMENUMODE
 
 
 def guadagno_del_volume(valore):
@@ -124,6 +135,49 @@ def _partita_vera(motore, suoni, statistiche):
     from partita import Partita
 
     return Partita(motore, suoni, statistiche)
+
+
+@functools.cache
+def _chiedi_a_windows():
+    """La funzione di Windows che dice lo stato dei menu del filo, con la sua struttura, in una copia di
+    user32 tutta sua, perché le firme non tocchino quelle di altri moduli; None fuori da Windows."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class GUITHREADINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD), ("hwndActive", wintypes.HWND), ("hwndFocus", wintypes.HWND),
+                    ("hwndCapture", wintypes.HWND), ("hwndMenuOwner", wintypes.HWND), ("hwndMoveSize", wintypes.HWND), ("hwndCaret", wintypes.HWND),
+                    ("rcCaret", wintypes.RECT)]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.GetGUIThreadInfo.restype = wintypes.BOOL
+    user32.GetGUIThreadInfo.argtypes = [wintypes.DWORD, ctypes.POINTER(GUITHREADINFO)]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+    kernel32.GetCurrentThreadId.argtypes = []
+    return user32.GetGUIThreadInfo, kernel32.GetCurrentThreadId, GUITHREADINFO, ctypes.byref, ctypes.sizeof
+
+
+def menu_di_windows():
+    """
+    Vero se il filo che chiama, quello della finestra, ha un menu aperto secondo Windows, anche soltanto
+    la barra dei menu evidenziata da Alt; falso se non ce l'ha; None se non lo si sa, fuori da Windows o
+    se la domanda non riesce (D22). Windows lo sa sempre: un evento dei menu di wx perso non lo inganna.
+    """
+    try:
+        funzioni = _chiedi_a_windows()
+        if funzioni is None:
+            return None
+        chiedi, filo, struttura, riferimento, misura = funzioni
+        stato = struttura()
+        stato.cbSize = misura(struttura)
+        if not chiedi(filo(), riferimento(stato)):
+            return None
+        return bool(stato.flags & SEGNI_DEL_MENU)
+    except Exception:  # noqa: BLE001 - il battito chiede a ogni giro: senza risposta valgono gli eventi di wx
+        return None
 
 
 def _senza_tasto(testo):
@@ -176,6 +230,8 @@ class FinestraPrincipale(wx.Frame):
         self._per_riaprire = False
         self._chiusura_dal = None
         self._modali = 0
+        # Il menu aperto secondo gli eventi dei menu di wx (D22): vale da solo soltanto dove Windows non sa dirlo.
+        self._menu_dagli_eventi = False
         self._comandi_in_corso = 0
         self._nel_battito = False
         self._errore_aperto = False
@@ -239,6 +295,8 @@ class FinestraPrincipale(wx.Frame):
         dentro_area_utile(self, MISURA)
         self.Bind(wx.EVT_CLOSE, self._alla_chiusura)
         self.Bind(wx.EVT_ACTIVATE, self._all_attivazione)
+        self.Bind(wx.EVT_MENU_OPEN, self._al_menu_aperto)
+        self.Bind(wx.EVT_MENU_CLOSE, self._al_menu_chiuso)
         self.Bind(wx.EVT_CHAR_HOOK, self._tasto)
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._al_battito, self.timer)
@@ -312,7 +370,8 @@ class FinestraPrincipale(wx.Frame):
         """I tasti che il gancio della finestra prende da sé, con quello che fanno, per la guida."""
         return (
             # Traduttori: il nome del tasto, come lo dice la guida.
-            (_("Spazio"), _("comincia la partita, avvia la mira e ferma le tre scivolate, della direzione, dell'alzo e della potenza")),
+            (_("Spazio"), _("comincia la partita, avvia la mira e ferma le tre scivolate, della direzione, dell'alzo e della potenza; nei livelli "
+                            "della palestra, dopo ogni tiro, fa ripartire la partita, che aspetta ferma")),
             ("F5", _("porta il fuoco nella vista della partita")),
             ("F7", _("porta il fuoco nella barra di stato")),
         )
@@ -486,8 +545,11 @@ class FinestraPrincipale(wx.Frame):
             self.aggiorna_barra()
 
     def _finestra_modale_aperta(self):
-        """Vero se è aperto davvero un dialogo, o un messaggio: allora la partita si ferma, e F5 e F7 sono suoi."""
-        if self._modali:
+        """
+        Vero se è aperto davvero un dialogo, o un messaggio, o un menu (D22): allora la partita si ferma,
+        F5 e F7 sono suoi, e il dialogo del nome aspetta che si chiuda.
+        """
+        if self._modali or self._menu_aperto():
             return True
         return any(isinstance(finestra, wx.Dialog) and finestra.IsShown() for finestra in wx.GetTopLevelWindows())
 
@@ -510,7 +572,10 @@ class FinestraPrincipale(wx.Frame):
         partita e si ferma qui, senza Skip: il carattere non arriva all'area di testo, e NVDA non lo
         ripete. Lo spazio tenuto giù conta una volta sola, alla prima pressione. F5 e F7 portano il fuoco.
         Ogni altro tasto prosegue come sempre, verso i controlli e i tasti rapidi.
+        Un tasto che arriva qui dice anche che nessun menu è aperto, perché il menu aperto si tiene la
+        tastiera: dove Windows non sa dire dei menu, un evento di chiusura perso finisce qui (D22).
         """
+        self._menu_dagli_eventi = False
         codice = event.GetKeyCode()
         if not event.HasAnyModifiers():
             if codice == wx.WXK_SPACE and self._spazio_per_la_partita():
@@ -801,6 +866,51 @@ class FinestraPrincipale(wx.Frame):
         else:
             self._ferma_la_partita()
 
+    # I menu (D22): un menu aperto, con Alt, F10 o il mouse, ferma la partita come un dialogo, e la
+    # ripresa viene quando si chiude, anche se un suo comando apre poi un dialogo, che la tiene ferma
+    # fino alla sua chiusura. I tasti rapidi dei menu non sono menu aperti, anche se wx ne manda gli
+    # eventi: lo dice Windows.
+
+    def _al_menu_aperto(self, event):
+        """
+        Si apre un menu della finestra: la partita si ferma subito, in silenzio. Ma un tasto rapido, come
+        Ctrl+P, passa da TranslateAccelerator di Windows, che manda l'apertura del menu della sua voce,
+        poi il comando, poi la chiusura, senza che nessun menu si apra davvero: lì Windows dice che il
+        filo non è in un menu, e la partita non si ferma, così Ctrl+P fuori dalla palestra non fa ripartire
+        la barra della mira e non conta una pausa automatica. Un menu vero è già aperto per Windows quando
+        arriva l'evento; dove Windows non sa rispondere valgono gli eventi.
+        """
+        event.Skip()
+        if self.chiusa or menu_di_windows() is False:
+            return
+        self._menu_dagli_eventi = True
+        self._ferma_la_partita()
+
+    def _al_menu_chiuso(self, event):
+        """
+        Si chiude un menu della finestra: la ripresa si prova dopo il comando scelto, se c'è, come dopo un
+        dialogo. wx manda la chiusura prima del comando: un comando che apre un dialogo tiene ferma la
+        partita, e la prova della ripresa, che arriva dentro il dialogo, la lascia stare.
+        """
+        event.Skip()
+        if self.chiusa:
+            return
+        self._menu_dagli_eventi = False
+        self._dopo_un_modale()
+
+    def _menu_aperto(self):
+        """
+        Vero se un menu è aperto. Lo dice Windows, che lo sa anche soltanto con la barra dei menu evidenziata
+        da Alt, quando wx non manda eventi, e la sua parola vale sugli eventi di wx, che si possono perdere
+        o non appaiare: un'apertura persa non fa ripartire la partita a menu aperto, una chiusura persa
+        non la lascia ferma. Dove Windows non sa rispondere valgono gli eventi.
+        """
+        di_windows = menu_di_windows()
+        if di_windows is None:
+            return self._menu_dagli_eventi
+        self._menu_dagli_eventi = di_windows
+        return di_windows
+
     def errore_imprevisto(self, tipo, valore):
         """
         Un'eccezione sfuggita a un comando: il comando muore in silenzio, e il resoconto completo va nel
@@ -838,11 +948,17 @@ class FinestraPrincipale(wx.Frame):
     # La partita.
 
     def nuova_partita(self):
-        """Ctrl+N: una partita nuova; con una partita in corso, prima una domanda, perché quella si abbandona."""
+        """
+        Ctrl+N: una partita nuova; con una partita in corso, prima una domanda, perché quella si abbandona.
+        A partita appena finita, la fine che aspetta ancora la fine del tonfo arriva prima, con la sua
+        classifica (D22).
+        """
         if self.partita.in_corso():
             if not self._domanda(_("Una partita è in corso: la abbandoni e ne cominci una nuova?")):
                 return
             self._ricevi(self.partita.abbandona())
+        else:
+            self._ricevi(self._messaggi_in_attesa())
         self._ricevi(self.partita.nuova())
         self._riavvia_il_battito()
 
@@ -919,6 +1035,15 @@ class FinestraPrincipale(wx.Frame):
         """
         dopo = getattr(self.partita, "dopo_gli_avvisi", None)
         return dopo() if callable(dopo) else None
+
+    def _messaggi_in_attesa(self):
+        """
+        I messaggi dell'ultimo tiro che la partita tiene finché il suo effetto suona (D22), subito: per la
+        partita nuova e per la chiusura, che non devono perdere la fine della partita e la sua classifica.
+        Una partita che non li tiene, come quelle finte delle prove, non ne ha.
+        """
+        prendi = getattr(self.partita, "messaggi_in_attesa", None)
+        return prendi() if callable(prendi) else []
 
     def _classifica_attuale(self):
         """
@@ -1509,6 +1634,9 @@ class FinestraPrincipale(wx.Frame):
             return
         if self._chiusura_dal is None:
             self._chiusura_dal = time.monotonic()
+        # La fine di una partita che aspetta ancora la fine del tonfo arriva adesso, e la chiusura aspetta la sua classifica,
+        # che il battito porta al dialogo del nome (D22).
+        self._accogli(self._messaggi_in_attesa())
         aperti = [d for d in wx.GetTopLevelWindows() if isinstance(d, wx.Dialog) and d.IsModal()]
         for dialogo in aperti:
             # Chiuso come annullato, il nome perderebbe la voce della classifica.
@@ -1655,6 +1783,9 @@ class FinestraPrincipale(wx.Frame):
                 self._per_riaprire = False
                 event.Veto()
                 return
+        # I messaggi dell'ultimo tiro che aspettavano la fine del suo effetto (D22): la fine di una partita
+        # chiusa mentre suona il tonfo va in classifica come le altre.
+        self._accogli(self._messaggi_in_attesa())
         if event.CanVeto():
             self._chiudi_i_conti()
         self.chiusa = True

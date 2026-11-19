@@ -1,12 +1,19 @@
-Collaudo di Ciechino 0.1.0, la prima partita: cancella le righe superate, annota dopo i due punti quelle con problemi.
-Prima: cuffie in testa, NVDA acceso; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. I dati che scrive restano fuori da git.
-Domanda 9: nella mira, aprendo un menu con Alt, la scivolata continua e arriva al massimo: vuoi che anche il menu aperto metta in pausa?
-* Sì.
-
-Passo 6: gioca fino a vuotare la riserva, entrando in classifica e colpendo almeno un bonus, dal terzo livello, e dopo il centro sul bonus premi subito la barra spaziatrice; a partita finita Ctrl+K e Ctrl+T.
-Domanda 10: i bersagli che si susseguono suonano ognuno un po' diverso, nel timbro e nell'oscillazione, e nota e larghezza della vibrazione ti dicono ancora altezza e grandezza?
-Domanda 11: il jingle del centro, tre note, e quello del bonus, otto più acute, si distinguono, anche mentre la voce legge il resoconto, e la coda del bonus lascia sentire i bip della mira?
-* Sarebbe meglio se il testo comparisse dopo che il jingle di successo ha suonato, diamogli un po di ritardo e di silenzio prima che compaia il nuovo bersaglio, lasciamo che l'utente lo chiami con un tasto, così a modo di andare a leggersi il report del tiro.
- 
-Domanda 13: classifica e statistiche si aprono massimizzate, si leggono riga per riga e Esc le chiude?
-* No. Esc non ha nulla da chiudere: la classifica è nellaarea di testo principale.
+Collaudo di Ciechino 0.1.0, il sommario e la palestra: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. Per arrivare presto ai livelli alti, prima del collaudo ClaudIA porta CENTRI_PER_LIVELLO di costanti.py da 10 a 2, e alla fine lo rimette a 10, senza committarlo: si sale di livello ogni 2 centri.
+Passo 1: al primo livello tira un centro, un colpo lungo e uno debole che cade prima del bersaglio, poi un tiro teso che passa poco sotto il bersaglio; dopo ogni tiro ascolta l'effetto fino in fondo, leggi il resoconto con la voce e col braille, poi F7 per la barra, e infine premi lo spazio.
+Domanda 1: il resoconto compare appena finito il jingle o il tonfo, senza pausa, e non sopra: va bene così, o vuoi un po' di silenzio prima che compaia?
+Domanda 2: il sommario coi numeri, Dal bersaglio, arriva dopo l'esito, si legge bene in braille, la voce dice più e meno, e i segni ti portano alla correzione giusta, anche nei tiri tesi, che arrivano salendo e possono dire lungo di molti metri?
+Domanda 3: dopo l'effetto tutto tace e la barra dice che cosa farà lo spazio; dopo il centro lo spazio chiama il bersaglio nuovo, dopo il tiro a vuoto i bersagli tornano a cantare; lo spazio premuto durante il jingle, o nel mezzo secondo dopo, non fa niente e non suona, e va ripremuto: ti basta, o vuoi sentire il non ora?
+Domanda 4: dopo il tiro teso a vuoto, la riga del mancato dice gli stessi numeri del sommario, anche lungo di molti metri con un mancato di pochi centimetri: ti va bene, o lì vuoi lo scarto nel punto più vicino?
+Passo 2: durante l'ascolto, poi nella mira e poi col colpo in volo, apri un menu con Alt, aspetta qualche secondo e chiudilo con Esc; prova anche F10, Alt+Spazio e il tasto Applicazioni nella vista; infine scegli Pausa dal menu Partita, e toglila con Ctrl+P.
+Domanda 5: ogni menu ferma la partita in silenzio, la mira compresa, e alla chiusura la partita riprende da dove era; Pausa scelta dal menu dà la pausa col suo suono, che resta a menu chiuso?
+Passo 3: a partita in corso premi Ctrl+K, leggi e chiudi con Esc; poi Ctrl+T, leggi e chiudi con Esc.
+Domanda 6: classifica e statistiche si aprono in una finestra loro, massimizzata, si leggono riga per riga ed Esc le chiude?
+Passo 4: gioca fino al quarto livello, ascoltando ogni bersaglio nuovo; nell'attesa del centro che chiude il terzo premi Ctrl+P; al quarto premi Ctrl+P durante l'ascolto e nella mira, poi tira, e dopo un centro avvia la mira mentre suona ancora il jingle.
+Domanda 7: i bersagli che si susseguono suonano ognuno un po' diverso, nel timbro e nell'oscillazione, e nota e larghezza della vibrazione ti dicono ancora altezza e grandezza?
+Domanda 8: al quarto livello Ctrl+P suona il non ora e la vista dice perché, senza zittire niente e senza far ripartire la scivolata, e dopo il tiro si torna subito ad ascoltare, col resoconto che aspetta comunque la fine dell'effetto?
+Domanda 9: avviando la mira durante il jingle, la prima scivolata aspetta il resoconto e poi il suo secondo di silenzio, così la voce comincia prima dei bip: va bene così, o fuori dalla palestra vuoi il resoconto all'impatto, sopra il jingle, come prima?
+Domanda 10: nell'attesa del centro che chiude il terzo livello Ctrl+P suona il non ora, perché il livello è già il quarto, mentre la barra dice ancora Palestra: va bene, o lì vuoi ancora la pausa?
+Passo 5: gioca fino al settimo livello, leggendo i resoconti del quinto e del sesto.
+Domanda 11: dal quarto al sesto il sommario a parole ti basta, e dal settimo il sommario non ti manca? I confini fra numeri, parole e niente vanno bene, o li sposti?
+Esito:

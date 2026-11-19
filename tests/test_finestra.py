@@ -520,6 +520,171 @@ def test_la_finestra_non_attiva_ferma_la_partita_ma_ctrl_p_resta(finestra, monke
     assert partita.in_pausa and not partita.automatica and partita.automatiche == prima
 
 
+# I menu (D22): un menu aperto ferma la partita come un dialogo.
+
+def _evento_del_menu(finestra, tipo):
+    """L'evento che wx manda alla finestra quando il primo menu della barra si apre o si chiude."""
+    evento = wx.MenuEvent(tipo, 0, finestra.GetMenuBar().GetMenu(0))
+    evento.SetEventObject(finestra)
+    finestra.GetEventHandler().ProcessEvent(evento)
+
+
+def test_un_menu_aperto_ferma_la_partita_e_alla_chiusura_riprende(finestra, sentiti, monkeypatch):
+    """Il menu aperto con Alt o F10 ferma la partita, in silenzio, come un dialogo; il battito la tiene
+    ferma finché il menu resta aperto, e la chiusura la fa riprendere. Qui Windows non sa dire dei menu,
+    e valgono gli eventi di wx."""
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: None)
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    assert partita.in_pausa and partita.automatiche == ["ferma"] and finestra._finestra_modale_aperta()
+    finestra._al_battito()
+    wx.Yield()
+    assert partita.in_pausa and partita.automatiche == ["ferma"]
+    _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+    wx.Yield()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"] and not finestra._finestra_modale_aperta()
+    assert sentiti == [] and "pausa" not in partita.chiamate
+
+
+def test_il_menu_lo_dice_windows_anche_senza_gli_eventi(finestra, monkeypatch):
+    """Con Alt la barra dei menu si evidenzia senza tendina, e wx non manda eventi: lo dice Windows, e il
+    battito ferma la partita; quando Windows dice che il menu non c'è più, la riprende, anche se la
+    chiusura di wx si è persa."""
+    aperto = [True]
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: aperto[0])
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    finestra._al_battito()
+    assert partita.in_pausa and partita.automatiche == ["ferma"]
+    aperto[0] = False
+    finestra._al_battito()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"]
+    # L'apertura di wx, poi la chiusura persa: la parola di Windows vale.
+    aperto[0] = True
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    finestra._al_battito()
+    assert partita.in_pausa
+    aperto[0] = False
+    finestra._al_battito()
+    assert not partita.in_pausa and not finestra._menu_dagli_eventi
+    # L'apertura di wx persa, col menu che Windows dice aperto: il battito non fa ripartire la partita.
+    aperto[0] = True
+    finestra._al_battito()
+    assert partita.in_pausa and partita.automatiche == ["ferma", "riprende"] * 2 + ["ferma"]
+
+
+def test_gli_eventi_dei_menu_persi_o_spaiati(finestra, sentiti, monkeypatch):
+    """Dove Windows non sa dire dei menu: due aperture e una chiusura, come quando ci si sposta da un menu
+    all'altro, fanno riprendere la partita alla chiusura, perché il menu aperto non è un conto; una
+    chiusura persa la tiene ferma finché un tasto non arriva alla finestra, cosa che a menu aperto non
+    succede."""
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: None)
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+    wx.Yield()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"]
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    for _battito in range(3):
+        finestra._al_battito()
+    assert partita.in_pausa
+    evento = _tasto(finestra, wx.WXK_F5)
+    assert not evento.GetSkipped() and sentiti[-1] == "vai_alla_vista"
+    finestra._al_battito()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"] * 2
+
+
+def test_il_comando_del_menu_che_apre_un_dialogo_tiene_ferma_la_partita(finestra, sentiti, monkeypatch):
+    """wx manda la chiusura del menu prima del comando: la prova della ripresa arriva dentro il dialogo
+    aperto dal comando, e lo lascia stare; la partita riprende quando il dialogo si chiude, con una pausa
+    automatica sola."""
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: None)
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    durante = []
+
+    def legge(dialogo):
+        wx.Yield()
+        durante.append((partita.in_pausa, partita.automatica))
+        return wx.ID_OK
+
+    monkeypatch.setattr(dialoghi.Lettura, "ShowModal", legge)
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+    finestra._esegui(finestra.mostra_classifica)
+    assert durante == [(True, True)]
+    wx.Yield()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"] and sentiti == ["classifica"]
+
+
+def test_il_tasto_rapido_non_e_un_menu_aperto(finestra, monkeypatch):
+    """Un tasto rapido dei menu, come Ctrl+P, passa da TranslateAccelerator di Windows, e wx manda
+    l'apertura del menu, il comando e la chiusura, ma per Windows nessun menu si è aperto: la partita non
+    si ferma, e la chiusura non ha niente da riprendere. Ctrl+P arriva alla partita in corso, non ferma."""
+    monkeypatch.setattr(modulo_finestra, "menu_di_windows", lambda: False)
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    _evento_del_menu(finestra, wx.wxEVT_MENU_OPEN)
+    assert not partita.in_pausa and partita.automatiche == [] and not finestra._menu_dagli_eventi
+    evento = wx.CommandEvent(wx.wxEVT_MENU, finestra.voci_del_menu[finestra.pausa].GetId())
+    evento.SetEventObject(finestra)
+    finestra.GetEventHandler().ProcessEvent(evento)
+    _evento_del_menu(finestra, wx.wxEVT_MENU_CLOSE)
+    wx.Yield()
+    finestra._al_battito()
+    assert partita.chiamate[-1] == "pausa" and partita.in_pausa and partita.automatiche == []
+
+
+def test_menu_di_windows_risponde():
+    """La domanda vera a Windows: nelle prove nessun menu è aperto; fuori da Windows non si sa."""
+    if sys.platform == "win32":
+        assert modulo_finestra.menu_di_windows() is False
+    else:
+        assert modulo_finestra.menu_di_windows() is None
+
+
+class PartitaConLaFine(PartitaFinta):
+    """Una partita finta finita col tonfo dell'ultimo tiro che suona ancora: la fine aspetta, come nella
+    partita vera, e la finestra la chiede con messaggi_in_attesa (D22)."""
+
+    def __init__(self, motore, suoni_, statistiche):
+        super().__init__(motore, suoni_, statistiche)
+        self.fase = "finita"
+        self.aspettano = [Messaggio("resoconto", "Tiro 9, livello 2: a vuoto; la riserva è vuota.", "A vuoto, riserva vuota."), _fine(1234)]
+
+    def messaggi_in_attesa(self):
+        messaggi, self.aspettano = self.aspettano, []
+        return messaggi
+
+
+def test_la_fine_che_aspetta_il_tonfo_arriva_prima_della_partita_nuova_e_dell_uscita(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """D22: Ctrl+N a partita appena finita, col tonfo che suona ancora: prima la fine, con la sua
+    classifica, poi la partita nuova; e lo stesso all'uscita, dove la fine va in classifica col nome."""
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.testo.SetValue("Gabry"), dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    f = FinestraPrincipale(fabbrica_della_partita=PartitaConLaFine)
+    try:
+        f.Show()
+        monkeypatch.setattr(f, "IsActive", lambda: True)
+        f._esegui(f.nuova_partita)
+        testo = f.vista.GetValue()
+        assert testo.index("\nPartita finita: 1234 punti.") < testo.index("\nComincia la partita, livello 1.")
+        assert [(v["nome"], v["punteggio"]) for v in classifica.carica()[0]] == [("Gabry", 1234)] and f.partita.chiamate == ["nuova"]
+        assert sentiti == ["in_classifica", "confermato"]
+    finally:
+        _chiudi(f)
+    f = FinestraPrincipale(fabbrica_della_partita=PartitaConLaFine)
+    try:
+        f.Show()
+        f.partita.aspettano[-1] = _fine(900)
+        f.Close()
+        assert f.chiusa and [v["punteggio"] for v in classifica.carica()[0]] == [1234, 900]
+    finally:
+        _chiudi(f)
+
+
 # La partita, la classifica e le letture.
 
 def _fine(punteggio):

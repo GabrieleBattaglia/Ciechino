@@ -1,6 +1,6 @@
 """
-Le prove di fisica.py: il tiro e la sua inversa, la parabola, il suono dello spazio, la scomposizione
-dello scarto e la copertura del cubo.
+Le prove di fisica.py: il tiro e la sua inversa, la parabola, il suono dello spazio, la distanza
+orizzontale delle misure dell'artigliere (D21), la scomposizione dello scarto e la copertura del cubo.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 La prova della copertura è quella che il progetto vuole: ogni punto dove può stare il centro di un
@@ -187,6 +187,19 @@ def test_distanza_e_suono_di():
         assert frequenze[k] == pytest.approx(f) == pytest.approx(fisica.frequenza_di(punto[1]))
         assert pan[k] == pytest.approx(p) == pytest.approx(fisica.pan_di(punto[0], punto[2]))
         assert guadagni[k] == pytest.approx(g) == pytest.approx(fisica.guadagno_di(fisica.distanza_dal_cannone(punto)))
+
+
+def test_distanza_orizzontale():
+    """D21: la distanza dal cannone senza l'altezza, quella delle misure dell'artigliere."""
+    assert fisica.distanza_orizzontale((0.0, 37.0, 0.0)) == 0.0
+    assert fisica.distanza_orizzontale((3.0, 12.0, -4.0)) == pytest.approx(5.0)
+    assert isinstance(fisica.distanza_orizzontale((3.0, 12.0, 4.0)), float)
+    posizioni = np.array([[0.0, 10.0, 40.0], [-20.0, 30.0, 60.0], [15.0, 45.0, 75.0]])
+    distanze = fisica.distanza_orizzontale(posizioni)
+    assert distanze.shape == (3,)
+    assert distanze == pytest.approx(np.hypot(posizioni[:, 0], posizioni[:, 2]))
+    # L'altezza non conta: la stessa distanza dal suolo al tetto del cubo.
+    assert fisica.distanza_orizzontale((6.0, 0.0, 8.0)) == fisica.distanza_orizzontale((6.0, CUBO_Y[1], 8.0)) == pytest.approx(10.0)
 
 
 def test_scomponi_bersaglio_davanti():

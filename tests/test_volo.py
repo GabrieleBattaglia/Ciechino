@@ -1,13 +1,16 @@
 """
 Le prove di volo.py: centri pieni e di striscio, tiri corti, lunghi, a destra e sopra, bersagli
-mobili, bonus già usciti, la voce del proiettile e il tempo di calcolo; e il passaggio del sommario
-(D21), confrontato con un minimo cercato senza i passi del volo, in salita e in discesa, su un
-bersaglio che si muove e fra due passi.
+mobili, bonus già usciti, la voce del proiettile e il tempo di calcolo; lo scarto nel punto più
+vicino, confrontato con un minimo cercato senza i passi del volo, anche fra due passi; e le misure
+dell'artigliere del sommario (D21), confrontate con una ricerca fine senza i passi del volo e, per i
+bersagli fermi, con le formule chiuse della parabola, in salita e in discesa, coi segni che portano
+alla correzione giusta e coi casi limite.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 """
 
 import math
+import random
 import time
 
 import numpy as np
@@ -15,7 +18,7 @@ import pytest
 
 import fisica
 import volo
-from bersagli import Bersaglio
+from bersagli import Bersaglio, genera
 from costanti import ALTEZZA_CANNONE, CUBO_X, GRAVITA, PROIETTILE_DB, RAGGIO_PROIETTILE
 
 PARTENZA = 20.0
@@ -26,6 +29,15 @@ TEMPO_MASSIMO_DEL_CALCOLO = 0.05
 # Con passi di 5 centesimi di secondo, cinquanta volte quelli del gioco, il vertice della parabola
 # sbaglia di qualche millimetro: il centimetro basta a distinguerlo dal passo, che sbaglia di decimetri.
 TOLLERANZA_FRA_DUE_PASSI = 0.01
+# La ricerca fine delle misure dell'artigliere nelle prove: un campione ogni centomillesimo di
+# secondo, e l'interpolazione lineare fra i due attorno al cambio.
+PASSO_FINE = 1e-5
+# Quanto le misure del volo possono scostarsi da quelle della ricerca fine: in metri e in gradi, e
+# in secondi per i tempi.
+TOLLERANZA_DELLE_MISURE = 1e-4
+TOLLERANZA_DEI_TEMPI = 1e-6
+# Il passo, nei valori da 0 a 1 delle scivolate, delle derivate nella prova dei segni.
+PASSO_DELLE_DERIVATE = 1e-4
 
 
 def _fermo(punto, raggio=1.0, **altro):
@@ -76,17 +88,81 @@ def _scarto_vero(traiettoria, bersaglio, tempo):
     return fisica.scomponi(traiettoria.posizione(tempo) - centro, centro)
 
 
-def _controlla_passaggio(esito, traiettoria, bersaglio, tolleranza=1e-4):
-    """D21: il passaggio del volo è quello vero, nell'istante della distanza minima, con lo scarto dal
-    centro del bersaglio in quello stesso istante e l'inclinazione del proiettile lì."""
-    passaggio = esito.passaggio
+def _controlla_scarto(esito, traiettoria, bersaglio, tolleranza=1e-4):
+    """Lo scarto di un tiro a vuoto è quello vero nel punto più vicino, nell'istante della distanza
+    minima, contro il centro del bersaglio in quello stesso istante, e torna con la distanza dal
+    vicino. Restituisce l'istante."""
     tempo = _minimo_esatto(traiettoria, bersaglio)
-    assert passaggio.tempo == pytest.approx(tempo, abs=tolleranza / 10)
-    assert passaggio.scarto == pytest.approx(_scarto_vero(traiettoria, bersaglio, tempo), abs=tolleranza)
-    assert passaggio.inclinazione == pytest.approx(traiettoria.inclinazione(tempo), abs=tolleranza * 10)
-    assert (passaggio.laterale, passaggio.verticale, passaggio.profondita) == (passaggio.scarto[1], passaggio.scarto[2], passaggio.scarto[0])
-    assert passaggio.distanza == pytest.approx(math.sqrt(sum(c * c for c in passaggio.scarto)))
-    return passaggio
+    assert esito.scarto == pytest.approx(_scarto_vero(traiettoria, bersaglio, tempo), abs=tolleranza)
+    assert math.sqrt(sum(c * c for c in esito.scarto)) - bersaglio.raggio == pytest.approx(esito.distanza_dal_vicino, abs=tolleranza)
+    return tempo
+
+
+def _cambio_fine(tempi, valori, indice):
+    """Il tempo del cambio di segno fra il campione indice meno uno e indice, interpolato."""
+    prima, dopo = valori[indice - 1], valori[indice]
+    return float(tempi[indice - 1] + (tempi[indice] - tempi[indice - 1]) * prima / (prima - dopo))
+
+
+def _misure_vere(traiettoria, bersaglio, passo=PASSO_FINE):
+    """D21: le misure dell'artigliere cercate in un altro modo da quello del volo: un campione ogni
+    centomillesimo di secondo fino a terra, il primo cambio, e l'interpolazione lineare. Restituisce
+    un dizionario coi campi di volo.Misure."""
+    a_terra = traiettoria.tempo_a_terra()
+    tempi = np.append(np.arange(0.0, a_terra, passo), a_terra)
+    proiettile = traiettoria.posizione(tempi)
+    centri = bersaglio.posizione(PARTENZA + tempi)
+    avanzo = np.hypot(proiettile[:, 0], proiettile[:, 2]) - np.hypot(centri[:, 0], centri[:, 2])
+    quota = proiettile[:, 1] - centri[:, 1]
+    vere = dict.fromkeys(("arrivo", "laterale", "verticale", "inclinazione", "ricaduta", "profondita"))
+    arrivati = np.flatnonzero(avanzo >= 0.0)
+    if arrivati.size:
+        indice = int(arrivati[0])
+        arrivo = 0.0 if indice == 0 else _cambio_fine(tempi, avanzo, indice)
+        centro = bersaglio.posizione(PARTENZA + arrivo)
+        _radiale, laterale, verticale = fisica.scomponi(traiettoria.posizione(arrivo) - centro, centro)
+        vere.update(arrivo=arrivo, laterale=laterale, verticale=verticale, inclinazione=traiettoria.inclinazione(arrivo))
+    scende = traiettoria.inclinazione(tempi) <= 0.0
+    ricadute = np.flatnonzero(scende[1:] & (quota[:-1] >= 0.0) & (quota[1:] < 0.0)) + 1
+    if ricadute.size:
+        ricaduta = _cambio_fine(tempi, quota, int(ricadute[0]))
+        profondita = fisica.distanza_orizzontale(traiettoria.posizione(ricaduta)) - fisica.distanza_orizzontale(bersaglio.posizione(PARTENZA + ricaduta))
+        vere.update(ricaduta=ricaduta, profondita=profondita)
+    return vere
+
+
+def _misure_chiuse(traiettoria, punto):
+    """D21: l'arrivo e la ricaduta di un bersaglio fermo, dalle formule chiuse della parabola: la
+    distanza orizzontale cresce col tempo alla velocità orizzontale, e la ricaduta è la radice più
+    grande di origine più vy t meno g t al quadrato mezzi uguale all'altezza. None dove non ci sono."""
+    orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+    arrivo = fisica.distanza_orizzontale(punto) / orizzontale
+    verticale = float(traiettoria.iniziale[1])
+    discriminante = verticale * verticale - 2.0 * GRAVITA * (punto[1] - ALTEZZA_CANNONE)
+    ricaduta = (verticale + math.sqrt(discriminante)) / GRAVITA if discriminante >= 0.0 else None
+    return (arrivo if arrivo <= traiettoria.tempo_a_terra() else None), ricaduta
+
+
+def _controlla_misure(misure, traiettoria, bersaglio):
+    """D21: le misure del volo sono quelle vere, che mancano dove mancano quelle della ricerca fine;
+    per un bersaglio fermo anche l'arrivo e la ricaduta delle formule chiuse."""
+    vere = _misure_vere(traiettoria, bersaglio)
+    for nome, vera in vere.items():
+        misura = getattr(misure, nome)
+        if vera is None:
+            assert misura is None, nome
+            continue
+        tolleranza = TOLLERANZA_DEI_TEMPI if nome in ("arrivo", "ricaduta") else TOLLERANZA_DELLE_MISURE
+        assert misura == pytest.approx(float(vera), abs=tolleranza), nome
+    if not bersaglio.mobile:
+        arrivo, ricaduta = _misure_chiuse(traiettoria, bersaglio.posizione(0.0))
+        assert (misure.arrivo is None) == (arrivo is None) and (misure.ricaduta is None) == (ricaduta is None)
+        if arrivo is not None:
+            assert misure.arrivo == pytest.approx(arrivo, abs=1e-8)
+        if ricaduta is not None:
+            assert misure.ricaduta == pytest.approx(ricaduta, abs=1e-8)
+    assert misure.scarto == (misure.profondita, misure.laterale, misure.verticale)
+    return misure
 
 
 def _controlla_tiro_a_vuoto(esito, traiettoria, bersaglio):
@@ -98,12 +174,10 @@ def _controlla_tiro_a_vuoto(esito, traiettoria, bersaglio):
     assert esito.vicino is bersaglio
     assert esito.distanza_dal_vicino > RAGGIO_PROIETTILE
     assert esito.fine == pytest.approx(PARTENZA + esito.durata)
-    # Lo scarto del tiro a vuoto è quello del passaggio, preso dove la distanza è minima, anche fra due
-    # passi, e coerente con la distanza dal vicino.
-    passaggio = _controlla_passaggio(esito, traiettoria, bersaglio)
-    assert esito.scarto == passaggio.scarto
-    assert passaggio.distanza - bersaglio.raggio == pytest.approx(esito.distanza_dal_vicino, abs=1e-6)
-    return passaggio
+    # Lo scarto nel punto più vicino, anche fra due passi, e le misure dell'artigliere rispetto allo
+    # stesso bersaglio (D21).
+    _controlla_scarto(esito, traiettoria, bersaglio)
+    return _controlla_misure(esito.misure, traiettoria, bersaglio)
 
 
 def test_centro_pieno_su_bersaglio_fermo():
@@ -124,12 +198,18 @@ def test_centro_pieno_su_bersaglio_fermo():
     assert esito.gittata == pytest.approx(math.hypot(esito.punto_finale[0], esito.punto_finale[2]))
     assert esito.altezza_massima == pytest.approx(max(traiettoria.posizione(np.linspace(0, esito.durata, 5001))[:, 1]), abs=1e-4)
     assert esito.fine == pytest.approx(PARTENZA + esito.durata)
-    # D21: il passaggio del centro pieno è nel centro, dopo il contatto, dove si misura la precisione.
-    passaggio = _controlla_passaggio(esito, traiettoria, bersaglio)
-    assert passaggio.tempo == pytest.approx(1.8, abs=1e-5) and passaggio.tempo > esito.durata
-    assert passaggio.distanza == pytest.approx(esito.distanza_al_centro, abs=1e-6)
-    assert passaggio.distanza < 0.01
-    assert passaggio.inclinazione == pytest.approx(traiettoria.inclinazione(1.8), abs=1e-3) and passaggio.inclinazione > 0.0
+    # D21: le misure guardano la parabola intera, anche dopo il contatto. Il proiettile arriva alla
+    # distanza del centro proprio nel centro, a 1,8 secondi, ancora in salita: laterale e verticale
+    # nulli. La ricaduta, scendendo, all'altezza del centro, è simmetrica rispetto all'apice, e lì il
+    # tiro è lungo: le misure dell'artigliere vogliono il tiro che arriva scendendo.
+    misure = _controlla_misure(esito.misure, traiettoria, bersaglio)
+    assert misure.arrivo == pytest.approx(1.8, abs=1e-8) and misure.arrivo > esito.durata
+    assert misure.laterale == pytest.approx(0.0, abs=1e-6) and misure.verticale == pytest.approx(0.0, abs=1e-6)
+    assert misure.inclinazione == pytest.approx(traiettoria.inclinazione(1.8)) and misure.inclinazione > 0.0
+    apice, _altezza = traiettoria.apice()
+    assert misure.ricaduta == pytest.approx(2.0 * apice - 1.8, abs=1e-8)
+    orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+    assert misure.profondita == pytest.approx(orizzontale * (misure.ricaduta - 1.8), abs=1e-6) and misure.profondita > 10.0
 
 
 def test_tiro_di_striscio():
@@ -146,14 +226,13 @@ def test_tiro_di_striscio():
     assert esito.precisione < 0.1
     assert esito.distanza_al_centro == pytest.approx((raggio + RAGGIO_PROIETTILE) * 0.95, abs=1e-3)
     # D21: il bersaglio sta a sinistra del tiro, di lato rispetto al piano verticale della parabola,
-    # quindi il passaggio più vicino è proprio a 1,5 secondi, col proiettile a destra del centro, alla
-    # sua altezza, e lo scarto è lungo quanto la distanza della precisione.
-    passaggio = _controlla_passaggio(esito, traiettoria, bersaglio)
-    assert passaggio.tempo == pytest.approx(1.5, abs=1e-5)
-    assert passaggio.distanza == pytest.approx(esito.distanza_al_centro, abs=1e-6)
-    assert passaggio.laterale > 0.9 * (raggio + RAGGIO_PROIETTILE) * 0.95
-    assert passaggio.verticale == pytest.approx(0.0, abs=1e-6)
-    assert passaggio.inclinazione == pytest.approx(traiettoria.inclinazione(1.5), abs=1e-3)
+    # appena più lontano dal cannone del punto a 1,5 secondi: il proiettile ci arriva subito dopo,
+    # alla sua destra di quasi tutta la distanza della precisione, e quasi alla sua altezza.
+    misure = _controlla_misure(esito.misure, traiettoria, bersaglio)
+    assert 1.5 < misure.arrivo < 1.51
+    assert misure.laterale == pytest.approx(esito.distanza_al_centro, rel=0.01)
+    assert abs(misure.verticale) < 0.05
+    assert misure.inclinazione == pytest.approx(traiettoria.inclinazione(1.5), abs=0.1)
     # Un po' più in là non si tocca più.
     lontano = _fermo(sul_tiro + di_lato * (raggio + RAGGIO_PROIETTILE) * 1.05, raggio=raggio)
     assert volo.calcola_volo(traiettoria, [lontano], PARTENZA).colpito is None
@@ -170,7 +249,13 @@ def test_tiro_corto():
     assert abs(radiale) > abs(verticale)
     assert abs(laterale) < 1e-6
     assert esito.distanza_dal_vicino == pytest.approx(math.sqrt(radiale**2 + laterale**2 + verticale**2) - 1.0, abs=0.01)
-    assert esito.passaggio.profondita < -2.5
+    # D21: il tiro ripassa all'altezza del bersaglio scendendo a 52 metri dal cannone, 3 prima di lui,
+    # e cade a terra prima di arrivare alla sua distanza: niente arrivo, quindi né laterale né
+    # verticale né inclinazione, e la profondità vale proprio meno 3.
+    misure = esito.misure
+    assert misure.arrivo is None and misure.laterale is None and misure.verticale is None and misure.inclinazione is None
+    assert misure.profondita == pytest.approx(-3.0, abs=1e-6)
+    assert misure.scarto == (misure.profondita, None, None)
 
 
 def test_tiro_lungo():
@@ -178,13 +263,15 @@ def test_tiro_lungo():
     bersaglio = _fermo(centro)
     traiettoria = _tiro_per((0.0, 12.0, 58.0), 80.0)
     esito = volo.calcola_volo(traiettoria, [bersaglio], PARTENZA)
-    passaggio = _controlla_tiro_a_vuoto(esito, traiettoria, bersaglio)
+    misure = _controlla_tiro_a_vuoto(esito, traiettoria, bersaglio)
     radiale, _, verticale = esito.scarto
     assert radiale > 2.5
     assert abs(radiale) > abs(verticale)
-    # D21: lungo, in profondità positivo, e a 80 gradi d'alzo il proiettile ricade quasi a piombo.
-    assert passaggio.profondita == radiale
-    assert passaggio.inclinazione < -60.0
+    # D21: lungo di 3 metri all'altezza del bersaglio, e alla sua distanza, a 80 gradi d'alzo, il
+    # proiettile ricade quasi a piombo, ancora molto più in alto: sopra e lungo, meno potenza.
+    assert misure.profondita == pytest.approx(3.0, abs=1e-6)
+    assert misure.verticale > 10.0 and misure.inclinazione < -60.0
+    assert misure.laterale == pytest.approx(0.0, abs=1e-9)
 
 
 def test_tiro_a_destra():
@@ -199,8 +286,11 @@ def test_tiro_a_destra():
     assert abs(laterale) > abs(verticale)
     # Il tiro passa a 3 metri dal centro, di lato: 2 dalla superficie di un bersaglio di raggio 1.
     assert esito.distanza_dal_vicino == pytest.approx(2.0, abs=0.05)
-    # D21: a destra, laterale positivo.
-    assert esito.passaggio.laterale == laterale > 2.5
+    # D21: alla distanza del bersaglio il proiettile è 3 metri alla sua destra: la distanza
+    # orizzontale del bersaglio per il seno dell'angolo fra le due direzioni viste dal cannone.
+    angolo = math.atan2(-2.0, 50.0) - math.atan2(-5.0, 50.0)
+    assert esito.misure.laterale == pytest.approx(math.hypot(5.0, 50.0) * math.sin(angolo), abs=1e-6)
+    assert esito.misure.laterale == pytest.approx(3.0, abs=0.01)
 
 
 def test_tiro_sopra():
@@ -215,31 +305,51 @@ def test_tiro_sopra():
     assert abs(laterale) < 0.05
     assert esito.distanza_dal_vicino == pytest.approx(2.0, abs=1e-3)
     assert esito.altezza_massima == pytest.approx(18.0)
-    # D21: sopra, e nell'apice, con l'inclinazione nulla.
-    assert esito.passaggio.verticale == pytest.approx(3.0, abs=1e-6)
-    assert esito.passaggio.tempo == pytest.approx(traiettoria.apice()[0], abs=1e-5)
-    assert esito.passaggio.inclinazione == pytest.approx(0.0, abs=1e-3)
+    # D21: il proiettile arriva alla distanza del bersaglio nell'apice, 3 metri sopra, con
+    # l'inclinazione nulla, e ricade alla sua altezza oltre: sopra e lungo.
+    misure = esito.misure
+    assert misure.verticale == pytest.approx(3.0, abs=1e-6) and misure.laterale == pytest.approx(0.0, abs=1e-6)
+    assert misure.arrivo == pytest.approx(traiettoria.apice()[0], abs=1e-8)
+    assert misure.inclinazione == pytest.approx(0.0, abs=1e-6)
+    assert misure.profondita > 0.0
 
 
 def test_tiro_in_salita_e_in_discesa():
-    """D21: lo stesso tiro passa sotto due bersagli uguali, 3 metri sopra la traiettoria, uno un
-    secondo prima dell'apice e uno un secondo dopo: nel primo il proiettile sale, nel secondo scende,
-    con la stessa inclinazione e il segno opposto, perché la parabola è simmetrica."""
+    """D21: lo stesso tiro passa sotto e sopra quattro bersagli uguali, 3 metri dalla traiettoria, due
+    un secondo prima dell'apice e due un secondo dopo. Le misure dell'artigliere si prendono dove il
+    proiettile arriva alla loro distanza, quindi proprio lì, in salita nei primi e in discesa negli
+    altri, con la stessa inclinazione e il segno opposto, perché la parabola è simmetrica. La
+    profondità si prende dove il proiettile ripassa scendendo alla loro altezza, quindi col segno che
+    porta alla correzione giusta anche in salita: il tiro che passa sopra è lungo, e non corto come
+    nel punto più vicino, dove lo scarto sta di traverso al volo."""
     traiettoria = fisica.Traiettoria(0.0, 60.0, 30.0)
     apice, _altezza = traiettoria.apice()
-    su = np.array((0.0, 3.0, 0.0))
-    prima = _fermo(traiettoria.posizione(apice - 1.0) + su, numero=1)
-    dopo = _fermo(traiettoria.posizione(apice + 1.0) + su, numero=2)
-    salita = _controlla_tiro_a_vuoto(volo.calcola_volo(traiettoria, [prima], PARTENZA), traiettoria, prima)
-    discesa = _controlla_tiro_a_vuoto(volo.calcola_volo(traiettoria, [dopo], PARTENZA), traiettoria, dopo)
-    assert salita.inclinazione > 30.0 and discesa.inclinazione < -30.0
-    assert salita.inclinazione == pytest.approx(-discesa.inclinazione, abs=1e-3)
-    assert salita.tempo < apice < discesa.tempo
-    # Il proiettile passa sotto tutti e due. In salita il punto più vicino al bersaglio, che sta sopra,
-    # viene un po' più avanti lungo la curva, quindi lungo; in discesa un po' prima, quindi corto.
-    assert salita.verticale < -1.0 and discesa.verticale < -1.0
-    assert discesa.profondita < 0.0 < salita.profondita
-    assert salita.distanza == pytest.approx(discesa.distanza, abs=1e-4)
+    orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+    misure = {}
+    for quota in (3.0, -3.0):
+        for verso in (-1.0, 1.0):
+            bersaglio = _fermo(traiettoria.posizione(apice + verso) + np.array((0.0, quota, 0.0)))
+            esito = volo.calcola_volo(traiettoria, [bersaglio], PARTENZA)
+            misure[quota, verso] = _controlla_tiro_a_vuoto(esito, traiettoria, bersaglio)
+            assert misure[quota, verso].arrivo == pytest.approx(apice + verso, abs=1e-8)
+            assert misure[quota, verso].verticale == pytest.approx(-quota, abs=1e-6)
+            # La ricaduta all'altezza del bersaglio: mezzo secondo al quadrato di gravità sotto
+            # l'apice, meno la quota, cioè tanti secondi dopo l'apice quanti dice la radice.
+            ricaduta = apice + math.sqrt(2.0 * (GRAVITA / 2.0 - quota) / GRAVITA)
+            assert misure[quota, verso].ricaduta == pytest.approx(ricaduta, abs=1e-8)
+            assert misure[quota, verso].profondita == pytest.approx(orizzontale * (ricaduta - apice - verso), abs=1e-6)
+    for quota in (3.0, -3.0):
+        salita, discesa = misure[quota, -1.0], misure[quota, 1.0]
+        assert salita.inclinazione > 30.0 and discesa.inclinazione < -30.0
+        assert salita.inclinazione == pytest.approx(-discesa.inclinazione, abs=1e-6)
+    # Sopra vuol dire lungo, in salita come in discesa: meno potenza. Nel punto più vicino, in salita,
+    # lo scarto diceva corto.
+    assert misure[-3.0, -1.0].profondita > 0.0 and misure[-3.0, 1.0].profondita > 0.0
+    bersaglio = _fermo(traiettoria.posizione(apice - 1.0) + np.array((0.0, -3.0, 0.0)))
+    assert volo.calcola_volo(traiettoria, [bersaglio], PARTENZA).scarto[0] < 0.0
+    # Sotto, in discesa, è corto; sotto in salita è il solo caso di disaccordo: il tiro ripido che
+    # alla distanza del bersaglio sale ancora, sotto di lui, e ricade oltre, lungo.
+    assert misure[3.0, 1.0].profondita < 0.0 < misure[3.0, -1.0].profondita
 
 
 def test_il_vicino_e_il_piu_vicino_dalla_superficie():
@@ -283,8 +393,8 @@ def test_bersaglio_mobile_che_attraversa_la_traiettoria():
     assert esito.scarto[1] > 0.0
 
 
-def test_passaggio_su_un_bersaglio_che_si_muove():
-    """D21: con un bersaglio in moto lo scarto è dal suo centro nello stesso istante, non da dove
+def test_misure_su_un_bersaglio_che_si_muove():
+    """D21: con un bersaglio in moto le misure sono dal suo centro nello stesso istante, non da dove
     stava allo sparo, nei tiri a vuoto e nei centri."""
     traiettoria = fisica.Traiettoria(0.0, 45.0, 30.0)
     incrocio = traiettoria.posizione(1.6)
@@ -295,40 +405,64 @@ def test_passaggio_su_un_bersaglio_che_si_muove():
     in_ritardo = Bersaglio(numero=1, forma="sega", raggio=1.0, partenza=incrocio - np.array((rapidita * (PARTENZA + 2.6 - nato), 0.0, 0.0)),
                            velocita=(rapidita, 0.0, 0.0), nato=nato)
     esito = volo.calcola_volo(traiettoria, [in_ritardo], PARTENZA)
-    passaggio = _controlla_tiro_a_vuoto(esito, traiettoria, in_ritardo)
-    assert passaggio.laterale > 2.5
-    # Contro il centro di partenza lo scarto sarebbe tutt'altro.
+    misure = _controlla_tiro_a_vuoto(esito, traiettoria, in_ritardo)
+    assert misure.laterale > 2.5
+    # Contro il centro di partenza il laterale sarebbe tutt'altro.
     allo_sparo = in_ritardo.posizione(PARTENZA)
-    fermo = fisica.scomponi(traiettoria.posizione(passaggio.tempo) - allo_sparo, allo_sparo)
-    assert abs(fermo[1] - passaggio.laterale) > 1.0
+    fermo = fisica.scomponi(traiettoria.posizione(misure.arrivo) - allo_sparo, allo_sparo)
+    assert abs(fermo[1] - misure.laterale) > 1.0
     # Un centro sullo stesso moto, che arriva insieme al proiettile ma un metro più in alto.
     in_orario = Bersaglio(numero=2, forma="sega", raggio=1.5, partenza=incrocio + np.array((-rapidita * (PARTENZA + 1.6 - nato), 1.0, 0.0)),
                           velocita=(rapidita, 0.0, 0.0), nato=nato)
     centro = volo.calcola_volo(traiettoria, [in_orario], PARTENZA)
     assert centro.colpito is in_orario
-    passaggio = _controlla_passaggio(centro, traiettoria, in_orario)
-    assert passaggio.distanza == pytest.approx(centro.distanza_al_centro, abs=1e-6)
-    assert passaggio.verticale < 0.0
+    misure = _controlla_misure(centro.misure, traiettoria, in_orario)
+    assert misure.verticale == pytest.approx(-1.0, abs=0.05) and abs(misure.laterale) < 0.05
 
 
-def test_passaggio_fra_due_passi(monkeypatch):
-    """D21: con passi grossi il minimo cade fra due passi, e il passaggio si prende lo stesso nel punto
-    giusto, al vertice della parabola, non sul passo più vicino; vale nei tiri a vuoto e nei centri."""
-    monkeypatch.setattr(volo, "PASSO_DEL_VOLO", 0.05)
+def test_misure_di_un_bersaglio_che_va_e_viene():
+    """D21: per un bersaglio in moto le due distanze dal cannone cambiano col tempo, e l'arrivo è il
+    primo istante in cui quella del proiettile raggiunge la sua. Uno che viene incontro si raggiunge
+    prima di quello fermo dov'era allo sparo; uno che scappa più in fretta del proiettile, mai."""
+    traiettoria = fisica.Traiettoria(0.0, 70.0, 30.0)
+    orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+    punto = np.array((0.0, 20.0, 75.0))
+    incontro = Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=punto, velocita=(0.0, 0.0, -6.0), nato=PARTENZA)
+    misure = _controlla_misure(volo.misure_dell_artigliere(traiettoria, incontro, PARTENZA), traiettoria, incontro)
+    # La distanza del proiettile cresce, quella del bersaglio cala, che non arriva a rimbalzare: si
+    # incontrano a 75 metri diviso la somma delle due velocità.
+    assert misure.arrivo == pytest.approx(75.0 / (orizzontale + 6.0), abs=1e-8)
+    # Fermo dov'era allo sparo, invece, il tiro cade prima della sua distanza.
+    assert _misure_chiuse(traiettoria, punto)[0] is None
+    assert volo.misure_dell_artigliere(traiettoria, _fermo(punto), PARTENZA).arrivo is None
+    # Uno che scappa dritto, senza rimbalzi, come un bonus che non esce mai dai lati.
+    scappa = Bersaglio(numero=2, forma="seno", raggio=1.0, partenza=(0.0, 20.0, 45.0), velocita=(0.0, 0.0, orizzontale + 1.0), nato=PARTENZA, bonus=True)
+    misure = _controlla_misure(volo.misure_dell_artigliere(traiettoria, scappa, PARTENZA), traiettoria, scappa)
+    assert misure.arrivo is None and misure.laterale is None
+
+
+def test_scarto_e_misure_fra_due_passi(monkeypatch):
+    """Con passi grossi il minimo cade fra due passi, e lo scarto del tiro a vuoto si prende lo stesso
+    nel punto giusto, al vertice della parabola, non sul passo più vicino. Le misure dell'artigliere
+    (D21) non dipendono dal passo: si stringono fra due passi con la parabola e il moto esatti."""
     traiettoria = fisica.Traiettoria(0.0, 45.0, 30.0)
     fermo = _fermo((-4.0, 20.0, 45.0))
     in_moto = Bersaglio(numero=2, forma="seno", raggio=1.0, partenza=(10.0, 20.0, 50.0), velocita=(-3.0, 1.0, -2.0), nato=PARTENZA - 1.0)
-    for bersaglio in (fermo, in_moto):
+    fini = [volo.calcola_volo(traiettoria, [bersaglio], PARTENZA).misure for bersaglio in (fermo, in_moto)]
+    monkeypatch.setattr(volo, "PASSO_DEL_VOLO", 0.05)
+    for bersaglio, fine in zip((fermo, in_moto), fini, strict=True):
         esito = volo.calcola_volo(traiettoria, [bersaglio], PARTENZA)
         assert esito.colpito is None
-        passaggio = _controlla_passaggio(esito, traiettoria, bersaglio, tolleranza=TOLLERANZA_FRA_DUE_PASSI)
-        assert esito.scarto == passaggio.scarto
+        tempo = _controlla_scarto(esito, traiettoria, bersaglio, tolleranza=TOLLERANZA_FRA_DUE_PASSI)
         # Sul passo più vicino lo scarto sbaglierebbe di decimetri: la prova guarda proprio fra due passi.
         passi = np.linspace(0.0, traiettoria.tempo_a_terra(), math.ceil(traiettoria.tempo_a_terra() / 0.05) + 1)
-        sul_passo = passi[int(np.argmin(np.abs(passi - passaggio.tempo)))]
-        assert np.abs(np.array(_scarto_vero(traiettoria, bersaglio, sul_passo)) - np.array(passaggio.scarto)).max() > 0.1
-    # Un centro col passaggio a 1,53 secondi, fra due passi, a un metro dal centro di un bersaglio
-    # abbastanza grande perché il proiettile resti dentro per qualche passo.
+        sul_passo = passi[int(np.argmin(np.abs(passi - tempo)))]
+        assert np.abs(np.array(_scarto_vero(traiettoria, bersaglio, sul_passo)) - np.array(esito.scarto)).max() > 0.1
+        _controlla_misure(esito.misure, traiettoria, bersaglio)
+        for nome in ("arrivo", "laterale", "verticale", "inclinazione", "ricaduta", "profondita"):
+            assert getattr(esito.misure, nome) == pytest.approx(getattr(fine, nome), abs=1e-6), nome
+    # Un centro a un metro dal centro di un bersaglio abbastanza grande perché il proiettile resti
+    # dentro per qualche passo, col punto più vicino a 1,53 secondi, fra due passi.
     sul_tiro = traiettoria.posizione(1.53)
     tangente = traiettoria.iniziale + np.array((0.0, -GRAVITA * 1.53, 0.0))
     di_lato = np.cross(tangente, (0.0, 1.0, 0.0))
@@ -336,11 +470,104 @@ def test_passaggio_fra_due_passi(monkeypatch):
     largo = _fermo(sul_tiro + di_lato * 1.0, raggio=3.0)
     esito = volo.calcola_volo(traiettoria, [largo], PARTENZA)
     assert esito.colpito is largo
-    passaggio = _controlla_passaggio(esito, traiettoria, largo, tolleranza=TOLLERANZA_FRA_DUE_PASSI)
-    assert passaggio.tempo == pytest.approx(1.53, abs=TOLLERANZA_FRA_DUE_PASSI / 10)
-    assert passaggio.distanza == pytest.approx(esito.distanza_al_centro, abs=1e-3) and passaggio.distanza == pytest.approx(1.0, abs=1e-3)
+    assert esito.distanza_al_centro == pytest.approx(1.0, abs=1e-3)
+    _controlla_misure(esito.misure, traiettoria, largo)
     passi = np.linspace(0.0, traiettoria.tempo_a_terra(), math.ceil(traiettoria.tempo_a_terra() / 0.05) + 1)
     assert np.abs(passi - 1.53).min() > 0.005
+
+
+def test_misure_casi_limite():
+    """D21, le regole dei casi limite del docstring di volo.Misure."""
+    # Un tiro piatto e piano cade a terra prima della distanza del bersaglio e sotto la sua altezza:
+    # nessuna misura.
+    piatto = fisica.Traiettoria(0.0, 0.0, 10.0)
+    lontano = _fermo((0.0, 15.0, 50.0))
+    nessuna = _controlla_misure(volo.misure_dell_artigliere(piatto, lontano, PARTENZA), piatto, lontano)
+    assert nessuna.scarto == (None, None, None) and nessuna.inclinazione is None and nessuna.ricaduta is None
+    # Un tiro teso arriva alla distanza di un bersaglio alto, ma non alla sua altezza: niente ricaduta.
+    teso = fisica.Traiettoria(0.0, 10.0, 45.0)
+    alto = _fermo((0.0, 30.0, 40.0))
+    misure = _controlla_misure(volo.misure_dell_artigliere(teso, alto, PARTENZA), teso, alto)
+    assert misure.verticale < -20.0 and misure.profondita is None and misure.ricaduta is None
+    # Un bersaglio che sale più in fretta del proiettile: il proiettile lo supera soltanto salendo, poi
+    # resta sotto, e scendendo non ripassa mai alla sua altezza.
+    ripido = fisica.Traiettoria(0.0, math.degrees(math.atan2(20.0, 15.0)), 25.0)
+    sale = Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=(0.0, 3.0, 40.0), velocita=(0.0, 12.0, 0.0), nato=PARTENZA)
+    tempi = np.linspace(0.0, ripido.apice()[0], 2001)
+    assert (ripido.posizione(tempi)[:, 1] > sale.posizione(PARTENZA + tempi)[:, 1]).any()
+    misure = _controlla_misure(volo.misure_dell_artigliere(ripido, sale, PARTENZA), ripido, sale)
+    assert misure.ricaduta is None and misure.profondita is None and misure.verticale < 0.0
+    # Un bersaglio proprio sopra il cannone: l'arrivo è lo sparo, col proiettile nel cannone, laterale
+    # nullo e l'inclinazione dell'alzo.
+    tiro = fisica.Traiettoria(10.0, 60.0, 25.0)
+    sopra = _fermo((0.0, 20.0, 0.0))
+    misure = _controlla_misure(volo.misure_dell_artigliere(tiro, sopra, PARTENZA), tiro, sopra)
+    assert misure.arrivo == 0.0 and misure.laterale == 0.0
+    assert misure.verticale == pytest.approx(ALTEZZA_CANNONE - 20.0) and misure.inclinazione == pytest.approx(60.0)
+    assert misure.profondita > 0.0
+    # Quasi sopra, a mezzo metro: l'arrivo subito dopo lo sparo, e il laterale non supera il mezzo metro.
+    quasi = _fermo((0.3, 20.0, 0.4))
+    misure = _controlla_misure(volo.misure_dell_artigliere(tiro, quasi, PARTENZA), tiro, quasi)
+    assert misure.arrivo == pytest.approx(0.5 / math.hypot(tiro.iniziale[0], tiro.iniziale[2]), abs=1e-8)
+    assert abs(misure.laterale) <= 0.5
+    assert misure.laterale == pytest.approx(0.5 * math.sin(math.radians(10.0) - math.atan2(0.3, 0.4)), abs=1e-6)
+    # Le misure dell'arrivo ci sono tutte o nessuna, e la profondità soltanto con la ricaduta.
+    with pytest.raises(ValueError):
+        volo.Misure(arrivo=1.0, laterale=None, verticale=0.0, inclinazione=0.0, ricaduta=None, profondita=None)
+    with pytest.raises(ValueError):
+        volo.Misure(arrivo=None, laterale=None, verticale=None, inclinazione=None, ricaduta=2.0, profondita=None)
+
+
+def _misure_coi_valori(valori, bersaglio, partenza):
+    return volo.misure_dell_artigliere(fisica.Traiettoria(*fisica.parametri_del_tiro(*valori)), bersaglio, partenza)
+
+
+def _derivata(valori, indice, bersaglio, partenza, nome):
+    """La derivata di una misura rispetto a uno dei tre valori della mira, o None se la misura sparisce."""
+    su, giu = list(valori), list(valori)
+    su[indice] += PASSO_DELLE_DERIVATE
+    giu[indice] -= PASSO_DELLE_DERIVATE
+    alta = getattr(_misure_coi_valori(su, bersaglio, partenza), nome)
+    bassa = getattr(_misure_coi_valori(giu, bersaglio, partenza), nome)
+    if alta is None or bassa is None:
+        return None
+    return (alta - bassa) / (2.0 * PASSO_DELLE_DERIVATE)
+
+
+def test_i_segni_portano_alla_correzione_giusta():
+    """D21: ogni segno porta alla correzione giusta, in salita come in discesa, coi bersagli fermi e in
+    moto: il laterale cresce con la direzione, quindi positivo vuol dire meno direzione; il verticale e
+    la profondità crescono con la potenza, quindi positivi vogliono dire meno potenza. Tiri a caso
+    attorno al tiro giusto, con un seme fisso; lo script di verifica di ClaudIA ne ha provati
+    seimila, senza un segno sbagliato."""
+    rng = random.Random(1911)
+    giudicati = {"salita": 0, "discesa": 0}
+    for prova in range(36):
+        livello = (1, 2, 3, 5, 9, 14)[prova % 6]
+        bersaglio = genera(livello, rng, 1, PARTENZA)
+        punto = bersaglio.posizione(PARTENZA + 2.0)
+        giusti = fisica.soluzione(punto)
+        assert giusti is not None
+        valori = [min(1.0, max(0.0, g + rng.gauss(0.0, s))) for g, s in zip(giusti, (0.02, 0.05, 0.08), strict=True)]
+        misure = _misure_coi_valori(valori, bersaglio, PARTENZA)
+        fase = "salita" if misure.inclinazione is not None and misure.inclinazione > 0.0 else "discesa"
+        for nome, indice in (("laterale", 0), ("verticale", 2), ("profondita", 2)):
+            valore = getattr(misure, nome)
+            if valore is None or abs(valore) < 0.05:
+                continue
+            derivata = _derivata(valori, indice, bersaglio, PARTENZA, nome)
+            if derivata is not None:
+                assert derivata > 0.0, (nome, livello, valori, misure)
+                giudicati[fase] += 1
+    # Anche un tiro in salita, voluto: troppo potente, alzo basso, sopra il bersaglio.
+    traiettoria = fisica.Traiettoria(0.0, 30.0, 40.0)
+    valori = fisica.valori_del_tiro(traiettoria.azimut, traiettoria.alzo, traiettoria.velocita)
+    bersaglio = _fermo(traiettoria.posizione(1.0) + np.array((0.0, -2.0, 0.0)))
+    misure = _misure_coi_valori(valori, bersaglio, PARTENZA)
+    assert misure.inclinazione > 0.0 and misure.verticale > 0.0 and misure.profondita > 0.0
+    for nome in ("verticale", "profondita"):
+        assert _derivata(valori, 2, bersaglio, PARTENZA, nome) > 0.0
+    assert giudicati["discesa"] > 20
 
 
 def test_bonus_gia_uscito_non_si_colpisce():
@@ -359,6 +586,12 @@ def test_bonus_gia_uscito_non_si_colpisce():
     esito = volo.calcola_volo(traiettoria, [bonus], PARTENZA)
     assert esito.colpito is None
     assert esito.durata == pytest.approx(traiettoria.tempo_a_terra())
+    # D21: per le misure il bonus già uscito prosegue dritto, come nel suo moto: il tiro arriva alla
+    # sua distanza proprio dove sarebbe stato, quindi né a destra né a sinistra, né sopra né sotto.
+    assert esito.vicino is bonus
+    misure = _controlla_misure(esito.misure, traiettoria, bonus)
+    assert misure.arrivo == pytest.approx(tempo, abs=1e-8)
+    assert misure.laterale == pytest.approx(0.0, abs=1e-6) and misure.verticale == pytest.approx(0.0, abs=1e-6)
 
 
 def test_bonus_non_ancora_nato_non_si_colpisce():
@@ -377,7 +610,7 @@ def test_senza_bersagli():
     assert esito.vicino is None
     assert esito.distanza_dal_vicino is None
     assert esito.scarto is None
-    assert esito.passaggio is None
+    assert esito.misure is None
     assert esito.durata == pytest.approx(traiettoria.tempo_a_terra())
     assert np.allclose(esito.punto_finale, traiettoria.punto_a_terra())
     assert esito.altezza_massima == pytest.approx(traiettoria.apice()[1])

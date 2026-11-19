@@ -224,11 +224,12 @@ RAGGIO_BONUS_FATTORE = 0.8
 # bersaglio più vicino (scelta di Gabriele: solo nei livelli bassi, poi si deciderà).
 AIUTO_MANCATO_FINO_AL_LIVELLO = 3
 # Il sommario in testa al resoconto di ogni tiro, centri compresi (D21, chiesto da Gabriele il 19
-# novembre 2026): dove il proiettile è passato rispetto al centro del bersaglio, nel suo passaggio
-# più vicino, di lato, in altezza e in profondità, e con quale inclinazione. I primi livelli sono una
-# palestra: fino a SOMMARIO_NUMERI_FINO_AL_LIVELLO il sommario dà i numeri, in metri e in gradi con
-# un decimale e il segno; fino a SOMMARIO_PAROLE_FINO_AL_LIVELLO soltanto le parole, come «a destra,
-# sotto, lungo, in discesa»; dopo, niente sommario. Da ritoccare giocando.
+# novembre 2026): dove il proiettile è passato rispetto al centro del bersaglio, con le misure
+# dell'artigliere scelte da Gabriele, di lato, in altezza e con quale inclinazione quando arriva
+# alla distanza del bersaglio, in profondità quando ripassa scendendo alla sua altezza. I primi
+# livelli sono una palestra: fino a SOMMARIO_NUMERI_FINO_AL_LIVELLO il sommario dà i numeri, in
+# metri e in gradi con un decimale e il segno; fino a SOMMARIO_PAROLE_FINO_AL_LIVELLO soltanto le
+# parole, come «a destra, sopra, lungo, in discesa»; dopo, niente sommario. Da ritoccare giocando.
 SOMMARIO_NUMERI_FINO_AL_LIVELLO = 3
 SOMMARIO_PAROLE_FINO_AL_LIVELLO = 6
 # Le soglie delle parole del sommario (D21): uno scarto, in metri, più piccolo della sua soglia si
@@ -238,6 +239,22 @@ SOMMARIO_SOGLIA_LATERALE = 0.5
 SOMMARIO_SOGLIA_VERTICALE = 0.5
 SOMMARIO_SOGLIA_PROFONDITA = 0.5
 SOMMARIO_SOGLIA_INCLINAZIONE = 5.0
+# La palestra delle attese (D22, dal collaudo di Gabriele del 19 novembre 2026): nei livelli da 1 a
+# PALESTRA_FINO_AL_LIVELLO, contando il livello in cui si spara, dopo ogni tiro, centro o a vuoto, la
+# partita resta ferma e muta come in pausa, finita l'eco dell'impatto e degli avvisi, finché lo spazio
+# non la fa ripartire: dopo un centro lo spazio chiama il bersaglio nuovo, dopo un tiro a vuoto
+# riporta all'ascolto. Così si legge il resoconto con calma, e il tempo dell'attesa non conta nella
+# durata della partita. Soltanto in questi livelli c'è anche la pausa di Ctrl+P; quella automatica,
+# dei dialoghi, dei menu e del cambio di finestra, resta in tutti.
+PALESTRA_FINO_AL_LIVELLO = 3
+# Lo spazio scioglie l'attesa della palestra soltanto passati tanti secondi da quando la partita si è
+# fermata: quello premuto mentre l'effetto o gli avvisi suonano ancora, o appena dopo, non la salta
+# per sbaglio. Da tarare giocando, come la grazia dei dialoghi.
+GRAZIA_DELL_ATTESA = 0.5
+# Il resoconto di ogni tiro compare nella vista, e va alla sintesi, quando l'effetto dell'impatto, il
+# jingle, l'impatto o il tonfo, ha finito di suonare (D22), in tutti i livelli; e dopo altri tanti
+# secondi di silenzio, da tarare ascoltando.
+RITARDO_DEL_RESOCONTO = 0.0
 
 # I punti di un centro: PUNTI_BASE, per il rapporto fra RAGGIO_DI_RIFERIMENTO e il raggio alla
 # ESPONENTE_DEL_RAGGIO, per 1 più la velocità del bersaglio divisa per VELOCITA_DI_RIFERIMENTO, per 1

@@ -19,9 +19,9 @@ I centri del livello sono fatti: si sale di livello, con altri colpi nella riser
 Compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce: ciechino_bonus_appare.
 Il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito: ciechino_bonus_uscito.
 La pausa e lo spazio a vuoto, 3 suoni.
-La partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira; la pausa automatica non suona: ciechino_pausa.
+La partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira, nei livelli della palestra; la pausa automatica non suona: ciechino_pausa.
 La partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita; la ripresa automatica non suona: ciechino_ripresa.
-Lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso: ciechino_non_ora.
+Lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso o fuori dai livelli della palestra: ciechino_non_ora.
 La finestra, l'avvio, l'uscita e gli errori, 9 suoni.
 Il programma si apre: ciechino_avvio.
 L'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra: ciechino_uscita.

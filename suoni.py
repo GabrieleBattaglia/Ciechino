@@ -149,11 +149,14 @@ AZIONI = {
     "livello_su": _("i centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi"),
     "bonus_appare": _("compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce"),
     "bonus_uscito": _("il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito"),
-    # La pausa automatica, quella di un dialogo aperto o di un'altra finestra, non ha suoni (D14): le
-    # due azioni lo dicono, perché chi ritocca i suoni non li cerchi lì.
-    "pausa": _("la partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira; la pausa automatica non suona"),
+    # La pausa automatica, quella di un dialogo o di un menu aperto o di un'altra finestra, non ha suoni
+    # (D14): le due azioni lo dicono, perché chi ritocca i suoni non li cerchi lì. La pausa di Ctrl+P c'è
+    # soltanto nei livelli della palestra (D22), e altrove Ctrl+P suona il non ora.
+    "pausa": _("la partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira, nei livelli della palestra; la pausa "
+               "automatica non suona"),
     "ripresa": _("la partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita; la ripresa automatica non suona"),
-    "non_ora": _("lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso"),
+    "non_ora": _("lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso o "
+                 "fuori dai livelli della palestra"),
     "avvio": _("il programma si apre"),
     "uscita": _("l'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra"),
     "riavvio": _("Ciechino si chiude per riaprirsi subito, dopo il sì alla domanda che segue la scelta di una lingua nuova"),

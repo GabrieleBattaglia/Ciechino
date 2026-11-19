@@ -10,8 +10,10 @@ I conti arrivano da sette strade:
 - carica(), che conta l'avvio di Ciechino;
 - conta(chiave, quanti), per i contatori semplici che solo la partita o la finestra conoscono:
   dalla partita partite_iniziate, mire_avviate, livelli_superati, colpi_guadagnati, bonus_usciti,
-  pause, quelle chieste con Ctrl+P, e pause_automatiche, quelle di un dialogo aperto o della
-  finestra lasciata (D14), e partite_col_seno, partite_col_triangolo e partite_con_la_sega_morbida,
+  pause, quelle chieste con Ctrl+P, e pause_automatiche, quelle di un dialogo o di un menu aperto o
+  della finestra lasciata (D14), pause_rifiutate, Ctrl+P fuori dai livelli della palestra, e
+  attese_della_palestra, le volte in cui dopo un tiro la partita si è fermata ad aspettare lo spazio
+  (D22), e partite_col_seno, partite_col_triangolo e partite_con_la_sega_morbida,
   le partite cominciate con ogni forma del proiettile (D17); dalla finestra ingressi_in_classifica,
   lingua_cambiata, proiettile_cambiato, scheda_cambiata e scheda_non_aperta, le schede audio scelte
   con Ctrl+Maiusc+X e quelle scelte che non c'erano o non si aprivano (D20), mail_al_pub_pronte e
@@ -48,7 +50,7 @@ CLASSI = 10
 # partita o la finestra passano a conta deve starci: lo controlla una prova.
 CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abbandonate", "tiri", "centri", "tiri_a_vuoto", "punti", "bonus_apparsi",
                     "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate", "pause", "pause_automatiche",
-                    "partite_col_seno", "partite_col_triangolo", "partite_con_la_sega_morbida", "ingressi_in_classifica", "lingua_cambiata",
+                    "pause_rifiutate", "attese_della_palestra", "partite_col_seno", "partite_col_triangolo", "partite_con_la_sega_morbida", "ingressi_in_classifica", "lingua_cambiata",
                     "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta", "mail_al_pub_pronte", "registri_al_pub")
 # Come può finire una scivolata, da mira.valore_scelto: fermata nei bip o subito dopo, scelta nella
 # scala, arrivata al massimo senza lo spazio.
@@ -517,8 +519,12 @@ class Pagina:
         righe.append(self._voce(_("Colpi guadagnati: {n}."), self.c("colpi_guadagnati")))
         righe.append(self._voce(_("Partite entrate in classifica: {n}."), self.c("ingressi_in_classifica")))
         righe.append(self._voce(_("Pause chieste con Ctrl+P: {n}."), self.c("pause")))
-        # Traduttori: le pause che Ciechino mette da solo quando si apre un dialogo o si passa a un'altra finestra.
-        righe.append(self._voce(_("Pause automatiche, per un dialogo aperto o un'altra finestra: {n}."), self.c("pause_automatiche")))
+        # Traduttori: le volte in cui Ctrl+P non ha messo la pausa, perché la partita era oltre i livelli della palestra, dove la pausa non c'è.
+        righe.append(self._voce(_("Pause rifiutate, chieste con Ctrl+P fuori dalla palestra: {n}."), self.c("pause_rifiutate")))
+        # Traduttori: le pause che Ciechino mette da solo quando si apre un dialogo o un menu, o si passa a un'altra finestra.
+        righe.append(self._voce(_("Pause automatiche, per un dialogo o un menu aperto o un'altra finestra: {n}."), self.c("pause_automatiche")))
+        # Traduttori: nei primi livelli, la palestra, dopo ogni tiro la partita si ferma e aspetta lo Spazio; qui quante volte è successo.
+        righe.append(self._voce(_("Attese della palestra dopo un tiro: {n}."), self.c("attese_della_palestra")))
         return righe
 
     # 3.
