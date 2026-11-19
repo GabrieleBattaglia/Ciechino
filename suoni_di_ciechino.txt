@@ -1,4 +1,4 @@
-I suoni di Ciechino e i loro preset nella collezione di GBUtils, da ritoccare con Acu_Maker: 33 suoni in 8 gruppi.
+I suoni di Ciechino e i loro preset nella collezione di GBUtils, da ritoccare con Acu_Maker: 54 suoni in 10 gruppi.
 Ogni riga dice l'azione che fa suonare il preset e, dopo i due punti, il suo nome. Il file lo scrive strumenti/elenco_suoni.py dalle tabelle di suoni.py: non va modificato a mano.
 La partita, l'inizio e la fine, 5 suoni.
 Comincia una partita nuova, con Ctrl+N o con Nuova partita del menu Partita: ciechino_nuova_partita.
@@ -22,22 +22,45 @@ La pausa e lo spazio a vuoto, 3 suoni.
 La partita va in pausa, con Ctrl+P o con Pausa del menu Partita: ciechino_pausa.
 La partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita: ciechino_ripresa.
 Lo spazio premuto quando non può fare niente, per esempio col proiettile in volo o a partita finita: ciechino_non_ora.
-La finestra, l'avvio, l'uscita e gli errori, 4 suoni.
+La finestra, l'avvio, l'uscita e gli errori, 8 suoni.
 Il programma si apre: ciechino_avvio.
 L'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra: ciechino_uscita.
+Ciechino si chiude per riaprirsi subito, dopo il sì alla domanda che segue la scelta di una lingua nuova: ciechino_riavvio.
 Si apre Ciechino mentre è già aperto, e la finestra aperta torna in primo piano: ciechino_primo_piano.
 Un errore imprevisto: ciechino_errore.
-La finestra, i menu, 10 suoni.
+All'avvio, dopo il suono d'apertura: la volta scorsa Ciechino si è chiuso per un errore grave, e la vista dice dov'è il resoconto: ciechino_crash_precedente.
+Un file dei dati, la classifica, le statistiche o le impostazioni, non si leggeva: Ciechino lo mette da parte e riparte dalla copia o da zero: ciechino_dati_rovinati.
+La classifica, le statistiche o le impostazioni non si sono potute salvare: ciechino_salvataggio_non_riuscito.
+La finestra, i menu, 16 suoni.
 Si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita: ciechino_classifica.
 Si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita: ciechino_statistiche.
-Il volume cambiato con Volume del menu Impostazioni: ciechino_volume.
-Un'impostazione cambiata dal menu Impostazioni, come la lettura dei resoconti con la sintesi o la lingua: ciechino_impostazioni.
+Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo: ciechino_volume.
+La lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_impostazioni.
+La lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_sintesi_spenta.
+Si apre la scelta della lingua, con Lingua del menu Impostazioni: ciechino_lingua.
+Si sceglie una lingua nuova, che vale dal prossimo avvio: ciechino_lingua_scelta.
 F1, la guida ai comandi, dal menu Aiuto: ciechino_guida.
 Maiusc+F1, il manuale, dal menu Aiuto: ciechino_manuale.
 F2, le novità della versione, dal menu Aiuto: ciechino_novita.
 F3, le informazioni sul programma, dal menu Aiuto: ciechino_informazioni.
+Il manuale o il file delle novità non c'è, o non si apre: ciechino_file_mancante.
 Offrimi un caffè, dal menu Aiuto: donazione.
-Entra al PUB o Chiedi aiuto al PUB, dal menu Aiuto: ciechino_pub.
+Dona con PayPal, nell'invito al caffè: si apre PayPal nel browser: ciechino_caffe_paypal.
+Entra al PUB, dal menu Aiuto: ciechino_pub.
+Chiedi aiuto al PUB, dal menu Aiuto: ciechino_pub_aiuto.
+La finestra, i dialoghi, 4 suoni.
+Una domanda col sì e col no, come l'uscita con una partita in corso: ciechino_domanda.
+Un dialogo confermato con OK, come il nome in classifica o il volume, o una mail del PUB pronta: ciechino_confermato.
+Un dialogo chiuso con Annulla o con Esc, o il no a una domanda: ciechino_annullato.
+OK in un dialogo con un campo da correggere, come un nome vuoto in classifica: ciechino_campo_da_correggere.
+La finestra, l'aggiornamento automatico, 7 suoni.
+All'avvio del programma compilato, su GitHub c'è una versione nuova, e la proposta si apre: ciechino_aggiornamento_disponibile.
+Aggiorna, nella proposta dell'aggiornamento: la versione nuova si scarica: ciechino_aggiornamento_scelto.
+Non adesso, nella proposta dell'aggiornamento, o Esc: ciechino_aggiornamento_rimandato.
+La proposta dell'aggiornamento resta senza risposta e si chiude da sola: ciechino_aggiornamento_scaduto.
+L'aggiornamento è scaricato: Ciechino si chiude per installarlo e si riapre da solo: ciechino_aggiornamento_pronto.
+La versione nuova c'è, ma il suo pacchetto non è ancora pronto: ciechino_aggiornamento_non_pronto.
+L'aggiornamento non si è scaricato, o non si è installato: ciechino_aggiornamento_non_riuscito.
 La finestra, il fuoco, 2 suoni.
 F5, il fuoco va nella vista della partita: ciechino_vai_alla_vista.
 F7, il fuoco va nella barra di stato: ciechino_vai_alla_barra.

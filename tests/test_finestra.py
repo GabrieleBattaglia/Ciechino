@@ -1,0 +1,747 @@
+"""
+Le prove della finestra principale di Ciechino e del suo avvio, sul desktop nascosto del conftest.
+Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+Nasce il 2026-11-19 con la 0.1.0, sul modello di tests/test_finestra.py di MESS. La finestra nasce con
+una partita finta, che ha l'interfaccia del contratto e annota ciò che le si chiede; il motore è muto,
+come vuole il conftest, o quello del flusso finto quando la prova vuole la scheda; i preset non si
+sintetizzano, e ogni suono si annota. I dialoghi modali e i messaggi di wx sono sostituiti, perché una
+prova che aspetta un tasto non finirebbe mai; i tasti sono l'evento wxEVT_CHAR_HOOK che il gancio di wx
+crea per un tasto vero, rifatto dalla prova: SendInput li manderebbe allo schermo vero. Nessuna prova
+parla: la voce finta del conftest raccoglie gli annunci. Classifica, statistiche e impostazioni si
+scrivono nella cartella temporanea del conftest.
+"""
+
+import itertools
+import json
+import sys
+import threading
+from dataclasses import dataclass, field
+
+import numpy as np
+import pytest
+import wx
+from aiuti_audio import motore_finto
+
+import aggiornamento
+import classifica
+import costanti
+import impostazioni
+import percorsi
+import suoni
+from gui import dialoghi
+from gui import finestra as modulo_finestra
+from gui.finestra import FinestraPrincipale, guadagno_del_volume
+
+# Il buffer che prende il posto di ogni preset: corto, e non vuoto, così la voce nasce e il suono si annota.
+CAMPIONI_FINTI = 64
+
+
+@dataclass
+class Messaggio:
+    """Un messaggio della partita, con i campi del contratto."""
+
+    tipo: str
+    testo: str
+    annuncio: str = ""
+    dati: dict = field(default_factory=dict)
+
+
+class PartitaFinta:
+    """Una partita con l'interfaccia del contratto: annota le chiamate e restituisce i messaggi preparati dalla prova."""
+
+    def __init__(self, motore, suoni_, statistiche):
+        self.motore = motore
+        self.suoni = suoni_
+        self.statistiche = statistiche
+        self.fase = "pronta"
+        self.in_pausa = False
+        self.chiamate = []
+        # I messaggi del prossimo battito e del prossimo spazio.
+        self.in_arrivo = []
+        self.allo_spazio = []
+        self.barra = ["Pronta. Livello 1, 0 punti.", "Riserva: 10 colpi."]
+        self.guasta = False
+
+    def in_corso(self):
+        return self.fase not in ("pronta", "finita")
+
+    def nuova(self):
+        self.chiamate.append("nuova")
+        self.fase = "ascolto"
+        return [Messaggio("info", "Comincia la partita, livello 1.", "Si comincia.")]
+
+    def spazio(self):
+        self.chiamate.append("spazio")
+        messaggi, self.allo_spazio = self.allo_spazio, []
+        return messaggi
+
+    def battito(self):
+        if self.guasta:
+            raise ValueError("battito guasto")
+        messaggi, self.in_arrivo = self.in_arrivo, []
+        return messaggi
+
+    def pausa(self):
+        self.chiamate.append("pausa")
+        self.in_pausa = not self.in_pausa
+        return [Messaggio("info", "Partita in pausa." if self.in_pausa else "La partita riprende.")]
+
+    def abbandona(self):
+        self.chiamate.append("abbandona")
+        if not self.in_corso():
+            return []
+        self.fase = "pronta"
+        return [Messaggio("info", "Partita abbandonata.", "Partita abbandonata.", self.riepilogo())]
+
+    def righe_della_barra(self):
+        return list(self.barra)
+
+    def riepilogo(self):
+        return {"punteggio": 0, "livello": 1, "tiri": 0, "centri": 0, "durata_s": 0.0}
+
+
+class Sentiti(list):
+    """Gli eventi sonori della finestra, in ordine; inizi annota anche il campione chiesto."""
+
+    def __init__(self):
+        super().__init__()
+        self.inizi = []
+
+
+class Messaggi(list):
+    """I messaggi di wx, al posto di dialoghi.messaggio: si annotano; le domande rispondono risposta."""
+
+    def __init__(self):
+        super().__init__()
+        self.risposta = wx.NO
+
+    def __call__(self, genitore, testo, titolo, stile=0):
+        self.append((testo, titolo, stile))
+        return self.risposta if stile & wx.YES_NO else wx.OK
+
+
+@pytest.fixture
+def sentiti(monkeypatch):
+    """Nessun preset si sintetizza, e ogni suono si annota: la voce nasce lo stesso sul motore, che è muto o finto."""
+    registro = Sentiti()
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: np.zeros((CAMPIONI_FINTI, 2), dtype=np.float32))
+    originale = suoni.Suoni.suona
+
+    def suona(self, evento, posizione=None, guadagno_db=0.0, inizio=None):
+        registro.append(evento)
+        registro.inizi.append(inizio)
+        return originale(self, evento, posizione, guadagno_db, inizio)
+
+    monkeypatch.setattr(suoni.Suoni, "suona", suona)
+    return registro
+
+
+@pytest.fixture
+def messaggi(monkeypatch):
+    registro = Messaggi()
+    monkeypatch.setattr(dialoghi, "messaggio", registro)
+    return registro
+
+
+@pytest.fixture
+def senza_modali(monkeypatch):
+    """Un dialogo che nessuna prova ha preparato non si apre davvero: risponde Annulla."""
+    monkeypatch.setattr(wx.Dialog, "ShowModal", lambda self: wx.ID_CANCEL)
+
+
+def _crea(**opzioni):
+    finestra = FinestraPrincipale(fabbrica_della_partita=PartitaFinta, **opzioni)
+    finestra.Show()
+    return finestra
+
+
+def _chiudi(finestra):
+    motore = finestra.motore if finestra else None
+    if finestra and not finestra.chiusa:
+        finestra.Close(force=True)
+    if motore is not None:
+        motore.chiudi()
+    wx.Yield()
+
+
+@pytest.fixture
+def finestra(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    f = _crea()
+    # Sul desktop nascosto nessuna finestra ha il primo piano: la finestra si dice attiva, come quando si gioca.
+    monkeypatch.setattr(f, "IsActive", lambda: True)
+    yield f
+    _chiudi(f)
+
+
+def _tasto(finestra, codice, controllo=False, maiuscolo=False):
+    """Un tasto come lo vede wx: il gancio parte dalla vista, che ha il fuoco, e sale fino alla finestra."""
+    evento = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    evento.SetEventObject(finestra.vista)
+    evento.SetKeyCode(codice)
+    evento.SetControlDown(controllo)
+    evento.SetShiftDown(maiuscolo)
+    finestra.vista.GetEventHandler().ProcessEvent(evento)
+    return evento
+
+
+def _riga_del_cursore(controllo):
+    _trovata, colonna, riga = controllo.PositionToXY(controllo.GetInsertionPoint())
+    return controllo.GetLineText(riga), colonna
+
+
+def _leggi(nome):
+    with open(percorsi.percorso_dati(nome), encoding="utf-8") as file:
+        return json.load(file)
+
+
+# La finestra com'è all'apertura.
+
+def test_la_finestra_nasce_coi_due_controlli_etichettati(finestra):
+    assert finestra.GetTitle() == "Ciechino"
+    figli = list(finestra.pannello.GetChildren())
+    for controllo, nome in ((finestra.vista, "Partita"), (finestra.barra, "Barra di stato")):
+        etichetta = figli[figli.index(controllo) - 1]
+        assert isinstance(etichetta, wx.StaticText) and etichetta.GetLabel() == nome
+        assert controllo.GetName() == nome
+        stile = controllo.GetWindowStyleFlag()
+        assert stile & wx.TE_MULTILINE and stile & wx.TE_READONLY and stile & wx.TE_RICH2
+    assert finestra.barra.GetWindowStyleFlag() & wx.TE_DONTWRAP and not finestra.vista.GetWindowStyleFlag() & wx.TE_DONTWRAP
+    sizer = finestra.pannello.GetSizer()
+    assert sizer.GetItem(finestra.vista).GetProportion() == 1
+    barra = sizer.GetItem(finestra.barra)
+    assert barra.GetProportion() == 0 and barra.GetFlag() & wx.EXPAND
+    # Alta quanto le sue righe nel suo carattere, non una misura fissa.
+    assert finestra.barra.GetMinSize().height >= finestra.barra.GetCharHeight() * modulo_finestra.RIGHE_DELLA_BARRA
+
+
+def test_i_menu_coi_tasti_giusti(finestra):
+    menu = finestra.GetMenuBar()
+    assert [menu.GetMenuLabelText(i) for i in range(menu.GetMenuCount())] == ["Partita", "Impostazioni", "Aiuto"]
+    tasti = {}
+    for i in range(menu.GetMenuCount()):
+        for voce in menu.GetMenu(i).GetMenuItems():
+            if voce.IsSeparator():
+                continue
+            rapido = voce.GetAccel()
+            tasti[voce.GetItemLabelText()] = rapido.ToString() if rapido is not None else None
+    assert tasti == {
+        "Nuova partita": "Ctrl+N", "Pausa": "Ctrl+P", "Classifica": "Ctrl+K", "Statistiche": "Ctrl+T", "Esci": "Ctrl+Q",
+        "Volume...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
+        "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
+        "Entra al PUB, il gruppo di supporto...": None, "Chiedi aiuto al PUB...": None,
+    }
+    sintesi = finestra.voci_del_menu[finestra.cambia_sintesi]
+    assert sintesi.IsCheckable() and sintesi.IsChecked() == impostazioni.PREDEFINITE["sintesi"]
+
+
+def test_la_vista_comincia_con_le_informazioni_utili(finestra):
+    righe = finestra.vista.GetValue().splitlines()
+    assert righe[0].startswith(f"Ciechino, il tiro a segno a orecchio, versione {costanti.VERSIONE}, rilasciata ")
+    assert righe[1].startswith("Autori: Gabriele Battaglia (IZ4APU) & ClaudIA")
+    assert righe[2].startswith("Oggi è ")
+    assert "Spazio" in righe[3] and "F1" in righe[3]
+    assert righe[4] == classifica.righe([])[0]
+    # Il conftest tiene il motore muto: senza scheda, il gioco è muto e lo dice.
+    assert righe[5] == "Non trovo una scheda audio che si apra: Ciechino funziona lo stesso, ma senza suono."
+    assert all(riga.strip() for riga in righe)
+    assert finestra.vista.GetInsertionPoint() == 0
+    assert finestra.barra.GetValue() == "Pronta. Livello 1, 0 punti.\nRiserva: 10 colpi."
+
+
+def test_la_vista_col_record_la_scheda_e_il_crash(app_wx, sentiti, messaggi, senza_modali):
+    voce = classifica.nuova_voce("Gabry", {"punteggio": 1234, "livello": 2, "tiri": 9, "centri": 5, "durata_s": 61.0})
+    assert classifica.salva([voce])
+    motore, _flusso = motore_finto()
+    f = _crea(motore=motore, crash_precedente="C:\\Ciechino\\Ciechino - Crash precedente.log")
+    try:
+        testo = f.vista.GetValue()
+        assert "Il record della classifica è di Gabry, con 1.234 punti, oggi." in testo
+        # Il flusso finto ha interfaccia e latenza: 20 millesimi.
+        assert "Il suono esce da finta, con una latenza di 20 millesimi di secondo." in testo
+        assert "La volta scorsa Ciechino si è chiuso per un errore grave" in testo and "Crash precedente.log" in testo
+        # All'avvio il suono d'apertura, poi la notizia del crash, staccata: il motore la mette dopo la fine dell'avvio.
+        f.suoni_d_avvio()
+        assert sentiti[-2:] == ["avvio", "crash_precedente"]
+        assert sentiti.inizi[-1] >= CAMPIONI_FINTI + round(modulo_finestra.PAUSA_DOPO_L_AVVIO * motore.fs)
+    finally:
+        _chiudi(f)
+    assert motore.chiuso
+
+
+def test_un_file_rovinato_lo_dice_all_apertura(app_wx, sentiti, messaggi, senza_modali):
+    with open(percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI), "w", encoding="utf-8") as file:
+        file.write("{ rovinato")
+    f = _crea()
+    try:
+        assert "non si legge" in f.vista.GetValue() and f.avvisi_dei_dati
+        f.suoni_d_avvio()
+        assert sentiti[-2:] == ["avvio", "dati_rovinati"]
+    finally:
+        _chiudi(f)
+
+
+# Lo spazio, i tasti e il battito.
+
+def test_lo_spazio_va_alla_partita_e_non_va_avanti(finestra):
+    evento = _tasto(finestra, wx.WXK_SPACE)
+    assert finestra.partita.chiamate == ["spazio"] and not evento.GetSkipped()
+    # Gli altri tasti, e lo spazio coi modificatori, vanno avanti come sempre, verso i controlli e i tasti rapidi.
+    assert _tasto(finestra, ord("A")).GetSkipped()
+    assert _tasto(finestra, wx.WXK_SPACE, controllo=True).GetSkipped()
+    assert _tasto(finestra, wx.WXK_SPACE, maiuscolo=True).GetSkipped()
+    assert finestra.partita.chiamate == ["spazio"]
+
+
+def test_lo_spazio_non_e_della_partita_con_un_dialogo_aperto_o_la_finestra_non_attiva(finestra, monkeypatch):
+    finestra._modali = 1
+    assert _tasto(finestra, wx.WXK_SPACE).GetSkipped()
+    finestra._modali = 0
+    monkeypatch.setattr(finestra, "IsActive", lambda: False)
+    assert _tasto(finestra, wx.WXK_SPACE).GetSkipped()
+    assert finestra.partita.chiamate == []
+
+
+def test_lo_spazio_porta_i_messaggi_nella_vista(finestra, voce_finta):
+    finestra.partita.allo_spazio = [Messaggio("info", "Mira: la direzione.", "Direzione.")]
+    _tasto(finestra, wx.WXK_SPACE)
+    assert finestra.vista.GetValue().endswith("\nMira: la direzione.")
+    assert voce_finta == ["Direzione."]
+
+
+def test_f5_e_f7_portano_il_fuoco_col_loro_suono(finestra, sentiti):
+    assert not _tasto(finestra, wx.WXK_F5).GetSkipped()
+    assert not _tasto(finestra, wx.WXK_F7).GetSkipped()
+    assert sentiti == ["vai_alla_vista", "vai_alla_barra"]
+
+
+def test_il_battito_porta_i_messaggi_in_coda_col_cursore_sul_nuovo(finestra, voce_finta):
+    prima = finestra.vista.GetValue()
+    finestra.partita.in_arrivo = [Messaggio("resoconto", "Colpito, al centro pieno.\nPunti: 120.", "Colpito.")]
+    finestra._al_battito()
+    assert finestra.vista.GetValue() == prima + "\nColpito, al centro pieno.\nPunti: 120."
+    assert _riga_del_cursore(finestra.vista) == ("Colpito, al centro pieno.", 0)
+    # Due messaggi nello stesso battito: il cursore va all'inizio dell'ultimo, e la sintesi li dice tutti e due.
+    finestra.partita.in_arrivo = [Messaggio("livello", "Livello 2: altri 10 colpi.", "Livello 2."), Messaggio("bonus", "Un bonus!", "")]
+    finestra._al_battito()
+    assert finestra.vista.GetValue().endswith("Punti: 120.\nLivello 2: altri 10 colpi.\nUn bonus!")
+    assert _riga_del_cursore(finestra.vista) == ("Un bonus!", 0)
+    assert voce_finta == ["Colpito.", "Livello 2."]
+    # Un battito senza messaggi non tocca la vista.
+    valore = finestra.vista.GetValue()
+    finestra._al_battito()
+    assert finestra.vista.GetValue() == valore
+
+
+def test_la_sintesi_spenta_non_legge_i_resoconti(finestra, voce_finta, sentiti):
+    finestra._esegui(finestra.cambia_sintesi)
+    assert not finestra.impostazioni["sintesi"] and not finestra.voci_del_menu[finestra.cambia_sintesi].IsChecked()
+    assert _leggi(costanti.FILE_IMPOSTAZIONI)["sintesi"] is False
+    assert sentiti == ["sintesi_spenta"]
+    finestra.partita.in_arrivo = [Messaggio("resoconto", "Mancato, troppo lungo.", "Mancato.")]
+    finestra._al_battito()
+    assert finestra.vista.GetValue().endswith("\nMancato, troppo lungo.") and voce_finta == []
+    finestra._esegui(finestra.cambia_sintesi)
+    assert finestra.impostazioni["sintesi"] and sentiti[-1] == "impostazioni"
+    assert voce_finta == ["La sintesi legge i resoconti della partita."]
+
+
+def test_la_barra_si_riscrive_solo_se_cambia_tenendo_il_cursore(finestra, monkeypatch):
+    barra = finestra.barra
+    barra.SetInsertionPoint(barra.XYToPosition(3, 1))
+    riscritture = []
+    originale = barra.ChangeValue
+    monkeypatch.setattr(barra, "ChangeValue", lambda testo: (riscritture.append(testo), originale(testo)))
+    finestra._al_battito()
+    assert riscritture == []
+    finestra.partita.barra = ["Ascolto. Livello 2, 120 punti.", "Riserva: 9 colpi, 1 bersaglio."]
+    finestra._al_battito()
+    assert barra.GetValue() == "Ascolto. Livello 2, 120 punti.\nRiserva: 9 colpi, 1 bersaglio."
+    assert barra.PositionToXY(barra.GetInsertionPoint()) == (True, 3, 1)
+    # Una riga che si accorcia porta il cursore a fine riga; meno righe, sull'ultima.
+    barra.SetInsertionPoint(barra.XYToPosition(20, 1))
+    finestra.partita.barra = ["Volo.", "Riserva."]
+    finestra._al_battito()
+    assert barra.PositionToXY(barra.GetInsertionPoint()) == (True, len("Riserva."), 1)
+    finestra.partita.barra = ["Finita."]
+    finestra._al_battito()
+    assert barra.PositionToXY(barra.GetInsertionPoint())[2] == 0
+    assert len(riscritture) == 3
+
+
+def test_un_battito_guasto_ferma_il_timer_e_la_partita_nuova_lo_riavvia(finestra):
+    finestra.partita.guasta = True
+    with pytest.raises(ValueError, match="battito guasto"):
+        finestra._al_battito()
+    assert not finestra.timer.IsRunning() and not finestra._nel_battito
+    finestra.partita.guasta = False
+    finestra._esegui(finestra.nuova_partita)
+    assert finestra.timer.IsRunning() and finestra.partita.chiamate == ["nuova"]
+
+
+# La partita, la classifica e le letture.
+
+def _fine(punteggio):
+    return Messaggio("fine", f"Partita finita: {punteggio} punti.", "Partita finita.",
+                     {"punteggio": punteggio, "livello": 2, "tiri": 9, "centri": 5, "durata_s": 61.0})
+
+
+def test_a_partita_finita_il_nome_e_la_classifica_nella_vista(finestra, sentiti, voce_finta, monkeypatch):
+    finestra.impostazioni["ultimo_nome"] = "Gabry"
+    proposti = []
+
+    def scrive_il_nome(dialogo):
+        proposti.append((dialogo.testo.GetValue(), dialogo.GRAZIA_ALL_APERTURA))
+        dialogo.testo.SetValue("Gabriele")
+        dialogo.conferma()
+        return dialogo.GetReturnCode()
+
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", scrive_il_nome)
+    finestra.partita.in_arrivo = [_fine(1234)]
+    finestra._al_battito()
+    assert proposti == [("Gabry", True)]
+    voci = _leggi(costanti.FILE_CLASSIFICA)["voci"]
+    assert len(voci) == 1 and voci[0]["nome"] == "Gabriele" and voci[0]["punteggio"] == 1234 and voci[0]["centri"] == 5
+    assert _leggi(costanti.FILE_IMPOSTAZIONI)["ultimo_nome"] == "Gabriele"
+    statistiche = _leggi(costanti.FILE_STATISTICHE)
+    assert statistiche["conti"]["ingressi_in_classifica"] == 1
+    assert finestra.vista.GetValue().endswith("\nPartita finita: 1234 punti.\nClassifica, 1 voce, ordinata per punteggio.\n1. Gabriele, 1.234 punti, oggi, nuova.")
+    assert _riga_del_cursore(finestra.vista) == ("1. Gabriele, 1.234 punti, oggi, nuova.", 0)
+    assert sentiti == ["in_classifica", "confermato"]
+    assert voce_finta == ["Partita finita.", "1. Gabriele, 1.234 punti, oggi, nuova."]
+
+
+def test_la_voce_nuova_in_mezzo_alla_classifica(finestra, monkeypatch):
+    vecchie = [classifica.nuova_voce(nome, {"punteggio": punti}) for nome, punti in (("Anna", 5000), ("Bruno", 100))]
+    assert classifica.salva(vecchie)
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    finestra.impostazioni["ultimo_nome"] = "Gabry"
+    finestra.partita.in_arrivo = [_fine(800)]
+    finestra._al_battito()
+    assert [v["nome"] for v in _leggi(costanti.FILE_CLASSIFICA)["voci"]] == ["Anna", "Gabry", "Bruno"]
+    assert _riga_del_cursore(finestra.vista) == ("2. Gabry, 800 punti, oggi, nuova.", 0)
+
+
+def test_fuori_classifica_e_nome_annullato(finestra, sentiti, monkeypatch):
+    aperti = []
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: aperti.append(dialogo) or wx.ID_CANCEL)
+    finestra.partita.in_arrivo = [_fine(0)]
+    finestra._al_battito()
+    assert aperti == [] and sentiti == ["fuori_classifica"]
+    assert finestra.vista.GetValue().endswith("\nIl punteggio di questa partita non entra in classifica.")
+    finestra.partita.in_arrivo = [_fine(500)]
+    finestra._al_battito()
+    assert len(aperti) == 1 and sentiti[-2:] == ["in_classifica", "annullato"]
+    assert classifica.carica()[0] == []
+    assert finestra.vista.GetValue().endswith("questa partita resta fuori dalla classifica.")
+
+
+def test_la_classifica_aspetta_che_il_dialogo_aperto_si_chiuda(finestra, sentiti, monkeypatch):
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    finestra.impostazioni["ultimo_nome"] = "Gabry"
+    finestra._modali = 1
+    finestra.partita.in_arrivo = [_fine(300)]
+    finestra._al_battito()
+    assert finestra._partite_da_concludere and sentiti == []
+    finestra._modali = 0
+    finestra._al_battito()
+    assert not finestra._partite_da_concludere and sentiti == ["in_classifica", "confermato"]
+
+
+def test_classifica_e_statistiche_si_leggono_nel_dialogo(finestra, sentiti, monkeypatch):
+    letti = []
+    monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: letti.append((dialogo.GetTitle(), dialogo.testo.GetValue(),
+                                                                                       dialogo.IsMaximized())) or wx.ID_OK)
+    finestra._esegui(finestra.mostra_classifica)
+    finestra._esegui(finestra.mostra_statistiche)
+    assert letti[0] == ("Classifica", classifica.righe([])[0], True)
+    assert letti[1][0] == "Statistiche" and letti[1][2] and "\n\n" not in letti[1][1] and len(letti[1][1].splitlines()) > 1
+    assert sentiti == ["classifica", "statistiche"]
+
+
+def test_nuova_partita_e_pausa(finestra, messaggi, sentiti):
+    finestra._esegui(finestra.nuova_partita)
+    assert finestra.partita.chiamate == ["nuova"] and messaggi == []
+    # Con una partita in corso, prima la domanda, col no già scelto: al no non succede niente.
+    finestra._esegui(finestra.nuova_partita)
+    assert len(messaggi) == 1 and messaggi[-1][2] & wx.NO_DEFAULT and finestra.partita.chiamate == ["nuova"]
+    assert sentiti == ["domanda", "annullato"]
+    messaggi.risposta = wx.YES
+    finestra._esegui(finestra.nuova_partita)
+    assert finestra.partita.chiamate == ["nuova", "abbandona", "nuova"]
+    assert "Partita abbandonata." in finestra.vista.GetValue()
+    finestra._esegui(finestra.pausa)
+    assert finestra.partita.chiamate[-1] == "pausa" and finestra.vista.GetValue().endswith("\nPartita in pausa.")
+
+
+# L'uscita.
+
+def test_l_uscita_con_una_partita_in_corso_chiede(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    f = _crea()
+    try:
+        f.partita.fase = "ascolto"
+        f.Close()
+        # Il no, già scelto: la finestra resta, e la partita anche.
+        assert f and not f.chiusa and f.partita.chiamate == []
+        assert len(messaggi) == 1 and messaggi[0][2] & wx.YES_NO and messaggi[0][2] & wx.NO_DEFAULT
+        assert sentiti == ["domanda", "annullato"]
+        messaggi.risposta = wx.YES
+        motore, partita = f.motore, f.partita
+        f.Close()
+        assert partita.chiamate == ["abbandona"] and f.chiusa and f.congedo == modulo_finestra.USCITA
+        assert sentiti[-2:] == ["domanda", "uscita"] and motore.chiuso
+        assert _leggi(costanti.FILE_STATISTICHE)["conti"]["avvii"] == 1
+    finally:
+        _chiudi(f)
+    assert not f
+
+
+def test_l_uscita_senza_partita_non_chiede(app_wx, sentiti, messaggi, senza_modali):
+    f = _crea()
+    try:
+        f.Close()
+        assert messaggi == [] and f.chiusa and sentiti == ["uscita"]
+    finally:
+        _chiudi(f)
+
+
+def test_chiudi_per_aggiornare_non_chiede_e_abbandona(app_wx, sentiti, messaggi, senza_modali):
+    f = _crea()
+    try:
+        f.partita.fase = "volo"
+        f.chiudi_per_aggiornare()
+        assert messaggi == [] and f.chiusa and f.congedo == modulo_finestra.PER_AGGIORNARE and f.partita.chiamate == ["abbandona"]
+    finally:
+        _chiudi(f)
+
+
+# Le impostazioni.
+
+def test_la_curva_del_volume():
+    assert guadagno_del_volume(0) == 0.0 and guadagno_del_volume(-5) == 0.0
+    assert guadagno_del_volume(100) == pytest.approx(1.0) and guadagno_del_volume(150) == pytest.approx(1.0)
+    assert guadagno_del_volume(50) == pytest.approx(10 ** (-modulo_finestra.DINAMICA_DEL_VOLUME_DB / 2 / 20))
+    valori = [guadagno_del_volume(v) for v in range(impostazioni.VOLUME_MINIMO, impostazioni.VOLUME_MASSIMO + 1)]
+    assert all(b > a for a, b in itertools.pairwise(valori))
+
+
+def test_il_volume_si_sente_mentre_cambia_e_annulla_torna_indietro(finestra, sentiti, monkeypatch):
+    def ritocca(dialogo, conferma):
+        dialogo.numero.SetValue(30)
+        dialogo.prova()
+        assert finestra.motore.volume == pytest.approx(guadagno_del_volume(30))
+        if conferma:
+            dialogo.conferma()
+            return dialogo.GetReturnCode()
+        return wx.ID_CANCEL
+
+    monkeypatch.setattr(dialoghi.Volume, "ShowModal", lambda dialogo: ritocca(dialogo, False))
+    finestra._esegui(finestra.cambia_volume)
+    assert finestra.motore.volume == pytest.approx(guadagno_del_volume(costanti.VOLUME_PREDEFINITO))
+    assert sentiti == ["volume", "volume", "annullato"]
+    monkeypatch.setattr(dialoghi.Volume, "ShowModal", lambda dialogo: ritocca(dialogo, True))
+    finestra._esegui(finestra.cambia_volume)
+    assert finestra.motore.volume == pytest.approx(guadagno_del_volume(30)) and _leggi(costanti.FILE_IMPOSTAZIONI)["volume"] == 30
+    assert sentiti[-3:] == ["volume", "volume", "confermato"] and finestra.vista.GetValue().endswith("\nIl volume è 30.")
+
+
+def test_la_lingua_con_una_lingua_sola(finestra, sentiti, monkeypatch):
+    import lingua
+
+    monkeypatch.setattr(lingua, "lingue", lambda: ["it"])
+    monkeypatch.setattr(dialoghi.SceltaLingua, "ShowModal", lambda dialogo: (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    finestra._esegui(finestra.cambia_lingua)
+    assert sentiti == ["lingua", "confermato"]
+    assert "per ora Ciechino parla solo questa" in finestra.vista.GetValue().splitlines()[-1]
+
+
+def test_la_lingua_nuova_offre_di_riaprire(finestra, sentiti, messaggi, monkeypatch):
+    import istanza
+    import lingua
+
+    scelte, riaperture = [], []
+    monkeypatch.setattr(lingua, "lingue", lambda: ["en", "it"])
+    monkeypatch.setattr(lingua, "scegli", scelte.append)
+    monkeypatch.setattr(istanza, "riapri", lambda: riaperture.append(True))
+
+    def sceglie_l_inglese(dialogo):
+        dialogo.elenco.SetSelection(0)
+        dialogo.conferma()
+        return dialogo.GetReturnCode()
+
+    monkeypatch.setattr(dialoghi.SceltaLingua, "ShowModal", sceglie_l_inglese)
+    finestra._esegui(finestra.cambia_lingua)
+    # Al no la lingua vale dal prossimo avvio, e Ciechino resta aperto.
+    assert scelte == ["en"] and sentiti == ["lingua", "lingua_scelta", "domanda", "annullato"] and not finestra.chiusa and riaperture == []
+    messaggi.risposta = wx.YES
+    finestra._esegui(finestra.cambia_lingua)
+    assert finestra.chiusa and riaperture == [True] and finestra.congedo == modulo_finestra.RIAPERTURA and sentiti[-1] == "riavvio"
+
+
+# L'aiuto.
+
+def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
+    finestra._esegui(finestra.guida)
+    testo = finestra.vista.GetValue()
+    assert "\nGuida ai comandi di Ciechino." in testo
+    righe = testo.split("\nGuida ai comandi di Ciechino.")[1].splitlines()
+    for titolo, comandi in finestra.voci_guida():
+        assert any(riga.startswith(f"Il menu {titolo}, con {len(comandi)} comand") for riga in righe), titolo
+        for voce, tasto in comandi:
+            assert (f"{voce}: {tasto}." if tasto else f"{voce}: dal menu, senza tasto rapido.") in righe, voce
+    assert "Manuale: Maiusc+F1." in righe and "Volume: dal menu, senza tasto rapido." in righe
+    assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
+    assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
+    assert sentiti == ["guida"]
+
+
+def test_manuale_novita_e_informazioni(finestra, sentiti, monkeypatch, tmp_path):
+    import os
+
+    aperti = []
+    monkeypatch.setattr(os, "startfile", aperti.append, raising=False)
+    risorse = tmp_path / "risorse"
+    risorse.mkdir()
+    monkeypatch.setattr(percorsi, "percorso_risorsa", lambda nome: str(risorse / nome))
+    finestra._esegui(finestra.manuale)
+    finestra._esegui(finestra.novita)
+    assert sentiti == ["file_mancante", "file_mancante"] and aperti == []
+    (risorse / "manuale.html").write_text("<html></html>", encoding="utf-8")
+    (risorse / "CHANGELOG.md").write_text("# Novità\n\n## [0.1.0] - 2026-11-19\n\n- La **prima** versione.\n", encoding="utf-8")
+    finestra._esegui(finestra.manuale)
+    assert aperti == [str(risorse / "manuale.html")] and sentiti[-1] == "manuale"
+    finestra._esegui(finestra.novita)
+    assert finestra.vista.GetValue().endswith("\nNovità.\nVersione 0.1.0, giovedì 19 novembre 2026.\nLa prima versione.")
+    assert _riga_del_cursore(finestra.vista) == ("Novità.", 0) and sentiti[-1] == "novita"
+    finestra._esegui(finestra.informazioni)
+    assert "GNU GPL" in finestra.vista.GetValue() and sentiti[-1] == "informazioni"
+
+
+def test_il_caffe(finestra, sentiti, monkeypatch):
+    import GBUtils
+
+    chiesti, letti = [], []
+    monkeypatch.setattr(GBUtils, "Donazione", lambda **opzioni: chiesti.append(opzioni) or "Offrimi un caffè.")
+    monkeypatch.setattr(dialoghi.Caffe, "ShowModal", lambda dialogo: letti.append(dialogo.testo.GetValue()) or wx.ID_OK)
+    finestra._esegui(finestra.caffe)
+    assert chiesti == [{"lang": "it", "probabilita": 100, "stampa": False}] and letti == ["Offrimi un caffè."] and sentiti == ["caffe"]
+
+
+def test_le_due_voci_del_pub(finestra, sentiti, monkeypatch):
+    import GBUtils
+    import GBwx
+
+    mail = []
+    monkeypatch.setattr(GBUtils, "informazioni_di_sistema", lambda separatore=".": [("windows", "Windows 11 Pro")])
+    monkeypatch.setattr(GBwx, "finestra_mail", lambda genitore, titolo, destinatario, oggetto, corpo, spiegazione, passi, pulsanti, senza_posta="",
+                        casella=None, **opzioni: mail.append((titolo, oggetto, corpo, casella)) or True)
+    finestra._esegui(finestra.entra_al_pub)
+    finestra._esegui(finestra.chiedi_aiuto_al_pub)
+    assert mail[0][0] == "Entra al PUB, il gruppo di supporto"
+    assert mail[1][0] == "Chiedi aiuto al PUB" and costanti.VERSIONE in mail[1][1] and "Windows 11 Pro" in mail[1][2]
+    # Senza registri accanto al programma, niente casella.
+    assert mail[1][3] is None
+    assert sentiti == ["pub", "confermato", "pub_aiuto", "confermato"]
+    assert finestra.statistiche.dati["conti"]["mail_al_pub_pronte"] == 2
+
+
+# L'aggiornamento, l'istanza unica e gli errori.
+
+def test_la_proposta_dell_aggiornamento(finestra, sentiti, monkeypatch):
+    risposte = [wx.ID_YES, wx.ID_NO]
+    monkeypatch.setattr(dialoghi.Aggiornamento, "ShowModal", lambda dialogo: risposte.pop(0))
+    assert finestra.proponi_l_aggiornamento("0.1.0", "0.2.0", "## [0.2.0] - 2026-12-01\n- Novità.", 120) is True
+    assert sentiti == ["aggiornamento_disponibile", "aggiornamento_scelto"]
+    assert finestra.proponi_l_aggiornamento("0.1.0", "0.2.0", "", 120) is False
+    assert sentiti[-1] == "aggiornamento_rimandato"
+    monkeypatch.setattr(dialoghi.Aggiornamento, "ShowModal", lambda dialogo: (setattr(dialogo, "scaduta", True), wx.ID_NO)[-1])
+    assert finestra.proponi_l_aggiornamento("0.1.0", "0.2.0", "", 120) is False
+    assert sentiti[-1] == "aggiornamento_scaduto"
+
+
+def test_gli_esiti_e_l_avanzamento_dell_aggiornamento(finestra, sentiti, messaggi):
+    for frase, suono, icona in ((aggiornamento.FRASE_PRONTO, "aggiornamento_pronto", wx.ICON_INFORMATION),
+                                (aggiornamento.FRASE_NON_RIUSCITO, "aggiornamento_non_riuscito", wx.ICON_ERROR),
+                                ("Disponibile la versione 0.2.0, " + aggiornamento.FRASE_NON_PRONTO, "aggiornamento_non_pronto", wx.ICON_WARNING)):
+        finestra.avvisa_dell_aggiornamento(frase)
+        assert sentiti[-1] == suono and messaggi[-1][0] == frase and messaggi[-1][2] & icona
+        assert finestra.vista.GetValue().endswith(frase)
+    finestra.avanzamento_dell_aggiornamento(512, 1024)
+    assert finestra.barra.GetValue().splitlines()[-1] == "Aggiornamento scaricato al 50%."
+    # La finestra ha ciò che aggiornamento.py si aspetta.
+    for metodo in ("proponi_l_aggiornamento", "avvisa_dell_aggiornamento", "avanzamento_dell_aggiornamento", "chiudi_per_aggiornare"):
+        assert callable(getattr(finestra, metodo))
+    assert finestra.chiusa is False
+
+
+def test_primo_piano_ed_errore_imprevisto(finestra, sentiti, messaggi):
+    finestra.porta_in_primo_piano()
+    assert sentiti == ["primo_piano"]
+    finestra.errore_imprevisto(ValueError, ValueError("qualcosa di storto"))
+    assert sentiti[-1] == "errore" and "ValueError, qualcosa di storto" in messaggi[-1][0] and messaggi[-1][2] & wx.ICON_ERROR
+
+
+# Il punto d'avvio.
+
+def test_ciechino_lascia_il_posto_alla_copia_aperta(monkeypatch):
+    import Ciechino
+    import istanza
+    import registro
+
+    avviati = []
+    monkeypatch.setattr(istanza, "manda", lambda: True)
+    monkeypatch.setattr(registro, "avvia", lambda *a, **k: avviati.append(True))
+    assert Ciechino.main([]) == 0 and avviati == []
+
+
+def test_ciechino_registra_l_uscita_e_ferma_tutto(monkeypatch):
+    import Ciechino
+    import istanza
+    import registro
+
+    fatti = []
+
+    class AscoltoFinto:
+        attiva = True
+
+        def __init__(self, mostra):
+            fatti.append("ascolto")
+
+        def ferma(self):
+            fatti.append("ferma")
+
+    monkeypatch.setattr(istanza, "manda", lambda: False)
+    monkeypatch.setattr(istanza, "Ascolto", AscoltoFinto)
+    monkeypatch.setattr(registro, "avvia", lambda *a, **k: fatti.append("registro") or None)
+    monkeypatch.setattr(registro, "scrivi", lambda riga: fatti.append(riga))
+    monkeypatch.setattr(registro, "chiudi", lambda: fatti.append("chiudi"))
+    monkeypatch.setattr(Ciechino, "avvia_finestra", lambda crash, finestre: Ciechino.RIAPERTA)
+    assert Ciechino.main([]) == 0
+    assert fatti == ["ascolto", "registro", f"Ciechino {costanti.VERSIONE} si avvia.", Ciechino.ESITI[Ciechino.RIAPERTA][1], "ferma", "chiudi"]
+    # Un errore che ferma Ciechino: l'ultima rete lo dice, e il codice è uno.
+    fatali = []
+    monkeypatch.setattr(Ciechino, "avvia_finestra", lambda crash, finestre: 1 / 0)
+    monkeypatch.setattr(Ciechino, "_errore_fatale", lambda *eccezione: fatali.append(eccezione[0]))
+    assert Ciechino.main([]) == 1 and fatali == [ZeroDivisionError] and fatti[-2:] == ["ferma", "chiudi"]
+
+
+def test_la_rete_per_gli_errori(monkeypatch):
+    import Ciechino
+    import registro
+
+    problemi, chiamati = [], []
+    monkeypatch.setattr(sys, "excepthook", lambda *a: chiamati.append("prima"))
+    monkeypatch.setattr(threading, "excepthook", lambda argomenti: chiamati.append("prima nei fili"))
+    monkeypatch.setattr(registro, "problema", lambda tipo, valore, traccia: problemi.append(tipo))
+    monkeypatch.setattr(wx, "CallAfter", lambda funzione, *argomenti: chiamati.append((funzione, argomenti)))
+
+    class FinestraFinta:
+        def errore_imprevisto(self, tipo, valore):
+            pass
+
+    finestra = FinestraFinta()
+    Ciechino._rete_per_gli_errori(finestra)
+    errore = KeyError("x")
+    sys.excepthook(KeyError, errore, None)
+    assert problemi == [KeyError] and chiamati[0] == "prima" and chiamati[1] == (finestra.errore_imprevisto, (KeyError, errore))
+    threading.excepthook(threading.ExceptHookArgs((OSError, OSError("disco"), None, None)))
+    assert problemi[-1] is OSError and chiamati[-1] == "prima nei fili"

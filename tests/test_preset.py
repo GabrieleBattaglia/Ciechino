@@ -32,6 +32,11 @@ EVENTI_DEL_CONTRATTO = (
     "bonus_uscito", "ultimo_colpo", "partita_finita", "in_classifica", "fuori_classifica", "pausa", "ripresa", "non_ora",
     "avvio", "uscita", "classifica", "statistiche", "guida", "manuale", "novita", "informazioni", "caffe", "pub", "volume",
     "impostazioni", "vai_alla_vista", "vai_alla_barra", "primo_piano", "errore",
+    # Quelli che la finestra ha aggiunto scrivendosi: la riapertura, le notizie dell'avvio, i salvataggi, la sintesi, la
+    # lingua, i file che mancano, il caffè, le due voci del PUB, i dialoghi e l'aggiornamento automatico.
+    "riavvio", "crash_precedente", "dati_rovinati", "salvataggio_non_riuscito", "sintesi_spenta", "lingua", "lingua_scelta", "file_mancante",
+    "caffe_paypal", "pub_aiuto", "domanda", "confermato", "annullato", "campo_da_correggere", "aggiornamento_disponibile", "aggiornamento_scelto",
+    "aggiornamento_rimandato", "aggiornamento_scaduto", "aggiornamento_pronto", "aggiornamento_non_pronto", "aggiornamento_non_riuscito",
 )
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98
