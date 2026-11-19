@@ -1,6 +1,6 @@
 """
-Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita della sintesi, l'ultimo nome usato in classifica
-e la forma d'onda del proiettile.
+Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita della sintesi, l'ultimo nome usato in classifica,
+la forma d'onda del proiettile e la scheda audio.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di impostazioni.py di MESS.
 Si salvano in «Ciechino - Impostazioni.json», accanto al programma, con la scrittura sicura di
@@ -9,17 +9,23 @@ rovinato si mette da parte invece di essere sovrascritto. valide riporta ogni ch
 intervallo, invece di buttarla, perché un volume a 120 scritto a mano vuol dire il massimo; e tiene
 le chiavi che questo Ciechino non conosce, perché un Ciechino più nuovo, sulla stessa cartella, non
 perda le sue.
-La chiave uscita è l'uscita della sintesi di GBsintesi, non la scheda audio: il suono esce sempre
-dal dispositivo che sceglie scegli_dispositivo_audio di GBUtils, e uscita dice soltanto chi legge i
-resoconti, automatica oppure nvda, jaws o sapi5, la voce di Windows; un nome che GBsintesi non
-conosce vale automatica.
+La chiave uscita è l'uscita della sintesi di GBsintesi, non la scheda audio, che sta nella chiave
+scheda: uscita dice soltanto chi legge i resoconti, automatica oppure nvda, jaws o sapi5, la voce di
+Windows; un nome che GBsintesi non conosce vale automatica.
 La chiave proiettile è la forma d'onda del proiettile in volo, una di costanti.PROIETTILE_FORME (D17,
 decisione di Gabriele del 19 novembre 2026); una forma che non sta lì vale quella di serie,
 PROIETTILE_FORMA.
+La chiave scheda è la scheda audio scelta con Ctrl+Maiusc+X (D20, decisione di Gabriele del 19
+novembre 2026): il nome del dispositivo e quello intero della sua interfaccia, {"dispositivo",
+"interfaccia"}, come li salva schede.da_salvare, o il dizionario vuoto, di serie, per la scelta
+automatica di scegli_dispositivo_audio di GBUtils. La ripulisce schede.valida: un dizionario senza i
+due testi non vuoti vale l'automatica. Una scheda scelta che non c'è o non si apre resta salvata,
+perché le cuffie possono tornare, e intanto Ciechino suona su quella automatica.
 """
 
 import costanti
 import percorsi
+import schede
 from classifica import leggi_dati, numero_valido, pulisci_nome, scrivi_dati
 from lingua import _
 
@@ -29,7 +35,8 @@ VOLUME_MINIMO = 0
 VOLUME_MASSIMO = 100
 # L'uscita della sintesi che lascia la scelta a GBsintesi: automatica, oppure nvda, jaws o sapi5.
 USCITA_AUTOMATICA = "automatica"
-PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": "", "proiettile": costanti.PROIETTILE_FORMA}
+PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": "", "proiettile": costanti.PROIETTILE_FORMA,
+               "scheda": {}}
 # L'avviso dell'ultimo caricamento, None se è andato tutto bene: carica restituisce soltanto le
 # impostazioni, come vuole il contratto, e la finestra può dire qui perché sono tornate ai predefiniti.
 ultimo_avviso = None
@@ -43,10 +50,13 @@ def _percorso(percorso):
 def valide(dati):
     """Le impostazioni ricevute, sistemate: il volume riportato fra VOLUME_MINIMO e VOLUME_MASSIMO,
     la sintesi vera o falsa, l'uscita della sintesi un nome non vuoto, l'ultimo nome pulito come in
-    classifica, il proiettile una delle forme di PROIETTILE_FORME; ciò che manca, ha il tipo
-    sbagliato o è un numero oltre NUMERO_MASSIMO di classifica.py prende il predefinito, e le chiavi
-    sconosciute restano."""
+    classifica, il proiettile una delle forme di PROIETTILE_FORME, la scheda un dizionario nuovo con
+    dispositivo e interfaccia, ripulito da schede.valida, o vuoto per l'automatica (D20); ciò che
+    manca, ha il tipo sbagliato o è un numero oltre NUMERO_MASSIMO di classifica.py prende il
+    predefinito, e le chiavi sconosciute restano."""
     risultato = dict(PREDEFINITE)
+    # Un dizionario nuovo a ogni chiamata: chi cambia la scheda delle sue impostazioni non tocca i predefiniti.
+    risultato["scheda"] = {}
     if not isinstance(dati, dict):
         return risultato
     risultato.update({chiave: valore for chiave, valore in dati.items() if chiave not in PREDEFINITE})
@@ -63,6 +73,7 @@ def valide(dati):
     proiettile = dati.get("proiettile")
     if isinstance(proiettile, str) and proiettile.strip() in costanti.PROIETTILE_FORME:
         risultato["proiettile"] = proiettile.strip()
+    risultato["scheda"] = schede.valida(dati.get("scheda"))
     return risultato
 
 

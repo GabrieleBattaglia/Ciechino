@@ -19,9 +19,16 @@ Domanda 10: i bersagli che si susseguono suonano ognuno un po' diverso, nel timb
 Domanda 11: il jingle del centro, tre note, e quello del bonus, otto più acute, si distinguono, anche mentre la voce legge il resoconto, e la coda del bonus lascia sentire i bip della mira?
 Domanda 12: dopo il suono della fine e quello della classifica si apre il dialogo del nome, che NVDA legge, e dopo Invio la vista mette il cursore sulla tua voce?
 Domanda 13: classifica e statistiche si aprono massimizzate, si leggono riga per riga e Esc le chiude?
-Passo 7: con la partita in corso stacca le cuffie, se sono USB o Bluetooth.
-Domanda 14: la vista e la sintesi lo dicono una volta sola, e il gioco va avanti senza suono?
-Passo 8: con Ciechino aperto lancia di nuovo python Ciechino.py.
-Domanda 15: la finestra già aperta torna in primo piano, col fuoco dove NVDA lo legge?
-Domanda 16: fra i 55 suoni degli eventi ce n'è qualcuno che si confonde con un altro o che non ti piace? L'elenco con i preset è suoni_di_ciechino.txt.
+Passo 7: con la partita in corso stacca le cuffie, se sono USB o Bluetooth; quando la vista lo dice, ricollegale e premi Ctrl+Maiusc+X.
+Domanda 14: la vista e la sintesi dicono una volta sola che la scheda non risponde, il gioco va avanti senza suono, e con Ctrl+Maiusc+X il suono torna già prima che l'elenco si apra?
+Passo 8: durante l'ascolto premi Ctrl+Maiusc+X, scorri l'elenco e scegli le cuffie con OK.
+Domanda 15: NVDA legge spiegazione, notizie ed elenco, la scheda in uso è già scelta e il vivavoce delle cuffie si riconosce?
+Domanda 16: dopo OK il suono passa subito nelle cuffie, la vista dice dove esce con la latenza, e la partita riprende senza intoppi?
+Passo 9: esci con Ctrl+Q e riapri Ciechino con le cuffie accese.
+Domanda 17: suona nelle cuffie scelte?
+Passo 10: esci, spegni le cuffie e riapri Ciechino; quando la vista dice che mancano, accendile, aspetta che Windows le colleghi, premi Ctrl+Maiusc+X e chiudi l'elenco con Esc.
+Domanda 18: all'avvio un suono e la vista dicono che le cuffie non ci sono, con Ctrl+Maiusc+X il suono torna nelle cuffie prima che l'elenco si apra, e dopo Esc la vista lo dice bene?
+Passo 11: con Ciechino aperto lancia di nuovo python Ciechino.py.
+Domanda 19: la finestra già aperta torna in primo piano, col fuoco dove NVDA lo legge?
+Domanda 20: fra i 57 suoni degli eventi ce n'è qualcuno che si confonde con un altro o che non ti piace? L'elenco con i preset è suoni_di_ciechino.txt.
 Esito:

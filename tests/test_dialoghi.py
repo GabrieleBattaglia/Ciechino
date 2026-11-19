@@ -15,9 +15,11 @@ import inspect
 
 import pytest
 import wx
+from aiuti_audio import ALTOPARLANTI, ASIO, CUFFIE, CUFFIE_FINTE, DIGITALE, USCITE_FINTE
 
 import costanti
 import impostazioni
+import schede
 from gui import dialoghi
 
 # Il codice con cui la rete di sicurezza chiude un dialogo che Esc non ha chiuso, dopo ATTESA millisecondi.
@@ -61,6 +63,8 @@ FABBRICHE = {
     "Volume": lambda suona: dialoghi.Volume(None, 80, None, suona),
     "SceltaLingua": lambda suona: dialoghi.SceltaLingua(None, ["italiano, codice it"], 0, suona),
     "SceltaProiettile": lambda suona: dialoghi.SceltaProiettile(None, costanti.PROIETTILE_FORMA, None, suona),
+    "SceltaScheda": lambda suona: dialoghi.SceltaScheda(None, [dict(u) for u in USCITE_FINTE], 0, "Altoparlanti (Realtek(R) Audio), WASAPI",
+                                                        suona=suona),
 }
 
 
@@ -356,6 +360,137 @@ def test_scelta_del_proiettile_annulla_ed_esc(app_wx, sentiti):
     finally:
         dialogo.Destroy()
     assert provate == [] and sentiti == []
+
+
+def _uscite():
+    """Le uscite finte con le cuffie accese dopo l'avvio, come le darebbe schede.uscite() dopo la rilettura: copie nuove."""
+    return [dict(u) for u in (*USCITE_FINTE, CUFFIE_FINTE)]
+
+
+def test_scelta_della_scheda_etichette_ed_elenco(app_wx, sentiti):
+    """D20: la spiegazione e le notizie sopra, l'elenco etichettato con prima l'automatica e poi le schede dette da
+    schede.etichetta, la scheda in uso detta nella sua riga e già scelta, OK e Annulla, la grazia dell'apertura."""
+    uscite = _uscite()
+    cuffie = len(uscite)
+    adesso = "Il suono esce da Cuffie (WH-1000XM4), WASAPI, con una latenza di 20 millesimi di secondo."
+    dialogo = dialoghi.SceltaScheda(None, uscite, cuffie, notizie=[adesso, ""], suona=sentiti)
+    try:
+        assert dialogo.GetTitle() == "Scheda audio"
+        figli = list(dialogo.pannello.GetChildren())
+        posto = figli.index(dialogo.elenco)
+        etichetta, notizia, spiegazione = figli[posto - 1], figli[posto - 2], figli[posto - 3]
+        assert isinstance(etichetta, wx.StaticText) and etichetta.GetLabel() == "&Scheda audio" and dialogo.elenco.GetName() == "Scheda audio"
+        # La notizia vuota non diventa una riga vuota: sopra l'etichetta c'è quella che dice dove suona Ciechino, e sopra la spiegazione.
+        assert notizia.GetLabel() == adesso
+        assert "Automatica suona sulla scheda di Windows" in spiegazione.GetLabel() and "prossimi avvii" in spiegazione.GetLabel()
+        # La latenza delle righe è quella dichiarata, e la via a orecchio per tornare all'automatica se un'esclusiva zittisce NVDA.
+        assert "la latenza che la scheda dichiara" in spiegazione.GetLabel()
+        assert "premi Ctrl+Maiusc+X, aspetta il suono della scelta, poi premi Inizio e, dopo un secondo, Invio." in spiegazione.GetLabel()
+        # Il secondo della spiegazione e del manuale basta a uscire dalla grazia dell'apertura.
+        assert dialoghi.GRAZIA_INVIO < 1
+        righe = dialogo.elenco.GetStrings()
+        assert righe == dialogo.righe and len(righe) == len(uscite) + 1
+        assert righe[0] == "Automatica, la scheda di Windows"
+        assert righe[1:-1] == [schede.etichetta(u) for u in uscite[:-1]]
+        assert righe[-1] == "Cuffie (WH-1000XM4), WASAPI, 3 ms, in uso"
+        # Le righe che avvisano: l'interfaccia esclusiva e il vivavoce del telefono.
+        assert righe[4] == "Realtek ASIO, ASIO, 23,2 ms, esclusiva: può zittire NVDA"
+        assert any(riga.endswith("vivavoce: suona come un telefono") for riga in righe)
+        assert sum(", in uso" in riga for riga in righe) == 1
+        assert all("{" not in riga and "\n" not in riga and "---" not in riga for riga in righe)
+        assert dialogo.elenco.GetSelection() == cuffie
+        assert dialogo.GRAZIA_ALL_APERTURA and dialogo.GetEscapeId() == wx.ID_ANY
+        assert dialogo.GetDefaultItem().GetId() == wx.ID_OK
+        assert [b.GetLabelText() for b in dialogo.pannello.GetChildren() if isinstance(b, wx.Button)] == ["OK", "Annulla"]
+        assert dialogo.indice is None and dialogo.scelta is None
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_scelta_della_scheda_automatica_in_uso_o_nessuna(app_wx):
+    uscite = _uscite()
+    dialogo = dialoghi.SceltaScheda(None, uscite, 0, "Altoparlanti (Realtek(R) Audio), WASAPI")
+    try:
+        assert dialogo.righe[0] == "Automatica, la scheda di Windows, in uso: Altoparlanti (Realtek(R) Audio), WASAPI"
+        assert dialogo.elenco.GetSelection() == 0 and sum(", in uso" in riga for riga in dialogo.righe) == 1
+    finally:
+        dialogo.Destroy()
+    # Muto: nessuna riga in uso, e l'elenco si apre sull'automatica, o sulla riga chiesta, come la scelta salvata.
+    for selezionata, attesa in ((None, 0), (3, 3), (99, len(uscite))):
+        dialogo = dialoghi.SceltaScheda(None, uscite, None, selezionata=selezionata)
+        try:
+            assert not any("in uso" in riga for riga in dialogo.righe)
+            assert dialogo.elenco.GetSelection() == attesa
+        finally:
+            dialogo.Destroy()
+    # Senza schede resta l'automatica.
+    dialogo = dialoghi.SceltaScheda(None, [], None)
+    try:
+        assert dialogo.righe == ["Automatica, la scheda di Windows"] and dialogo.elenco.GetSelection() == 0
+    finally:
+        dialogo.Destroy()
+
+
+def test_scelta_della_scheda_conferma(app_wx):
+    uscite = _uscite()
+    dialogo = dialoghi.SceltaScheda(None, uscite, 0)
+    try:
+        digitale = next(n for n, u in enumerate(uscite, 1) if u["dispositivo"] == DIGITALE)
+        dialogo.elenco.SetSelection(digitale)
+        dialogo.conferma()
+        assert dialogo.GetReturnCode() == wx.ID_OK and dialogo.indice == digitale
+        assert dialogo.scelta == {"dispositivo": DIGITALE, "interfaccia": "Windows WASAPI"}
+        # L'automatica si salva come il dizionario vuoto.
+        dialogo.elenco.SetSelection(0)
+        dialogo.conferma()
+        assert dialogo.indice == 0 and dialogo.scelta == {}
+    finally:
+        dialogo.Destroy()
+    # Il doppio clic conferma come OK.
+    dialogo = dialoghi.SceltaScheda(None, uscite, 1)
+    try:
+        asio = next(n for n, u in enumerate(uscite, 1) if u["dispositivo"] == ASIO)
+        dialogo.elenco.SetSelection(asio)
+        evento = wx.CommandEvent(wx.wxEVT_LISTBOX_DCLICK, dialogo.elenco.GetId())
+        evento.SetEventObject(dialogo.elenco)
+        dialogo.elenco.GetEventHandler().ProcessEvent(evento)
+        assert dialogo.scelta == {"dispositivo": ASIO, "interfaccia": "ASIO"} and dialogo.GetReturnCode() == wx.ID_OK
+    finally:
+        dialogo.Destroy()
+
+
+def test_scelta_della_scheda_annulla_esc_e_grazia(app_wx, sentiti, monkeypatch):
+    for azione in (lambda d: _premi(next(b for b in d.pannello.GetChildren() if isinstance(b, wx.Button) and b.GetId() == wx.ID_CANCEL)), _esc):
+        dialogo = dialoghi.SceltaScheda(None, _uscite(), 1, suona=sentiti)
+        try:
+            dialogo.elenco.SetSelection(2)
+            codice, massimizzato = _apri(dialogo, azione)
+            assert codice == wx.ID_CANCEL and massimizzato and dialogo.scelta is None and dialogo.indice is None
+        finally:
+            dialogo.Destroy()
+    # L'Invio tenuto giù dalla voce del menu, dentro la grazia dell'apertura, non sceglie la scheda.
+    orologio = [700.0]
+    monkeypatch.setattr(dialoghi, "_adesso", lambda: orologio[0])
+    dialogo = dialoghi.SceltaScheda(None, _uscite(), 1, suona=sentiti)
+    try:
+        orologio[0] += dialoghi.GRAZIA_INVIO / 2
+        assert not _tasto(dialogo, wx.WXK_RETURN, dialogo.elenco).GetSkipped()
+        assert dialogo.GetReturnCode() == 0 and dialogo.scelta is None
+        orologio[0] += dialoghi.GRAZIA_INVIO * 2
+        assert _tasto(dialogo, wx.WXK_RETURN, dialogo.elenco).GetSkipped()
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_le_righe_delle_schede():
+    altoparlanti = next(u for u in USCITE_FINTE if u["dispositivo"] == ALTOPARLANTI)
+    assert dialoghi.riga_della_scheda(altoparlanti) == "Altoparlanti (Realtek(R) Audio), WASAPI, 3 ms"
+    assert dialoghi.riga_della_scheda(CUFFIE_FINTE, in_uso=True) == f"{CUFFIE}, WASAPI, 3 ms, in uso"
+    assert dialoghi.riga_dell_automatica() == "Automatica, la scheda di Windows"
+    assert dialoghi.riga_dell_automatica(True) == "Automatica, la scheda di Windows, in uso"
+    assert dialoghi.riga_dell_automatica(True, "Altoparlanti, WASAPI") == "Automatica, la scheda di Windows, in uso: Altoparlanti, WASAPI"
 
 
 def test_i_nomi_delle_forme_del_proiettile():

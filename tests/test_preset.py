@@ -39,6 +39,9 @@ EVENTI_DEL_CONTRATTO = (
     "aggiornamento_rimandato", "aggiornamento_scaduto", "aggiornamento_pronto", "aggiornamento_non_pronto", "aggiornamento_non_riuscito",
     # La scelta della forma del proiettile, dai banchi d'ascolto (D17): un suono suo, non quello della sintesi accesa.
     "proiettile",
+    # La scelta della scheda audio (D20): l'elenco che si apre, e la scheda scelta che non c'è o non si apre. La scheda
+    # cambiata suona confermato, come ogni dialogo confermato.
+    "scheda_audio", "scheda_non_aperta",
 )
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98
@@ -256,6 +259,20 @@ def test_gli_eventi_frequenti_sono_brevi(creata):
         nome = suoni.EVENTI[evento]
         assert crea_preset.durata(creata.dati[nome]["score"]) < crea_preset.DURATA_MASSIMA_FREQUENTI, evento
         assert len(_sintetizza(creata.dati[nome], nome)) / FS < crea_preset.DURATA_MASSIMA_FREQUENTI, evento
+
+
+def test_i_suoni_della_scheda_audio(creata):
+    """D20: l'elenco delle schede sta coi menu, la scheda che non si apre con gli errori; ognuno ha il suo preset, e le
+    descrizioni dicono la durata vera."""
+    gruppi = dict(suoni.GRUPPI)
+    assert "scheda_audio" in gruppi["La finestra, i menu"]
+    assert "scheda_non_aperta" in gruppi["La finestra, l'avvio, l'uscita e gli errori"]
+    for evento, millesimi in (("scheda_audio", 315), ("scheda_non_aperta", 355)):
+        nome = suoni.EVENTI[evento]
+        assert round(crea_preset.durata(creata.dati[nome]["score"]) * 1000) == millesimi, evento
+        assert f"in {millesimi} ms" in creata.dati[nome]["descrizione"], evento
+    # La scheda cambiata con successo suona come ogni dialogo confermato, e l'azione lo dice.
+    assert "scheda audio" in suoni.AZIONI["confermato"]
 
 
 def test_sparo_colpiti_e_terra_sono_di_rumore(creata):

@@ -12,13 +12,35 @@ import impostazioni
 
 def test_predefinite():
     assert impostazioni.PREDEFINITE == {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": "automatica", "ultimo_nome": "",
-                                        "proiettile": costanti.PROIETTILE_FORMA}
+                                        "proiettile": costanti.PROIETTILE_FORMA, "scheda": {}}
     assert impostazioni.valide(None) == impostazioni.PREDEFINITE
     assert impostazioni.valide([1, 2]) == impostazioni.PREDEFINITE
-    # valide restituisce una copia: cambiarla non tocca i predefiniti.
-    copia = impostazioni.valide(None)
-    copia["volume"] = 3
-    assert impostazioni.PREDEFINITE["volume"] == costanti.VOLUME_PREDEFINITO
+    # valide restituisce una copia: cambiarla non tocca i predefiniti, nemmeno la scheda, che è un dizionario.
+    for dati in (None, {}, {"volume": 5}):
+        copia = impostazioni.valide(dati)
+        copia["volume"] = 3
+        copia["scheda"]["dispositivo"] = "Cuffie"
+        assert copia["scheda"] is not impostazioni.PREDEFINITE["scheda"]
+    assert impostazioni.PREDEFINITE["volume"] == costanti.VOLUME_PREDEFINITO and impostazioni.PREDEFINITE["scheda"] == {}
+
+
+SCELTA = {"dispositivo": "Cuffie (WH-1000XM4)", "interfaccia": "Windows WASAPI"}
+
+
+def test_la_scheda_e_dispositivo_e_interfaccia_o_l_automatica():
+    """D20: la scheda vale soltanto con dispositivo e interfaccia, due testi non vuoti, ripuliti; altrimenti è l'automatica, il dizionario vuoto."""
+    assert impostazioni.valide({"scheda": SCELTA})["scheda"] == SCELTA
+    # Un a capo dentro un nome, come certi driver, si fa spazio; gli spazi ai capi se ne vanno; le chiavi in più non restano.
+    sporca = {"dispositivo": " Cuffie\r\n(Bluetooth) ", "interfaccia": " Windows DirectSound ", "indice": 15}
+    assert impostazioni.valide({"scheda": sporca})["scheda"] == {"dispositivo": "Cuffie (Bluetooth)", "interfaccia": "Windows DirectSound"}
+    for sbagliata in ({}, {"dispositivo": "Cuffie"}, {"interfaccia": "Windows WASAPI"}, {"dispositivo": "", "interfaccia": "Windows WASAPI"},
+                      {"dispositivo": "Cuffie", "interfaccia": "  "}, {"dispositivo": 3, "interfaccia": "MME"}, "Cuffie", 18, None, ["Cuffie", "MME"]):
+        assert impostazioni.valide({"scheda": sbagliata})["scheda"] == {}, sbagliata
+    # La scheda valida è un dizionario nuovo: cambiarlo non tocca quello ricevuto.
+    ricevuta = dict(SCELTA)
+    valida = impostazioni.valide({"scheda": ricevuta})["scheda"]
+    valida["dispositivo"] = "Altro"
+    assert ricevuta == SCELTA
 
 
 def test_valide_riporta_nell_intervallo():
@@ -65,10 +87,22 @@ def test_salva_e_carica(cartella_di_prova):
     assert impostazioni.salva({"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "proiettile": "sega_morbida", "extra": 1})
     file = cartella_di_prova / costanti.FILE_IMPOSTAZIONI
     assert json.loads(file.read_text(encoding="utf-8"))["volume"] == 33
-    assert impostazioni.carica() == {"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "proiettile": "sega_morbida", "extra": 1}
-    # Un file senza la chiave, come quelli della 0.1.0, dà il proiettile di serie.
+    assert impostazioni.carica() == {"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "proiettile": "sega_morbida", "scheda": {},
+                                     "extra": 1}
+    # Un file senza la chiave, come quelli della 0.1.0, dà il proiettile di serie e la scheda automatica.
     file.write_text(json.dumps({"volume": 20}), encoding="utf-8")
     assert impostazioni.carica()["proiettile"] == costanti.PROIETTILE_FORMA
+    assert impostazioni.carica()["scheda"] == {}
+
+
+def test_la_scheda_scelta_resta_sul_disco(cartella_di_prova):
+    """D20: la scelta della scheda è permanente; quella scritta male a mano torna l'automatica."""
+    assert impostazioni.salva({"scheda": SCELTA})
+    file = cartella_di_prova / costanti.FILE_IMPOSTAZIONI
+    assert json.loads(file.read_text(encoding="utf-8"))["scheda"] == SCELTA
+    assert impostazioni.carica()["scheda"] == SCELTA
+    file.write_text(json.dumps({"scheda": {"dispositivo": "Cuffie"}}), encoding="utf-8")
+    assert impostazioni.carica()["scheda"] == {} and impostazioni.ultimo_avviso is None
 
 
 def test_salva_sistema_i_valori(cartella_di_prova):

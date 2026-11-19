@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: Ciechino 0.1.0\n"
 "Report-Msgid-Bugs-To: "
 "https://github.com/GabrieleBattaglia/Ciechino/issues\n"
-"POT-Creation-Date: 2026-11-19 18:02+0100\n"
+"POT-Creation-Date: 2026-11-19 19:19+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -20,14 +20,14 @@ msgstr ""
 
 #. Traduttori: {tipo} è il nome dell'errore, in inglese, {valore} la sua
 #. descrizione, {resoconto} dove sta il resoconto.
-#: Ciechino.py:202
+#: Ciechino.py:209
 #, python-brace-format
 msgid ""
 "Ciechino si è fermato per un errore imprevisto: {tipo}, {valore}. "
 "{resoconto}"
 msgstr ""
 
-#: Ciechino.py:204
+#: Ciechino.py:211
 msgid "Ciechino si è fermato"
 msgstr ""
 
@@ -123,8 +123,8 @@ msgid_plural "Classifica, {n} voci, ordinata per punteggio."
 msgstr[0] ""
 msgstr[1] ""
 
-#: classifica.py:394 gui/finestra.py:370 gui/finestra.py:894 resoconti.py:96
-#: statistiche.py:489
+#: classifica.py:394 gui/finestra.py:387 gui/finestra.py:966 resoconti.py:96
+#: statistiche.py:495
 #, python-brace-format
 msgid "{n} punto"
 msgid_plural "{n} punti"
@@ -145,7 +145,7 @@ msgstr ""
 msgid "{posizione}. {nome}, {punti}, {eta}."
 msgstr ""
 
-#: impostazioni.py:71
+#: impostazioni.py:82
 msgid "il file non contiene le impostazioni"
 msgstr ""
 
@@ -157,17 +157,17 @@ msgstr ""
 msgid "&Passo per passo"
 msgstr ""
 
-#: gui/dialoghi.py:369 gui/dialoghi.py:407 gui/dialoghi.py:452
-#: gui/dialoghi.py:509 pub.py:30
+#: gui/dialoghi.py:392 gui/dialoghi.py:430 gui/dialoghi.py:475
+#: gui/dialoghi.py:553 gui/dialoghi.py:586 pub.py:30
 msgid "&OK"
 msgstr ""
 
-#: gui/dialoghi.py:252 gui/dialoghi.py:275 pub.py:30
+#: gui/dialoghi.py:275 gui/dialoghi.py:298 pub.py:30
 msgid "&Chiudi"
 msgstr ""
 
-#: gui/dialoghi.py:369 gui/dialoghi.py:407 gui/dialoghi.py:452
-#: gui/dialoghi.py:509 pub.py:30
+#: gui/dialoghi.py:392 gui/dialoghi.py:430 gui/dialoghi.py:475
+#: gui/dialoghi.py:553 gui/dialoghi.py:586 pub.py:30
 msgid "&Annulla"
 msgstr ""
 
@@ -895,14 +895,14 @@ msgstr[1] ""
 msgid "{centri} su {tiri}, {percentuale}"
 msgstr ""
 
-#: resoconti.py:423 statistiche.py:651
+#: resoconti.py:423 statistiche.py:657
 #, python-brace-format
 msgid "{n} centro"
 msgid_plural "{n} centri"
 msgstr[0] ""
 msgstr[1] ""
 
-#: resoconti.py:424 statistiche.py:652
+#: resoconti.py:424 statistiche.py:658
 #, python-brace-format
 msgid "{n} tiro"
 msgid_plural "{n} tiri"
@@ -1029,15 +1029,33 @@ msgstr ""
 msgid "Bersagli in volo: {n}"
 msgstr ""
 
-#: statistiche.py:61
+#. Traduttori: la latenza di una scheda audio, in millisecondi.
+#: schede.py:55
+#, python-brace-format
+msgid "{numero} ms"
+msgstr ""
+
+#. Traduttori: in coda alla riga di una scheda audio con un'interfaccia
+#. esclusiva, come ASIO.
+#: schede.py:83
+msgid "esclusiva: può zittire NVDA"
+msgstr ""
+
+#. Traduttori: in coda alla riga del vivavoce di cuffie Bluetooth, che Windows
+#. apre per le telefonate.
+#: schede.py:86
+msgid "vivavoce: suona come un telefono"
+msgstr ""
+
+#: statistiche.py:63
 msgid "direzione"
 msgstr ""
 
-#: statistiche.py:61
+#: statistiche.py:63
 msgid "alzo"
 msgstr ""
 
-#: statistiche.py:61
+#: statistiche.py:63
 msgid "potenza"
 msgstr ""
 
@@ -1045,359 +1063,373 @@ msgstr ""
 #. bersaglio.
 #. Traduttori: da qui, i nomi delle forme d'onda del proiettile, come si dicono
 #. dopo «in»: «il proiettile suona in seno».
-#: gui/dialoghi.py:56 statistiche.py:64 statistiche.py:71
+#: gui/dialoghi.py:57 statistiche.py:66 statistiche.py:73
 msgid "seno"
 msgstr ""
 
-#: statistiche.py:64
+#: statistiche.py:66
 msgid "dente di sega"
 msgstr ""
 
-#: statistiche.py:64
+#: statistiche.py:66
 msgid "dente di sega inverso"
 msgstr ""
 
-#: gui/dialoghi.py:56 statistiche.py:64 statistiche.py:71
+#: gui/dialoghi.py:57 statistiche.py:66 statistiche.py:73
 msgid "triangolo"
 msgstr ""
 
-#: statistiche.py:64
+#: statistiche.py:66
 msgid "onda quadra"
 msgstr ""
 
-#: statistiche.py:65
+#: statistiche.py:67
 msgid "casuale"
 msgstr ""
 
-#: statistiche.py:65
+#: statistiche.py:67
 msgid "deriva"
 msgstr ""
 
-#: statistiche.py:67
+#: statistiche.py:69
 msgid "molla"
 msgstr ""
 
-#: statistiche.py:67
+#: statistiche.py:69
 msgid "scala a gradini"
 msgstr ""
 
-#: statistiche.py:67
+#: statistiche.py:69
 msgid "impulsi"
 msgstr ""
 
-#: statistiche.py:67
+#: statistiche.py:69
 msgid "onda doppia"
 msgstr ""
 
-#: statistiche.py:67
+#: statistiche.py:69
 msgid "trillo"
 msgstr ""
 
 #. Traduttori: da qui, i timbri della voce di un bersaglio, cioè le sue forme
 #. d'onda: «Timbro sega morbida».
-#: statistiche.py:71
+#: statistiche.py:73
 msgid "organo"
 msgstr ""
 
-#: gui/dialoghi.py:56 statistiche.py:71
+#: gui/dialoghi.py:57 statistiche.py:73
 msgid "sega morbida"
 msgstr ""
 
-#: statistiche.py:201
+#: statistiche.py:203
 msgid "il file non contiene le statistiche"
 msgstr ""
 
 #. Traduttori: da qui, i titoli delle sezioni delle statistiche, con l'iniziale
 #. minuscola: «Sezione 1 di 8, in breve.».
-#: statistiche.py:425
+#: statistiche.py:427
 msgid "in breve"
 msgstr ""
 
-#: statistiche.py:426
+#: statistiche.py:428
 msgid "le partite"
 msgstr ""
 
-#: statistiche.py:427
+#: statistiche.py:429
 msgid "i tiri"
 msgstr ""
 
-#: statistiche.py:428
+#: statistiche.py:430
 msgid "la mira"
 msgstr ""
 
-#: statistiche.py:429
+#: statistiche.py:431
 msgid "i bersagli"
 msgstr ""
 
-#: statistiche.py:430
+#: statistiche.py:432
 msgid "i primati"
 msgstr ""
 
-#: statistiche.py:431
+#: statistiche.py:433
 msgid "le ultime partite"
 msgstr ""
 
-#: statistiche.py:432
+#: statistiche.py:434
 msgid "i suoni"
 msgstr ""
 
-#: statistiche.py:433
+#: statistiche.py:435
 msgid "gli altri conti"
 msgstr ""
 
 #. Traduttori: data è come «giovedì 19 novembre 2026», giorni come «5 giorni».
-#: statistiche.py:446
+#: statistiche.py:448
 #, python-brace-format
 msgid ""
 "Statistiche di {nome} {versione}, raccolte da {data}: {giorni}, oggi "
 "compreso."
 msgstr ""
 
-#: statistiche.py:448 testi.py:161
+#: statistiche.py:450 testi.py:161
 #, python-brace-format
 msgid "{n} giorno"
 msgid_plural "{n} giorni"
 msgstr[0] ""
 msgstr[1] ""
 
-#: statistiche.py:450
+#: statistiche.py:452
 #, python-brace-format
 msgid "Le sezioni: {sezioni}."
 msgstr ""
 
-#: statistiche.py:453
+#: statistiche.py:455
 #, python-brace-format
 msgid "Sezione {n} di {totale}, {titolo}."
 msgstr ""
 
-#: statistiche.py:454
+#: statistiche.py:456
 msgid "Ancora niente da dire."
 msgstr ""
 
-#: statistiche.py:467
+#: statistiche.py:469
 #, python-brace-format
 msgid "Avvii di Ciechino: {n}."
 msgstr ""
 
-#: statistiche.py:468
+#: statistiche.py:470
 #, python-brace-format
 msgid "Cambi di lingua: {n}."
 msgstr ""
 
 #. Traduttori: le volte in cui si è scelta nelle Impostazioni una forma d'onda
 #. nuova per il proiettile.
-#: statistiche.py:470
+#: statistiche.py:472
 #, python-brace-format
 msgid "Cambi della forma del proiettile: {n}."
 msgstr ""
 
+#. Traduttori: le volte in cui si è scelta, con Ctrl+Maiusc+X, una scheda audio
+#. diversa da quella di prima.
+#: statistiche.py:474
+#, python-brace-format
+msgid "Cambi della scheda audio: {n}."
+msgstr ""
+
+#. Traduttori: le volte in cui la scheda audio scelta non c'era, o non si
+#. apriva, all'avvio o appena scelta.
+#: statistiche.py:476
+#, python-brace-format
+msgid "Schede audio scelte che non si sono aperte: {n}."
+msgstr ""
+
 #. Traduttori: il PUB è il gruppo di supporto di Gabriele, e il nome resta
 #. così; conta le mail d'iscrizione e quelle d'aiuto.
-#: statistiche.py:472
+#: statistiche.py:478
 #, python-brace-format
 msgid "Mail al PUB preparate: {n}."
 msgstr ""
 
 #. Traduttori: le mail d'aiuto al PUB preparate col file dei registri degli
 #. errori allegato.
-#: statistiche.py:474
+#: statistiche.py:480
 #, python-brace-format
 msgid "Mail d'aiuto al PUB coi registri allegati: {n}."
 msgstr ""
 
-#: statistiche.py:475
+#: statistiche.py:481
 #, python-brace-format
 msgid "Partite giocate: {n}."
 msgstr ""
 
-#: statistiche.py:476 statistiche.py:501
+#: statistiche.py:482 statistiche.py:507
 #, python-brace-format
 msgid "Tempo di gioco: {durata}."
 msgstr ""
 
-#: statistiche.py:477 statistiche.py:524
+#: statistiche.py:483 statistiche.py:530
 #, python-brace-format
 msgid "Tiri: {n}."
 msgstr ""
 
-#: statistiche.py:478 statistiche.py:525
+#: statistiche.py:484 statistiche.py:531
 #, python-brace-format
 msgid "Centri: {n}, {percentuale} dei tiri."
 msgstr ""
 
-#: statistiche.py:478 statistiche.py:525
+#: statistiche.py:484 statistiche.py:531
 #, python-brace-format
 msgid "Centri: {n}."
 msgstr ""
 
-#: statistiche.py:479
+#: statistiche.py:485
 #, python-brace-format
 msgid "Punti fatti: {n}."
 msgstr ""
 
-#: statistiche.py:482
+#: statistiche.py:488
 #, python-brace-format
 msgid "Punteggio più alto: {punti}."
 msgstr ""
 
-#: statistiche.py:484
+#: statistiche.py:490
 #, python-brace-format
 msgid "Livello più alto: {n}."
 msgstr ""
 
-#: statistiche.py:497
+#: statistiche.py:503
 #, python-brace-format
 msgid "Partite iniziate: {n}."
 msgstr ""
 
-#: statistiche.py:498
+#: statistiche.py:504
 #, python-brace-format
 msgid "Partite finite a riserva vuota: {n}."
 msgstr ""
 
-#: statistiche.py:499
+#: statistiche.py:505
 #, python-brace-format
 msgid "Partite abbandonate: {n}."
 msgstr ""
 
-#: statistiche.py:500
+#: statistiche.py:506
 #, python-brace-format
 msgid ""
 "Partite iniziate e non concluse, perché sono in corso o il programma si è"
 " chiuso: {n}."
 msgstr ""
 
-#: statistiche.py:504
+#: statistiche.py:510
 #, python-brace-format
 msgid "Durata media di una partita: {durata}."
 msgstr ""
 
-#: statistiche.py:505
+#: statistiche.py:511
 #, python-brace-format
 msgid "Punteggio medio di una partita: {punti}."
 msgstr ""
 
 #. Traduttori: da qui, le partite cominciate con ogni forma d'onda del
 #. proiettile, scelta nelle Impostazioni.
-#: statistiche.py:507
+#: statistiche.py:513
 #, python-brace-format
 msgid "Partite col proiettile in seno: {n}."
 msgstr ""
 
-#: statistiche.py:508
+#: statistiche.py:514
 #, python-brace-format
 msgid "Partite col proiettile in triangolo: {n}."
 msgstr ""
 
-#: statistiche.py:509
+#: statistiche.py:515
 #, python-brace-format
 msgid "Partite col proiettile in sega morbida: {n}."
 msgstr ""
 
-#: statistiche.py:510
+#: statistiche.py:516
 #, python-brace-format
 msgid "Livelli superati: {n}."
 msgstr ""
 
-#: statistiche.py:511
+#: statistiche.py:517
 #, python-brace-format
 msgid "Colpi guadagnati: {n}."
 msgstr ""
 
-#: statistiche.py:512
+#: statistiche.py:518
 #, python-brace-format
 msgid "Partite entrate in classifica: {n}."
 msgstr ""
 
-#: statistiche.py:513
+#: statistiche.py:519
 #, python-brace-format
 msgid "Pause chieste con Ctrl+P: {n}."
 msgstr ""
 
 #. Traduttori: le pause che Ciechino mette da solo quando si apre un dialogo o
 #. si passa a un'altra finestra.
-#: statistiche.py:515
+#: statistiche.py:521
 #, python-brace-format
 msgid "Pause automatiche, per un dialogo aperto o un'altra finestra: {n}."
 msgstr ""
 
-#: statistiche.py:526
+#: statistiche.py:532
 #, python-brace-format
 msgid "Tiri a vuoto: {n}, {percentuale} dei tiri."
 msgstr ""
 
-#: statistiche.py:526
+#: statistiche.py:532
 #, python-brace-format
 msgid "Tiri a vuoto: {n}."
 msgstr ""
 
-#: statistiche.py:529
+#: statistiche.py:535
 #, python-brace-format
 msgid "Precisione media dei centri: {percentuale}."
 msgstr ""
 
-#: statistiche.py:531
+#: statistiche.py:537
 #, python-brace-format
 msgid "Punti per centro, in media: {n}."
 msgstr ""
 
-#: statistiche.py:532
+#: statistiche.py:538
 #, python-brace-format
 msgid "Mire avviate: {n}."
 msgstr ""
 
 #. Traduttori: da qui, le righe della mira; parametro è direzione, alzo o
 #. potenza, con l'iniziale maiuscola.
-#: statistiche.py:552
+#: statistiche.py:558
 #, python-brace-format
 msgid "{parametro}, valori presi: {n}."
 msgstr ""
 
-#: statistiche.py:554
+#: statistiche.py:560
 #, python-brace-format
 msgid "{parametro}, scelti con lo spazio nella scivolata: {n}, {percentuale}."
 msgstr ""
 
-#: statistiche.py:555
+#: statistiche.py:561
 #, python-brace-format
 msgid "{parametro}, fermati al minimo nei bip: {n}, {percentuale}."
 msgstr ""
 
-#: statistiche.py:556
+#: statistiche.py:562
 #, python-brace-format
 msgid "{parametro}, arrivati al massimo senza lo spazio: {n}, {percentuale}."
 msgstr ""
 
-#: statistiche.py:561
+#: statistiche.py:567
 #, python-brace-format
 msgid "{parametro}, valore medio: {percentuale} della scala."
 msgstr ""
 
-#: statistiche.py:563
+#: statistiche.py:569
 #, python-brace-format
 msgid "{parametro}, valore medio nei centri: {percentuale} della scala."
 msgstr ""
 
 #. Traduttori: una fascia della scala con quanti valori ci sono caduti: «da 10
 #. a 20%: 5».
-#: statistiche.py:567
+#: statistiche.py:573
 #, python-brace-format
 msgid "da {da} a {a}%: {n}"
 msgstr ""
 
-#: statistiche.py:571
+#: statistiche.py:577
 #, python-brace-format
 msgid "{parametro}, valori per fasce della scala: {fasce}."
 msgstr ""
 
-#: statistiche.py:581
+#: statistiche.py:587
 #, python-brace-format
 msgid "{n} apparso"
 msgid_plural "{n} apparsi"
 msgstr[0] ""
 msgstr[1] ""
 
-#: statistiche.py:582
+#: statistiche.py:588
 #, python-brace-format
 msgid "{n} colpito"
 msgid_plural "{n} colpiti"
@@ -1406,148 +1438,148 @@ msgstr[1] ""
 
 #. Traduttori: una riga dei bersagli: «Bersagli fermi: 12 apparsi, 5 colpiti,
 #. 42%.».
-#: statistiche.py:586
+#: statistiche.py:592
 #, python-brace-format
 msgid "{etichetta}: {dati}."
 msgstr ""
 
-#: statistiche.py:593
+#: statistiche.py:599
 #, python-brace-format
 msgid "Bersagli apparsi: {n}."
 msgstr ""
 
-#: statistiche.py:594
+#: statistiche.py:600
 #, python-brace-format
 msgid "Bersagli colpiti: {n}, {percentuale} degli apparsi."
 msgstr ""
 
-#: statistiche.py:594
+#: statistiche.py:600
 #, python-brace-format
 msgid "Bersagli colpiti: {n}."
 msgstr ""
 
-#: statistiche.py:595
+#: statistiche.py:601
 msgid "Bersagli fermi"
 msgstr ""
 
-#: statistiche.py:596
+#: statistiche.py:602
 msgid "Bersagli mobili"
 msgstr ""
 
 #. Traduttori: forma è il nome della forma dell'oscillazione, come «dente di
 #. sega».
-#: statistiche.py:601
+#: statistiche.py:607
 #, python-brace-format
 msgid "Forma {forma}"
 msgstr ""
 
 #. Traduttori: timbro è il nome della forma d'onda della voce di un bersaglio,
 #. come «sega morbida».
-#: statistiche.py:607
+#: statistiche.py:613
 #, python-brace-format
 msgid "Timbro {timbro}"
 msgstr ""
 
-#: statistiche.py:610
+#: statistiche.py:616
 #, python-brace-format
 msgid "Bonus apparsi: {n}."
 msgstr ""
 
-#: statistiche.py:612
+#: statistiche.py:618
 #, python-brace-format
 msgid "Bonus colpiti: {n}, {percentuale} degli apparsi."
 msgstr ""
 
-#: statistiche.py:612
+#: statistiche.py:618
 #, python-brace-format
 msgid "Bonus colpiti: {n}."
 msgstr ""
 
-#: statistiche.py:613
+#: statistiche.py:619
 #, python-brace-format
 msgid "Bonus usciti dal cubo senza essere colpiti: {n}."
 msgstr ""
 
 #. Traduttori: da qui, i primati; valore è già scritto, quando è una data come
 #. «giovedì 19 novembre 2026».
-#: statistiche.py:622
+#: statistiche.py:628
 #, python-brace-format
 msgid "Punteggio più alto in una partita: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:623
+#: statistiche.py:629
 #, python-brace-format
 msgid "Livello più alto raggiunto: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:624
+#: statistiche.py:630
 #, python-brace-format
 msgid "Serie più lunga di centri consecutivi: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:625
+#: statistiche.py:631
 #, python-brace-format
 msgid "Il centro più preciso: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:626
+#: statistiche.py:632
 #, python-brace-format
 msgid "Più punti in un tiro: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:627
+#: statistiche.py:633
 #, python-brace-format
 msgid "Più centri in una partita: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:628
+#: statistiche.py:634
 #, python-brace-format
 msgid "La partita più lunga: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:629
+#: statistiche.py:635
 #, python-brace-format
 msgid ""
 "Il tiro passato più vicino al centro di un bersaglio: {valore} dal "
 "centro, {quando}."
 msgstr ""
 
-#: statistiche.py:630
+#: statistiche.py:636
 #, python-brace-format
 msgid ""
 "Il tiro a vuoto passato più vicino al centro di un bersaglio: {valore} "
 "dal centro, {quando}."
 msgstr ""
 
-#: statistiche.py:638
+#: statistiche.py:644
 #, python-brace-format
 msgid "{etichetta}: {valore}, {quando}."
 msgstr ""
 
-#: statistiche.py:645
+#: statistiche.py:651
 msgid "finita a riserva vuota"
 msgstr ""
 
-#: statistiche.py:645
+#: statistiche.py:651
 msgid "abbandonata"
 msgstr ""
 
 #. Traduttori: una delle ultime partite: «Giovedì 19 novembre 2026 alle 18:03:
 #. 1.230 punti, livello 3, 12 centri su 20 tiri, 4 minuti e 12 secondi,
 #. abbandonata.».
-#: statistiche.py:649
+#: statistiche.py:655
 #, python-brace-format
 msgid ""
 "{quando}: {punti}, livello {livello}, {centri} su {tiri}, {durata}, "
 "{motivo}."
 msgstr ""
 
-#: statistiche.py:660
+#: statistiche.py:666
 #, python-brace-format
 msgid "Eventi sonori in tutto: {n}."
 msgstr ""
 
-#: statistiche.py:664 statistiche.py:675
+#: statistiche.py:670 statistiche.py:681
 #, python-brace-format
 msgid "{etichetta}: {n}."
 msgstr ""
@@ -1576,297 +1608,309 @@ msgstr ""
 msgid "La finestra, l'avvio, l'uscita e gli errori"
 msgstr ""
 
-#: suoni.py:83
+#: suoni.py:85
 msgid "La finestra, i menu"
 msgstr ""
 
-#: suoni.py:106
+#: suoni.py:111
 msgid "La finestra, i dialoghi"
 msgstr ""
 
-#: suoni.py:112
+#: suoni.py:117
 msgid "La finestra, l'aggiornamento automatico"
 msgstr ""
 
-#: suoni.py:121
+#: suoni.py:126
 msgid "La finestra, il fuoco"
 msgstr ""
 
-#: suoni.py:133
+#: suoni.py:138
 msgid ""
 "comincia una partita nuova, con lo spazio quando nessuna partita è in "
 "corso, con Ctrl+N o con Nuova partita del menu Partita"
 msgstr ""
 
-#: suoni.py:134
+#: suoni.py:139
 msgid "nella riserva resta l'ultimo colpo"
 msgstr ""
 
-#: suoni.py:135
+#: suoni.py:140
 msgid "la riserva è vuota e la partita finisce"
 msgstr ""
 
-#: suoni.py:136
+#: suoni.py:141
 msgid ""
 "a partita finita il punteggio entra nella classifica dei migliori: suona "
 "dopo la fine, e quando tace si apre la finestra del nome"
 msgstr ""
 
-#: suoni.py:137
+#: suoni.py:142
 msgid ""
 "a partita finita il punteggio non entra nella classifica dei migliori: "
 "suona dopo la fine"
 msgstr ""
 
-#: suoni.py:138
+#: suoni.py:143
 msgid ""
 "lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del "
 "gioco si ferma e i bersagli si sentono più piano"
 msgstr ""
 
-#: suoni.py:139
+#: suoni.py:144
 msgid ""
 "la mira prende un valore, la direzione, l'alzo o la potenza, con lo "
 "spazio o alla fine della scivolata"
 msgstr ""
 
-#: suoni.py:140
+#: suoni.py:145
 msgid "dopo il terzo valore della mira parte il colpo dal cannone"
 msgstr ""
 
-#: suoni.py:141
+#: suoni.py:146
 msgid ""
 "il proiettile colpisce un bersaglio, e il suono viene dal punto "
 "dell'impatto"
 msgstr ""
 
-#: suoni.py:142
+#: suoni.py:147
 msgid ""
 "il proiettile colpisce un bersaglio bonus, e il suono viene dal punto "
 "dell'impatto"
 msgstr ""
 
-#: suoni.py:143
+#: suoni.py:148
 msgid ""
 "il proiettile arriva a terra senza aver colpito niente, e il suono viene "
 "dal punto dove cade"
 msgstr ""
 
-#: suoni.py:144
+#: suoni.py:149
 msgid ""
 "i centri del livello sono fatti: si sale di livello, con altri colpi "
 "nella riserva e bersagli nuovi"
 msgstr ""
 
-#: suoni.py:145
+#: suoni.py:150
 msgid ""
 "compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi "
 "esce"
 msgstr ""
 
-#: suoni.py:146
+#: suoni.py:151
 msgid ""
 "il bersaglio bonus esce dallo spazio dei bersagli senza essere stato "
 "colpito"
 msgstr ""
 
-#: suoni.py:149
+#: suoni.py:154
 msgid ""
 "la partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche "
 "durante la mira; la pausa automatica non suona"
 msgstr ""
 
-#: suoni.py:150
+#: suoni.py:155
 msgid ""
 "la partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita;"
 " la ripresa automatica non suona"
 msgstr ""
 
-#: suoni.py:151
+#: suoni.py:156
 msgid ""
 "lo spazio premuto quando non può fare niente, col proiettile in volo o in"
 " pausa, oppure Ctrl+P senza una partita in corso"
 msgstr ""
 
-#: suoni.py:152
+#: suoni.py:157
 msgid "il programma si apre"
 msgstr ""
 
-#: suoni.py:153
+#: suoni.py:158
 msgid ""
 "l'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo"
 " la finestra"
 msgstr ""
 
-#: suoni.py:154
+#: suoni.py:159
 msgid ""
 "Ciechino si chiude per riaprirsi subito, dopo il sì alla domanda che "
 "segue la scelta di una lingua nuova"
 msgstr ""
 
-#: suoni.py:155
+#: suoni.py:160
 msgid ""
 "si apre Ciechino mentre è già aperto, e la finestra aperta torna in primo"
 " piano"
 msgstr ""
 
-#: suoni.py:156
+#: suoni.py:161
 msgid "un errore imprevisto"
 msgstr ""
 
-#: suoni.py:157
+#: suoni.py:162
 msgid ""
 "all'avvio, dopo il suono d'apertura: la volta scorsa Ciechino si è chiuso"
 " per un errore grave, e la vista dice dov'è il resoconto"
 msgstr ""
 
-#: suoni.py:158
+#: suoni.py:163
 msgid ""
 "un file dei dati, la classifica, le statistiche o le impostazioni, non si"
 " leggeva: Ciechino lo mette da parte e riparte dalla copia o da zero"
 msgstr ""
 
-#: suoni.py:159
+#: suoni.py:164
 msgid "la classifica, le statistiche o le impostazioni non si sono potute salvare"
 msgstr ""
 
-#: suoni.py:160
+#: suoni.py:165
+msgid ""
+"la scheda audio scelta non c'è o non si apre, all'avvio o appena scelta "
+"con Ctrl+Maiusc+X, e Ciechino suona su quella automatica, se si apre"
+msgstr ""
+
+#: suoni.py:167
 msgid ""
 "si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu "
 "Partita"
 msgstr ""
 
-#: suoni.py:161
+#: suoni.py:168
 msgid "si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita"
 msgstr ""
 
-#: suoni.py:162
+#: suoni.py:169
 msgid ""
 "Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume "
 "scritto nel campo"
 msgstr ""
 
-#: suoni.py:163
+#: suoni.py:170
+msgid ""
+"si apre la scelta della scheda audio, con Ctrl+Maiusc+X o con Scheda "
+"audio del menu Impostazioni, appena Ciechino ha riletto le schede"
+msgstr ""
+
+#: suoni.py:172
 msgid ""
 "si apre la scelta della forma del proiettile, con Proiettile del menu "
 "Impostazioni"
 msgstr ""
 
-#: suoni.py:164
+#: suoni.py:173
 msgid ""
 "la lettura dei resoconti con la sintesi si accende, con Leggi i resoconti"
 " con la sintesi del menu Impostazioni"
 msgstr ""
 
-#: suoni.py:165
+#: suoni.py:174
 msgid ""
 "la lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti "
 "con la sintesi del menu Impostazioni"
 msgstr ""
 
-#: suoni.py:166
+#: suoni.py:175
 msgid "si apre la scelta della lingua, con Lingua del menu Impostazioni"
 msgstr ""
 
-#: suoni.py:167
+#: suoni.py:176
 msgid "si sceglie una lingua nuova, che vale dal prossimo avvio"
 msgstr ""
 
-#: suoni.py:168
+#: suoni.py:177
 msgid "F1, la guida ai comandi, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:169
+#: suoni.py:178
 msgid "Maiusc+F1, il manuale, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:170
+#: suoni.py:179
 msgid "F2, le novità della versione, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:171
+#: suoni.py:180
 msgid "F3, le informazioni sul programma, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:172
+#: suoni.py:181
 msgid "il manuale o il file delle novità non c'è, o non si apre"
 msgstr ""
 
-#: suoni.py:173
+#: suoni.py:182
 msgid "Offrimi un caffè, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:174
+#: suoni.py:183
 msgid "Dona con PayPal, nell'invito al caffè: si apre PayPal nel browser"
 msgstr ""
 
-#: suoni.py:175
+#: suoni.py:184
 msgid "Entra al PUB, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:176
+#: suoni.py:185
 msgid "Chiedi aiuto al PUB, dal menu Aiuto"
 msgstr ""
 
-#: suoni.py:177
+#: suoni.py:186
 msgid ""
 "una domanda col sì e col no, come Ctrl+N o l'uscita con una partita in "
 "corso"
 msgstr ""
 
-#: suoni.py:178
+#: suoni.py:187
 msgid ""
-"un dialogo confermato con OK, come il nome in classifica, il volume o il "
-"proiettile, o una mail del PUB pronta"
+"un dialogo confermato con OK, come il nome in classifica, il volume, il "
+"proiettile o la scheda audio che si apre, o una mail del PUB pronta"
 msgstr ""
 
-#: suoni.py:179
+#: suoni.py:189
 msgid "un dialogo chiuso con Annulla o con Esc, o il no a una domanda"
 msgstr ""
 
-#: suoni.py:180
+#: suoni.py:190
 msgid ""
 "OK in un dialogo con un campo da correggere, come un nome vuoto in "
 "classifica"
 msgstr ""
 
-#: suoni.py:181
+#: suoni.py:191
 msgid ""
 "all'avvio del programma compilato, su GitHub c'è una versione nuova, e la"
 " proposta si apre"
 msgstr ""
 
-#: suoni.py:182
+#: suoni.py:192
 msgid "Aggiorna, nella proposta dell'aggiornamento: la versione nuova si scarica"
 msgstr ""
 
-#: suoni.py:183
+#: suoni.py:193
 msgid "Non adesso, nella proposta dell'aggiornamento, o Esc"
 msgstr ""
 
-#: suoni.py:184
+#: suoni.py:194
 msgid "la proposta dell'aggiornamento resta senza risposta e si chiude da sola"
 msgstr ""
 
-#: suoni.py:185
+#: suoni.py:195
 msgid ""
 "l'aggiornamento è scaricato: Ciechino si chiude per installarlo e si "
 "riapre da solo"
 msgstr ""
 
-#: suoni.py:186
+#: suoni.py:196
 msgid "la versione nuova c'è, ma il suo pacchetto non è ancora pronto"
 msgstr ""
 
-#: suoni.py:187
+#: suoni.py:197
 msgid "l'aggiornamento non si è scaricato, o non si è installato"
 msgstr ""
 
-#: suoni.py:188
+#: suoni.py:198
 msgid "F5, il fuoco va nella vista della partita"
 msgstr ""
 
-#: suoni.py:189
+#: suoni.py:199
 msgid "F7, il fuoco va nella barra di stato"
 msgstr ""
 
@@ -2105,19 +2149,19 @@ msgstr ""
 
 #. Traduttori: da qui, il carattere del suono di ogni forma d'onda del
 #. proiettile, nell'elenco del dialogo.
-#: gui/dialoghi.py:60
+#: gui/dialoghi.py:61
 msgid "il suono più puro e morbido, quasi un fischio"
 msgstr ""
 
-#: gui/dialoghi.py:61
+#: gui/dialoghi.py:62
 msgid "un poco più chiaro e vivo del seno, ancora dolce"
 msgstr ""
 
-#: gui/dialoghi.py:62
+#: gui/dialoghi.py:63
 msgid "il più ricco e brillante, con un leggero ronzio"
 msgstr ""
 
-#: gui/dialoghi.py:85
+#: gui/dialoghi.py:86
 msgid ""
 "Il resoconto non si è potuto scrivere, perché il registro degli errori "
 "non è aperto."
@@ -2125,7 +2169,7 @@ msgstr ""
 
 #. Traduttori: {file} è il nome del registro degli errori, {cartella} la
 #. cartella del programma.
-#: gui/dialoghi.py:87
+#: gui/dialoghi.py:88
 #, python-brace-format
 msgid ""
 "Il resoconto completo è nel file {file}, nella cartella {cartella}: se "
@@ -2134,33 +2178,56 @@ msgstr ""
 
 #. Traduttori: {minimo} e {massimo} sono i caratteri del nome, come 1 e 20; la
 #. e commerciale segna la lettera del tasto rapido.
-#: gui/dialoghi.py:101
+#: gui/dialoghi.py:102
 #, python-brace-format
 msgid "&Nome, da {minimo} a {massimo} caratteri"
 msgstr ""
 
 #. Traduttori: una riga dell'elenco delle forme del proiettile, come «Seno, il
 #. suono più puro e morbido, quasi un fischio».
-#: gui/dialoghi.py:121
+#: gui/dialoghi.py:122
 #, python-brace-format
 msgid "{nome}, {carattere}"
 msgstr ""
 
-#: gui/dialoghi.py:275
+#: gui/dialoghi.py:131
+msgid "Automatica, la scheda di Windows"
+msgstr ""
+
+#. Traduttori: la prima riga dell'elenco delle schede audio, quando Ciechino
+#. suona sulla scelta automatica; {scheda} è come «Altoparlanti (Realtek(R)
+#. Audio), WASAPI».
+#: gui/dialoghi.py:134
+#, python-brace-format
+msgid "Automatica, la scheda di Windows, in uso: {scheda}"
+msgstr ""
+
+#: gui/dialoghi.py:135
+msgid "Automatica, la scheda di Windows, in uso"
+msgstr ""
+
+#. Traduttori: la riga della scheda audio su cui suona Ciechino, nell'elenco
+#. delle schede; {scheda} è come «Cuffie (WH-1000XM4), WASAPI, 3 ms».
+#: gui/dialoghi.py:144
+#, python-brace-format
+msgid "{scheda}, in uso"
+msgstr ""
+
+#: gui/dialoghi.py:298
 msgid "Offrimi un caffè"
 msgstr ""
 
-#: gui/dialoghi.py:275
+#: gui/dialoghi.py:298
 msgid "Dona con &PayPal"
 msgstr ""
 
 #. Traduttori: {nuova} e {attuale} sono versioni, come 0.2.0.
-#: gui/dialoghi.py:312
+#: gui/dialoghi.py:335
 #, python-brace-format
 msgid "È disponibile Ciechino {nuova}; tu hai la {attuale}."
 msgstr ""
 
-#: gui/dialoghi.py:313
+#: gui/dialoghi.py:336
 msgid ""
 "Aggiorna scarica la versione nuova; poi Ciechino si chiude e si riapre "
 "aggiornato, con la tua classifica, le tue statistiche e le tue "
@@ -2168,48 +2235,48 @@ msgid ""
 msgstr ""
 
 #. Traduttori: {attesa} è una durata, come 2 minuti.
-#: gui/dialoghi.py:317
+#: gui/dialoghi.py:340
 #, python-brace-format
 msgid ""
 "Se non rispondi entro {attesa}, il dialogo si chiude da solo e te lo "
 "ripropongo al prossimo avvio."
 msgstr ""
 
-#: gui/dialoghi.py:319
+#: gui/dialoghi.py:342
 msgid "Le note della release:"
 msgstr ""
 
-#: gui/dialoghi.py:319
+#: gui/dialoghi.py:342
 msgid "Nessuna nota scritta per questa versione."
 msgstr ""
 
-#: gui/dialoghi.py:320 gui/finestra.py:1274
+#: gui/dialoghi.py:343 gui/finestra.py:1481
 msgid "Aggiornamento di Ciechino"
 msgstr ""
 
-#: gui/dialoghi.py:320
+#: gui/dialoghi.py:343
 msgid "&Aggiorna"
 msgstr ""
 
-#: gui/dialoghi.py:320
+#: gui/dialoghi.py:343
 msgid "&Non adesso"
 msgstr ""
 
-#: gui/dialoghi.py:364
+#: gui/dialoghi.py:387
 msgid "Il tuo nome in classifica"
 msgstr ""
 
 #. Traduttori: {minimo} e {massimo} sono i caratteri del nome, come 1 e 20.
-#: gui/dialoghi.py:386
+#: gui/dialoghi.py:409
 #, python-brace-format
 msgid "Scrivi il tuo nome, da {minimo} a {massimo} caratteri."
 msgstr ""
 
-#: gui/dialoghi.py:401
+#: gui/dialoghi.py:424
 msgid "Volume"
 msgstr ""
 
-#: gui/dialoghi.py:402
+#: gui/dialoghi.py:425
 msgid ""
 "Il volume cambia mentre lo scrivi, e lo senti subito: OK lo tiene, "
 "Annulla torna a quello di prima."
@@ -2217,197 +2284,224 @@ msgstr ""
 
 #. Traduttori: {minimo} e {massimo} sono i capi della scala del volume, 0 e
 #. 100.
-#: gui/dialoghi.py:404
+#: gui/dialoghi.py:427
 #, python-brace-format
 msgid "&Volume, da {minimo} a {massimo}"
 msgstr ""
 
-#: gui/dialoghi.py:445
+#: gui/dialoghi.py:468
 msgid "Proiettile"
 msgstr ""
 
-#: gui/dialoghi.py:446
+#: gui/dialoghi.py:469
 msgid ""
 "La forma d'onda dà il timbro al proiettile in volo, e i bersagli ne usano"
 " un'altra, così non li confondi con lui. Spostandoti nell'elenco senti un"
 " esempio di ogni forma. La forma scelta vale dalla prossima partita."
 msgstr ""
 
-#: gui/dialoghi.py:450
+#: gui/dialoghi.py:473
 msgid "&Forma del proiettile"
 msgstr ""
 
-#: gui/dialoghi.py:488
+#: gui/dialoghi.py:511
 msgid "Scegli una forma dall'elenco."
 msgstr ""
 
-#: gui/dialoghi.py:504
+#: gui/dialoghi.py:537
+msgid "Scheda audio"
+msgstr ""
+
+#: gui/dialoghi.py:540
+msgid ""
+"Automatica suona sulla scheda di Windows, e la riga della scheda su cui "
+"suona Ciechino finisce con in uso. Ogni riga dice la latenza che la "
+"scheda dichiara, di solito più bassa di quella che la vista dice dopo la "
+"scelta. La scheda scelta vale da subito e resta anche per i prossimi "
+"avvii. Se una scheda esclusiva zittisce NVDA, per tornare all'automatica "
+"premi Ctrl+Maiusc+X, aspetta il suono della scelta, poi premi Inizio e, "
+"dopo un secondo, Invio."
+msgstr ""
+
+#: gui/dialoghi.py:549
+msgid "&Scheda audio"
+msgstr ""
+
+#: gui/dialoghi.py:564
+msgid "Scegli una scheda dall'elenco."
+msgstr ""
+
+#: gui/dialoghi.py:581
 msgid "Lingua"
 msgstr ""
 
-#: gui/dialoghi.py:505
+#: gui/dialoghi.py:582
 msgid "La lingua scelta vale dal prossimo avvio di Ciechino."
 msgstr ""
 
-#: gui/dialoghi.py:506
+#: gui/dialoghi.py:583
 msgid "&Lingua"
 msgstr ""
 
-#: gui/dialoghi.py:519
+#: gui/dialoghi.py:596
 msgid "Scegli una lingua dall'elenco."
 msgstr ""
 
-#: gui/finestra.py:242
+#: gui/finestra.py:256
 msgid "Partita"
 msgstr ""
 
-#: gui/finestra.py:246
+#: gui/finestra.py:260
 msgid "Barra di stato"
 msgstr ""
 
-#: gui/finestra.py:267
+#: gui/finestra.py:281
 msgid "&Partita"
 msgstr ""
 
-#: gui/finestra.py:268
+#: gui/finestra.py:282
 msgid "&Nuova partita"
 msgstr ""
 
-#: gui/finestra.py:269
+#: gui/finestra.py:283
 msgid "&Pausa"
 msgstr ""
 
-#: gui/finestra.py:271
+#: gui/finestra.py:285
 msgid "&Classifica"
 msgstr ""
 
-#: gui/finestra.py:272
+#: gui/finestra.py:286
 msgid "S&tatistiche"
 msgstr ""
 
-#: gui/finestra.py:274
+#: gui/finestra.py:288
 msgid "&Esci"
 msgstr ""
 
-#: gui/finestra.py:276
+#: gui/finestra.py:290
 msgid "&Impostazioni"
 msgstr ""
 
-#: gui/finestra.py:277
+#: gui/finestra.py:291
 msgid "&Volume..."
 msgstr ""
 
-#: gui/finestra.py:278
+#: gui/finestra.py:293
+msgid "Scheda &audio..."
+msgstr ""
+
+#: gui/finestra.py:294
 msgid "&Proiettile..."
 msgstr ""
 
-#: gui/finestra.py:279
+#: gui/finestra.py:295
 msgid "&Leggi i resoconti con la sintesi"
 msgstr ""
 
-#: gui/finestra.py:280
+#: gui/finestra.py:296
 msgid "L&ingua..."
 msgstr ""
 
-#: gui/finestra.py:282
+#: gui/finestra.py:298
 msgid "&Aiuto"
 msgstr ""
 
-#: gui/finestra.py:283
+#: gui/finestra.py:299
 msgid "&Guida ai comandi"
 msgstr ""
 
-#: gui/finestra.py:284
+#: gui/finestra.py:300
 msgid "&Manuale"
 msgstr ""
 
-#: gui/finestra.py:285
+#: gui/finestra.py:301
 msgid "&Novità"
 msgstr ""
 
-#: gui/finestra.py:286
+#: gui/finestra.py:302
 msgid "&Informazioni"
 msgstr ""
 
-#: gui/finestra.py:288
+#: gui/finestra.py:304
 msgid "&Offrimi un caffè..."
 msgstr ""
 
-#: gui/finestra.py:290
+#: gui/finestra.py:306
 msgid "&Entra al PUB, il gruppo di supporto..."
 msgstr ""
 
-#: gui/finestra.py:291
+#: gui/finestra.py:307
 msgid "&Chiedi aiuto al PUB..."
 msgstr ""
 
 #. Traduttori: il nome del tasto, come lo dice la guida.
-#: gui/finestra.py:299
+#: gui/finestra.py:315
 msgid "Spazio"
 msgstr ""
 
-#: gui/finestra.py:299
+#: gui/finestra.py:315
 msgid ""
 "comincia la partita, avvia la mira e ferma le tre scivolate, della "
 "direzione, dell'alzo e della potenza"
 msgstr ""
 
-#: gui/finestra.py:300
+#: gui/finestra.py:316
 msgid "porta il fuoco nella vista della partita"
 msgstr ""
 
-#: gui/finestra.py:301
+#: gui/finestra.py:317
 msgid "porta il fuoco nella barra di stato"
 msgstr ""
 
-#: gui/finestra.py:326
+#: gui/finestra.py:342
 msgid "Maiusc"
 msgstr ""
 
-#: gui/finestra.py:332
+#: gui/finestra.py:348
 msgid "Guida ai comandi di Ciechino."
 msgstr ""
 
-#: gui/finestra.py:332
+#: gui/finestra.py:348
 msgid "I tasti fuori dai menu:"
 msgstr ""
 
 #. Traduttori: una riga della guida, come «F5: porta il fuoco nella vista della
 #. partita.».
-#: gui/finestra.py:335
+#: gui/finestra.py:351
 #, python-brace-format
 msgid "{tasto}: {cosa}."
 msgstr ""
 
-#: gui/finestra.py:338
+#: gui/finestra.py:354
 #, python-brace-format
 msgid "Il menu {menu}, con {n} comando:"
 msgid_plural "Il menu {menu}, con {n} comandi:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/finestra.py:341
+#: gui/finestra.py:357
 #, python-brace-format
 msgid "{voce}: {tasto}."
 msgstr ""
 
-#: gui/finestra.py:343
+#: gui/finestra.py:359
 #, python-brace-format
 msgid "{voce}: dal menu, senza tasto rapido."
 msgstr ""
 
 #. Traduttori: {data} è come «giovedì 19 novembre 2026».
-#: gui/finestra.py:352
+#: gui/finestra.py:368
 #, python-brace-format
 msgid "Oggi è {data}."
 msgstr ""
 
-#: gui/finestra.py:353
+#: gui/finestra.py:369
 msgid "Per cominciare una partita premi Spazio; F1 ti dice tutti i comandi."
 msgstr ""
 
 #. Traduttori: {file} è il percorso del resoconto del crash.
-#: gui/finestra.py:358
+#: gui/finestra.py:375
 #, python-brace-format
 msgid ""
 "La volta scorsa Ciechino si è chiuso per un errore grave, e il resoconto "
@@ -2417,107 +2511,165 @@ msgstr ""
 
 #. Traduttori: «Il record della classifica è di Gabry, con 12.340 punti, 3
 #. giorni fa.».
-#: gui/finestra.py:372
+#: gui/finestra.py:389
 #, python-brace-format
 msgid "Il record della classifica è di {nome}, con {punti}, {eta}."
 msgstr ""
 
-#: gui/finestra.py:378
+#: gui/finestra.py:409
 msgid ""
 "Non trovo una scheda audio che si apra: Ciechino funziona lo stesso, ma "
 "senza suono."
 msgstr ""
 
-#: gui/finestra.py:379
-msgid "una scheda senza nome"
-msgstr ""
-
-#. Traduttori: {scheda} è il dispositivo con l'interfaccia, come «Altoparlanti,
-#. Windows WASAPI».
-#: gui/finestra.py:384
+#. Traduttori: {scheda} è il dispositivo con l'interfaccia, come «Altoparlanti
+#. (Realtek(R) Audio), WASAPI».
+#: gui/finestra.py:415
 #, python-brace-format
 msgid "Il suono esce da {scheda}, con una latenza di {latenza}."
 msgstr ""
 
-#: gui/finestra.py:385
+#: gui/finestra.py:416
 #, python-brace-format
 msgid "{n} millesimo di secondo"
 msgid_plural "{n} millesimi di secondo"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/finestra.py:386
+#: gui/finestra.py:417
 #, python-brace-format
 msgid "Il suono esce da {scheda}."
 msgstr ""
 
+#: gui/finestra.py:424
+msgid "una scheda senza nome"
+msgstr ""
+
+#. Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4),
+#. WASAPI»: è sparita, e Ciechino suona sulla scelta automatica.
+#: gui/finestra.py:445
+#, python-brace-format
+msgid ""
+"La scheda audio scelta, {scheda}, non c'è: Ciechino suona su quella "
+"automatica."
+msgstr ""
+
+#. Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4),
+#. WASAPI»; segue la frase che dice che il gioco è muto.
+#: gui/finestra.py:447
+#, python-brace-format
+msgid "La scheda audio scelta, {scheda}, non c'è."
+msgstr ""
+
+#. Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»:
+#. c'è, ma non si apre, e Ciechino suona sulla scelta automatica.
+#: gui/finestra.py:450
+#, python-brace-format
+msgid ""
+"La scheda audio scelta, {scheda}, non si apre: Ciechino suona su quella "
+"automatica."
+msgstr ""
+
+#. Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»;
+#. segue la frase che dice che il gioco è muto.
+#: gui/finestra.py:452
+#, python-brace-format
+msgid "La scheda audio scelta, {scheda}, non si apre."
+msgstr ""
+
 #. Traduttori: {tipo} è il nome dell'errore, in inglese, {valore} la sua
 #. descrizione, {resoconto} dove sta il resoconto.
-#: gui/finestra.py:744
+#: gui/finestra.py:816
 #, python-brace-format
 msgid ""
 "Il comando si è interrotto per un errore imprevisto: {tipo}, {valore}. "
 "{resoconto}"
 msgstr ""
 
-#: gui/finestra.py:745
+#: gui/finestra.py:817
 msgid "Errore imprevisto"
 msgstr ""
 
-#: gui/finestra.py:754
+#: gui/finestra.py:826
 msgid ""
 "Le statistiche non si sono potute salvare: le ritroverai come erano "
 "all'ultimo salvataggio riuscito."
 msgstr ""
 
-#: gui/finestra.py:762
+#: gui/finestra.py:834
 msgid "Le impostazioni non si sono potute salvare: valgono fino all'uscita."
 msgstr ""
 
-#: gui/finestra.py:771
+#: gui/finestra.py:843
 msgid "Una partita è in corso: la abbandoni e ne cominci una nuova?"
 msgstr ""
 
-#: gui/finestra.py:878
+#: gui/finestra.py:950
 msgid "Il punteggio di questa partita non entra in classifica."
 msgstr ""
 
 #. Traduttori: {punti} è come «1.234 punti», {posizione} un numero.
-#: gui/finestra.py:896
+#: gui/finestra.py:968
 #, python-brace-format
 msgid "Con {punti} entri in classifica al posto {posizione}: scrivi il tuo nome."
 msgstr ""
 
-#: gui/finestra.py:905
+#: gui/finestra.py:977
 msgid "Il nome non è stato scritto: questa partita resta fuori dalla classifica."
 msgstr ""
 
-#: gui/finestra.py:918
+#: gui/finestra.py:990
 msgid "La classifica non si è potuta salvare: la voce nuova vale fino all'uscita."
 msgstr ""
 
-#: gui/finestra.py:938
+#: gui/finestra.py:1010
 msgid "Classifica"
 msgstr ""
 
-#: gui/finestra.py:942
+#: gui/finestra.py:1014
 msgid "Statistiche"
 msgstr ""
 
-#: gui/finestra.py:964
+#: gui/finestra.py:1036
 #, python-brace-format
 msgid "Il volume resta {volume}."
 msgstr ""
 
-#: gui/finestra.py:971
+#: gui/finestra.py:1043
 #, python-brace-format
 msgid "Il volume è {volume}."
+msgstr ""
+
+#. Traduttori: {errore} è il perché, come lo dice PortAudio, spesso in inglese.
+#: gui/finestra.py:1073
+#, python-brace-format
+msgid ""
+"Non riesco a leggere l'elenco delle schede audio: {errore}. Resta la "
+"scelta automatica."
+msgstr ""
+
+#: gui/finestra.py:1078
+msgid ""
+"Non ho potuto rileggere le schede audio: quelle accese da poco, come "
+"delle cuffie Bluetooth, possono mancare."
+msgstr ""
+
+#: gui/finestra.py:1091
+msgid "La scelta della scheda audio non cambia."
+msgstr ""
+
+#: gui/finestra.py:1098
+msgid "La scelta della scheda audio resta quella di prima."
+msgstr ""
+
+#: gui/finestra.py:1178
+msgid "Ciechino suona sulla scheda automatica, quella di Windows."
 msgstr ""
 
 #. Traduttori: {forma} e {prima} sono nomi di forme d'onda, come «seno» o «sega
 #. morbida»: {forma} vale dalla prossima partita, {prima} è quella della
 #. partita in corso.
-#: gui/finestra.py:1000
+#: gui/finestra.py:1207
 #, python-brace-format
 msgid ""
 "Il proiettile suonerà in {forma} dalla prossima partita: quella in corso "
@@ -2526,152 +2678,152 @@ msgstr ""
 
 #. Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega
 #. morbida».
-#: gui/finestra.py:1030
+#: gui/finestra.py:1237
 #, python-brace-format
 msgid "Il proiettile resta in {forma}."
 msgstr ""
 
 #. Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega
 #. morbida».
-#: gui/finestra.py:1042
+#: gui/finestra.py:1249
 #, python-brace-format
 msgid "Il proiettile adesso suona in {forma}: lo senti dalla prossima partita."
 msgstr ""
 
-#: gui/finestra.py:1052
+#: gui/finestra.py:1259
 msgid "La sintesi legge i resoconti della partita."
 msgstr ""
 
-#: gui/finestra.py:1055
+#: gui/finestra.py:1262
 msgid "La sintesi non legge più i resoconti della partita."
 msgstr ""
 
 #. Traduttori: una riga dell'elenco delle lingue, come «italiano, codice it».
-#: gui/finestra.py:1069
+#: gui/finestra.py:1276
 #, python-brace-format
 msgid "{nome}, codice {codice}"
 msgstr ""
 
-#: gui/finestra.py:1078
+#: gui/finestra.py:1285
 msgid "La lingua non cambia."
 msgstr ""
 
-#: gui/finestra.py:1084
+#: gui/finestra.py:1291
 #, python-brace-format
 msgid ""
 "La lingua resta {lingua}: per ora Ciechino parla solo questa, e le altre "
 "arriveranno con le traduzioni."
 msgstr ""
 
-#: gui/finestra.py:1091
+#: gui/finestra.py:1298
 #, python-brace-format
 msgid "La lingua resta {lingua}."
 msgstr ""
 
-#: gui/finestra.py:1096
+#: gui/finestra.py:1303
 #, python-brace-format
 msgid "La lingua sarà {lingua} dal prossimo avvio di Ciechino."
 msgstr ""
 
-#: gui/finestra.py:1098
+#: gui/finestra.py:1305
 msgid "Vuoi riaprire Ciechino adesso, per usare subito la lingua nuova?"
 msgstr ""
 
-#: gui/finestra.py:1115
+#: gui/finestra.py:1322
 #, python-brace-format
 msgid ""
 "Il manuale non c'è: dovrebbe essere il file {percorso}. Reinstallare "
 "Ciechino lo rimette al suo posto."
 msgstr ""
 
-#: gui/finestra.py:1122
+#: gui/finestra.py:1329
 #, python-brace-format
 msgid "Il manuale non si apre nel browser: {errore}. È il file {percorso}."
 msgstr ""
 
-#: gui/finestra.py:1126
+#: gui/finestra.py:1333
 msgid "Il manuale si apre nel browser."
 msgstr ""
 
-#: gui/finestra.py:1136
+#: gui/finestra.py:1343
 #, python-brace-format
 msgid "Il file delle novità non si può leggere: {errore}."
 msgstr ""
 
-#: gui/finestra.py:1140
+#: gui/finestra.py:1347
 msgid "Il file delle novità è vuoto."
 msgstr ""
 
-#: gui/finestra.py:1155
+#: gui/finestra.py:1362
 msgid "Grazie se vorrai offrire un caffè all'autore."
 msgstr ""
 
-#: gui/finestra.py:1170
+#: gui/finestra.py:1377
 msgid "La mail d'iscrizione al PUB è pronta: spediscila tu."
 msgstr ""
 
-#: gui/finestra.py:1170
+#: gui/finestra.py:1377
 msgid "Entra al PUB: niente di preparato."
 msgstr ""
 
-#: gui/finestra.py:1202
+#: gui/finestra.py:1409
 #, python-brace-format
 msgid "Non riesco a scrivere il file dei registri: {errore}."
 msgstr ""
 
-#: gui/finestra.py:1207
+#: gui/finestra.py:1414
 msgid "La mail d'aiuto al PUB è pronta: scrivi la domanda e spediscila tu."
 msgstr ""
 
-#: gui/finestra.py:1207
+#: gui/finestra.py:1414
 msgid "Chiedi aiuto al PUB: niente di preparato."
 msgstr ""
 
-#: gui/finestra.py:1251
+#: gui/finestra.py:1458
 #, python-brace-format
 msgid ""
 "Scarico Ciechino {versione}: quando è pronto, Ciechino si chiude per "
 "installarlo, abbandonando la partita in corso, e si riapre da solo."
 msgstr ""
 
-#: gui/finestra.py:1255
+#: gui/finestra.py:1462
 #, python-brace-format
 msgid ""
 "La proposta di Ciechino {versione} è scaduta: te la ripropongo al "
 "prossimo avvio."
 msgstr ""
 
-#: gui/finestra.py:1258
+#: gui/finestra.py:1465
 #, python-brace-format
 msgid "Ciechino {versione} può aspettare: te lo ripropongo al prossimo avvio."
 msgstr ""
 
 #. Traduttori: {percentuale} è come 45%.
-#: gui/finestra.py:1282
+#: gui/finestra.py:1489
 #, python-brace-format
 msgid "Aggiornamento scaricato al {percentuale}."
 msgstr ""
 
 #. Traduttori: {mega} è come 3,2.
-#: gui/finestra.py:1285
+#: gui/finestra.py:1492
 #, python-brace-format
 msgid "Aggiornamento: {mega} MB scaricati."
 msgstr ""
 
-#: gui/finestra.py:1317
+#: gui/finestra.py:1524
 msgid ""
 "L'aggiornamento non si è installato: Ciechino doveva chiudersi entro 30 "
 "secondi, ma un messaggio è rimasto aperto. Continui con questa versione, "
 "e te lo ripropongo al prossimo avvio."
 msgstr ""
 
-#: gui/finestra.py:1399
+#: gui/finestra.py:1608
 msgid ""
 "La scheda audio non risponde più, forse si è staccata: Ciechino continua "
-"senza suono. Per riavere il suono esci e riapri Ciechino."
+"senza suono. Per riavere il suono scegli la scheda con Ctrl+Maiusc+X."
 msgstr ""
 
-#: gui/finestra.py:1444
+#: gui/finestra.py:1654
 msgid "Una partita è in corso: se esci, la partita si abbandona. Esci lo stesso?"
 msgstr ""
 

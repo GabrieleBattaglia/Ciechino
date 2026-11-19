@@ -1,22 +1,24 @@
 """
 Le prove di motore_audio.py: voci al campione, attacco e fermate sfumate, tempo di gioco, eventi
 programmati e annullati, campione udibile, tetto, notifiche per il registro, modo muto e guardia del
-flusso perso, col flusso finto di aiuti_audio e senza mai aprire la scheda audio.
+flusso perso, col flusso finto di aiuti_audio e senza mai aprire la scheda audio. Con D20 la scheda
+scelta all'avvio e il cambio di scheda a motore avviato, con apri_flusso vera su un sounddevice finto
+e le schede finte di GBUtils che il conftest mette in tutte le prove.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 """
 
+import functools
 import importlib.util
 import math
 import sys
 import threading
 import time
-import types
 from pathlib import Path
 
 import numpy as np
 import pytest
-from aiuti_audio import LATENZA_FINTA, FlussoFinto, apri_finto, motore_finto
+from aiuti_audio import ALTOPARLANTI, ASIO, CUFFIE, CUFFIE_FINTE, DIGITALE, LATENZA_FINTA, FlussoFinto, apri_finto, motore_finto, sounddevice_finto
 
 import motore_audio
 from costanti import AUDIO_BLOCCO, AUDIO_LATENZA, FS, RAMPA_DEL_GUADAGNO, SFUMATURA_STOP, SOGLIA_DEL_TETTO, VELOCITA_DEL_TEMPO
@@ -693,35 +695,23 @@ def test_apri_cercato_al_momento_di_avvia(monkeypatch):
         motore.chiudi()
 
 
-# apri_flusso vera, con un sounddevice finto: il conftest sostituisce quella del modulo, quindi qui
-# se ne carica una copia fresca dal file.
+# apri_flusso vera, con il sounddevice finto di aiuti_audio e le schede finte del conftest: il
+# conftest sostituisce quella del modulo, quindi qui se ne carica una copia fresca dal file.
 
-class _FlussoDiProva:
-    def __init__(self, registro, fallisce, **opzioni):
-        if fallisce(opzioni):
-            raise RuntimeError("il dispositivo non si apre")
-        self.opzioni = opzioni
-        self.avviato = False
-        registro.append(self)
-
-    def start(self):
-        self.avviato = True
-
-    def close(self):
-        pass
+SCELTA_DIGITALE = {"dispositivo": DIGITALE, "interfaccia": "Windows WASAPI"}
+SCELTA_CUFFIE = {"dispositivo": CUFFIE, "interfaccia": "Windows WASAPI"}
+SCELTA_ASIO = {"dispositivo": ASIO, "interfaccia": "ASIO"}
+SCELTA_ALTOPARLANTI = {"dispositivo": ALTOPARLANTI, "interfaccia": "Windows WASAPI"}
+NON_SI_APRE = "RuntimeError: il dispositivo non si apre"
 
 
-def _sounddevice_finto(fallisce):
-    modulo = types.ModuleType("sounddevice")
-    modulo.aperti = []
+def _solleva(errore):
+    """Una funzione che, chiamata con qualunque argomento, solleva errore."""
 
-    class WasapiSettings:
-        def __init__(self, auto_convert=False):
-            self.auto_convert = auto_convert
+    def funzione(*argomenti, **opzioni):
+        raise errore
 
-    modulo.WasapiSettings = WasapiSettings
-    modulo.OutputStream = lambda **opzioni: _FlussoDiProva(modulo.aperti, fallisce, **opzioni)
-    return modulo
+    return funzione
 
 
 def _apri_flusso_vera():
@@ -732,31 +722,43 @@ def _apri_flusso_vera():
     return copia.apri_flusso
 
 
-@pytest.mark.parametrize(("scelta", "fallisce", "atteso", "perche"), [
-    ((7, "Windows WASAPI"), lambda o: False, (7, True), ""),
-    ((3, "Windows DirectSound"), lambda o: False, (3, False), ""),
-    ((7, "Windows WASAPI"), lambda o: o["device"] == 7, (None, False), "dispositivo 7 di Windows WASAPI, RuntimeError: il dispositivo non si apre"),
-    (RuntimeError("niente scelta"), lambda o: False, (None, False), "scelta del dispositivo, RuntimeError: niente scelta"),
+@pytest.fixture
+def sd_finto(monkeypatch, schede_finte):
+    """Il sounddevice finto al posto del vero, con le uscite delle schede finte: apri_flusso vera non
+    apre mai la scheda."""
+    finto = sounddevice_finto(schede_finte)
+    monkeypatch.setitem(sys.modules, "sounddevice", finto)
+    return finto
+
+
+@pytest.fixture
+def apri_vera(sd_finto):
+    """apri_flusso vera, che apre i flussi finti di sd_finto."""
+    return _apri_flusso_vera()
+
+
+@pytest.mark.parametrize(("automatica", "rotte", "atteso", "quale", "perche"), [
+    ((7, "Windows WASAPI"), (), (7, True), "automatica", ""),
+    ((3, "Windows DirectSound"), (), (3, False), "automatica", ""),
+    ((7, "Windows WASAPI"), (7,), (None, False), "predefinito", f"dispositivo 7 di Windows WASAPI, {NON_SI_APRE}"),
+    (RuntimeError("niente scelta"), (), (None, False), "predefinito", "scelta del dispositivo, RuntimeError: niente scelta"),
 ])
-def test_apri_flusso_sceglie_e_ripiega(monkeypatch, scelta, fallisce, atteso, perche):
+def test_apri_flusso_sceglie_e_ripiega(monkeypatch, schede_finte, sd_finto, automatica, rotte, atteso, quale, perche):
     import GBUtils
 
-    finto = _sounddevice_finto(fallisce)
-    monkeypatch.setitem(sys.modules, "sounddevice", finto)
-    chieste = []
-
-    def scegli(**opzioni):
-        chieste.append(opzioni)
-        if isinstance(scelta, Exception):
-            raise scelta
-        return scelta
-
-    monkeypatch.setattr(GBUtils, "scegli_dispositivo_audio", scegli)
+    sd_finto.rotte = set(rotte)
+    sollevata = isinstance(automatica, Exception)
+    if sollevata:
+        monkeypatch.setattr(GBUtils, "scegli_dispositivo_audio", _solleva(automatica))
+    else:
+        schede_finte.automatica = automatica
     apri_flusso = _apri_flusso_vera()
     callback = object()
-    flusso = apri_flusso(callback, FS, BLOCCO)
-    assert chieste == [{"modo": "callback"}]
-    assert flusso is finto.aperti[-1] and flusso.avviato
+    esito = {"vecchia": "resta"}
+    flusso = apri_flusso(callback, FS, BLOCCO, esito=esito)
+    # Senza una scelta l'elenco non si legge: si va diritti all'automatica, come prima di D20.
+    assert schede_finte.chiamate == ([] if sollevata else [("scegli", "callback", False)])
+    assert flusso is sd_finto.aperti[-1] and flusso.attivo
     dispositivo, wasapi = atteso
     opzioni = flusso.opzioni
     assert opzioni["device"] == dispositivo
@@ -764,19 +766,506 @@ def test_apri_flusso_sceglie_e_ripiega(monkeypatch, scelta, fallisce, atteso, pe
     assert opzioni["callback"] is callback
     assert opzioni["samplerate"] == FS and opzioni["blocksize"] == BLOCCO
     assert opzioni["channels"] == 2 and opzioni["dtype"] == "float32" and opzioni["latency"] == AUDIO_LATENZA
-    # Il perché dei tentativi falliti resta nel modulo, per il registro; vuoto se il primo è riuscito.
+    # Il perché dei tentativi falliti va nell'esito e resta nel modulo, per il registro; vuoto se il primo è riuscito.
+    assert esito == {"vecchia": "resta", "quale": quale, "mancante": False, "non_si_apre": False, "errore": perche}
     assert apri_flusso.__globals__["ULTIMO_ERRORE_DI_APERTURA"] == perche
 
 
-def test_apri_flusso_senza_niente(monkeypatch):
+def test_apri_flusso_senza_niente(monkeypatch, schede_finte, sd_finto):
+    sd_finto.rotte = {18, None}
+    apri_flusso = _apri_flusso_vera()
+    esito = {}
+    assert apri_flusso(object(), FS, BLOCCO, esito=esito) is None
+    perche = f"dispositivo 18 di Windows WASAPI, {NON_SI_APRE}; dispositivo predefinito, {NON_SI_APRE}"
+    assert esito == {"quale": None, "mancante": False, "non_si_apre": False, "errore": perche}
+    assert apri_flusso.__globals__["ULTIMO_ERRORE_DI_APERTURA"] == perche
+    # Senza sounddevice non si cade: si dice perché.
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
+    assert apri_flusso(object(), FS, BLOCCO, esito=esito) is None
+    assert esito["errore"].startswith("sounddevice non si importa, ") and esito["quale"] is None
+
+
+def test_apri_flusso_sulla_scheda_scelta(schede_finte, sd_finto, apri_vera):
+    """La scheda scelta si ritrova per nome e interfaccia e si apre per prima, con la conversione di
+    WASAPI; l'automatica non si chiede nemmeno, e quindi niente si apre per provarla."""
+    esito = {}
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_DIGITALE, esito=esito)
+    assert flusso.opzioni["device"] == 19 and flusso.opzioni["extra_settings"].auto_convert
+    assert esito == {"quale": "scelta", "mancante": False, "non_si_apre": False, "errore": ""}
+    assert schede_finte.chiamate == [("elenco", "callback")]
+    # Una scheda ASIO, senza la conversione.
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_ASIO, esito=esito)
+    assert flusso.opzioni["device"] == 16 and flusso.opzioni["extra_settings"] is None and esito["quale"] == "scelta"
+
+
+def test_apri_flusso_con_la_scelta_che_manca_o_non_si_apre(monkeypatch, schede_finte, sd_finto, apri_vera):
     import GBUtils
 
-    monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice_finto(lambda o: True))
-    monkeypatch.setattr(GBUtils, "scegli_dispositivo_audio", lambda **opzioni: (7, "Windows WASAPI"))
-    apri_flusso = _apri_flusso_vera()
-    assert apri_flusso(object(), FS, BLOCCO) is None
-    assert apri_flusso.__globals__["ULTIMO_ERRORE_DI_APERTURA"] == ("dispositivo 7 di Windows WASAPI, RuntimeError: il dispositivo non si apre; "
-                                                                    "dispositivo predefinito, RuntimeError: il dispositivo non si apre")
+    esito = {}
+    # Le cuffie non ci sono: si va sull'automatica, rifatta da capo se si chiede riprova.
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_CUFFIE, riprova=True, esito=esito)
+    assert flusso.opzioni["device"] == 18
+    assert esito == {"quale": "automatica", "mancante": True, "non_si_apre": False, "errore": f"scheda scelta {CUFFIE} di Windows WASAPI, non è fra le uscite"}
+    assert schede_finte.chiamate == [("elenco", "callback"), ("scegli", "callback", True)]
+    # La scheda c'è ma non si apre.
+    sd_finto.rotte = {19}
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_DIGITALE, esito=esito)
+    assert flusso.opzioni["device"] == 18
+    assert esito == {"quale": "automatica", "mancante": False, "non_si_apre": True, "errore": f"scheda scelta {DIGITALE} di Windows WASAPI, dispositivo 19, {NON_SI_APRE}"}
+    # La scelta che non si apre è anche l'automatica: non si riprova, e si va sul predefinito.
+    sd_finto.rotte = {18}
+    sd_finto.chieste.clear()
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_ALTOPARLANTI, esito=esito)
+    assert [opzioni["device"] for opzioni in sd_finto.chieste] == [18, None]
+    assert flusso.device == "predefinito" and esito["quale"] == "predefinito" and esito["non_si_apre"]
+    # Un elenco che non si legge: la scelta non si ritrova.
+    monkeypatch.setattr(GBUtils, "elenco_dispositivi_audio", _solleva(OSError("PortAudio spento")))
+    sd_finto.rotte = set()
+    flusso = apri_vera(object(), FS, BLOCCO, scelta=SCELTA_DIGITALE, esito=esito)
+    assert flusso.opzioni["device"] == 18 and esito["mancante"] and esito["quale"] == "automatica"
+    assert esito["errore"].startswith("elenco delle schede, OSError: PortAudio spento; scheda scelta ")
+
+
+def test_apri_flusso_con_una_scelta_rovinata(schede_finte, sd_finto, apri_vera):
+    """Una scelta scritta male non fa cadere niente: un dizionario a metà non si ritrova, un testo vale
+    l'automatica."""
+    esito = {}
+    flusso = apri_vera(object(), FS, BLOCCO, scelta={"dispositivo": DIGITALE}, esito=esito)
+    assert flusso.opzioni["device"] == 18 and esito["mancante"] and esito["quale"] == "automatica"
+    schede_finte.chiamate.clear()
+    flusso = apri_vera(object(), FS, BLOCCO, scelta="Altoparlanti", esito=esito)
+    assert flusso.opzioni["device"] == 18 and not esito["mancante"] and esito["errore"] == ""
+    assert schede_finte.chiamate == [("scegli", "callback", False)]
+
+
+# La scheda scelta all'avvio del motore (D20).
+
+def test_avvio_sulla_scheda_scelta(schede_finte, sd_finto, apri_vera):
+    motore = Motore(apri=apri_vera, scelta={"dispositivo": f" {DIGITALE}\r\n", "interfaccia": "Windows WASAPI"})
+    try:
+        # La scelta si ripulisce.
+        assert motore.scelta == SCELTA_DIGITALE
+        assert motore.avvia() is True
+        assert motore.flusso is sd_finto.aperti[-1] and motore.flusso.opzioni["device"] == 19
+        assert motore.esito_dell_apertura == {"aperta": True, "quale": "scelta", "richiesta": SCELTA_DIGITALE, "mancante": False, "non_si_apre": False,
+                                              "dispositivo": DIGITALE, "interfaccia": "Windows WASAPI", "latenza": LATENZA_FINTA, "errore": "",
+                                              "rilettura": None, "errore_della_rilettura": None}
+        stato = motore.stato()
+        assert stato["dispositivo"] == DIGITALE and stato["interfaccia"] == "Windows WASAPI" and stato["scelta"] == SCELTA_DIGITALE and stato["quale"] == "scelta"
+        assert motore.ultimo_errore is None
+        # Niente si è aperto per provare l'automatica.
+        assert ("scegli", "callback", False) not in schede_finte.chiamate
+    finally:
+        motore.chiudi()
+
+
+@pytest.mark.parametrize(("scelta", "rotte", "mancante", "perche"), [
+    (SCELTA_CUFFIE, (), True, f"scheda scelta {CUFFIE} di Windows WASAPI, non è fra le uscite"),
+    (SCELTA_DIGITALE, (19,), False, f"scheda scelta {DIGITALE} di Windows WASAPI, dispositivo 19, {NON_SI_APRE}"),
+])
+def test_avvio_con_la_scelta_che_manca_o_non_si_apre(schede_finte, sd_finto, apri_vera, scelta, rotte, mancante, perche):
+    sd_finto.rotte = set(rotte)
+    motore = Motore(apri=apri_vera, scelta=scelta)
+    try:
+        assert motore.avvia() is True
+        esito = motore.esito_dell_apertura
+        assert esito["quale"] == "automatica" and esito["mancante"] == mancante and esito["non_si_apre"] != mancante
+        assert esito["dispositivo"] == ALTOPARLANTI and esito["errore"] == perche
+        # La scelta resta quella di chi gioca, per quando la scheda tornerà; il registro sa perché non c'è.
+        assert motore.scelta == scelta and motore.stato()["quale"] == "automatica"
+        assert motore.ultimo_errore == f"apertura: {perche}"
+        assert ("scegli", "callback", False) in schede_finte.chiamate
+    finally:
+        motore.chiudi()
+
+
+def test_avvio_senza_una_scheda_che_si_apra(schede_finte, sd_finto, apri_vera):
+    sd_finto.rotte = {19, 18, None}
+    motore = Motore(apri=apri_vera, scelta=SCELTA_DIGITALE)
+    try:
+        assert motore.avvia() is False
+        assert motore.muto and motore.flusso is None and motore._filo_muto.is_alive()
+        esito = motore.esito_dell_apertura
+        assert not esito["aperta"] and esito["quale"] is None and esito["non_si_apre"] and not esito["mancante"]
+        assert esito["dispositivo"] is None and esito["latenza"] is None
+        assert motore.ultimo_errore.startswith(f"apertura: scheda scelta {DIGITALE} di Windows WASAPI, dispositivo 19, {NON_SI_APRE}; ")
+        assert motore.ultimo_errore.endswith(f"dispositivo predefinito, {NON_SI_APRE}")
+        assert motore.stato()["quale"] is None and not motore.stato()["aperto"]
+    finally:
+        motore.chiudi()
+
+
+def test_avvio_muto_col_conftest_e_funzioni_d_apertura_di_prima():
+    """L'apertura finta del conftest non apre niente e non dice perché; una funzione d'apertura
+    scritta come prima di D20, senza la scelta, apre la sua scheda, e il motore la dà per la scelta."""
+    motore = Motore(scelta=SCELTA_DIGITALE)
+    try:
+        assert motore.avvia() is False
+        esito = motore.esito_dell_apertura
+        assert not esito["aperta"] and esito["non_si_apre"] and esito["errore"] == "nessuna scheda audio si è aperta"
+    finally:
+        motore.chiudi()
+    motore = Motore(apri=lambda callback, fs, blocco: FlussoFinto(callback, fs, blocco), scelta=SCELTA_DIGITALE)
+    try:
+        assert motore.avvia() is True
+        assert motore.esito_dell_apertura["quale"] == "scelta" and motore.stato()["interfaccia"] == "finta"
+    finally:
+        motore.chiudi()
+
+
+def test_opzioni_accettate():
+    opzioni = {"scelta": {}, "riprova": True, "esito": {}}
+    accettate = motore_audio._opzioni_accettate
+    assert accettate(lambda callback, fs, blocco: None, opzioni) == {}
+    assert accettate(lambda *argomenti, **altre: None, opzioni) == opzioni
+    assert accettate(functools.partial(apri_finto, latenza=0.05), opzioni) == {"scelta": {}, "riprova": True}
+    assert accettate(FlussoFinto, opzioni) == {}
+    assert accettate(_apri_flusso_vera(), opzioni) == opzioni
+    # Una firma che non si legge: niente opzioni.
+    assert accettate(object(), opzioni) == {}
+
+
+def test_una_funzione_d_apertura_finta_dice_com_e_andata():
+    """Una funzione d'apertura delle prove scrive nell'esito soltanto ciò che le serve: il resto lo
+    completa il motore."""
+
+    def apri(callback, fs, blocco, scelta=None, esito=None):
+        esito.update(quale="automatica", mancante=True, errore="la scelta non c'è")
+        return apri_finto(callback, fs, blocco)
+
+    motore = Motore(apri=apri, scelta=SCELTA_CUFFIE)
+    try:
+        assert motore.avvia() is True
+        esito = motore.esito_dell_apertura
+        assert esito["quale"] == "automatica" and esito["mancante"] and not esito["non_si_apre"] and esito["interfaccia"] == "finta"
+        assert motore.ultimo_errore == "apertura: la scelta non c'è"
+    finally:
+        motore.chiudi()
+
+
+# Il cambio di scheda a motore avviato (D20).
+
+def _rampa(lunghezza=40_000, ampiezza=0.5):
+    """Un buffer che sale piano, diverso a ogni campione: dice dove si è arrivati."""
+    valori = (np.arange(lunghezza) / lunghezza * ampiezza).astype(np.float32)
+    return np.repeat(valori[:, None], 2, axis=1)
+
+
+def test_cambia_scheda_da_una_scheda_a_un_altra(schede_finte, sd_finto, apri_vera):
+    motore = Motore(apri=apri_vera)
+    try:
+        assert motore.avvia() is True
+        vecchio = motore.flusso
+        assert vecchio.opzioni["device"] == 18
+        buffer = _rampa()
+        voce = motore.suona(buffer, inizio=0)
+        motore.volume = 0.5
+        # Un evento al tempo di gioco di un campione che la scheda nuova preparerà.
+        scattati = []
+        evento = motore.programma((6 * BLOCCO + 700.5) / FS * VELOCITA_DEL_TEMPO, scattati.append)
+        vecchio.avanza(6)
+        prima = motore.campione_udibile()
+        assert prima < 6 * BLOCCO
+        esito = motore.cambia_scheda(SCELTA_DIGITALE)
+        # La scheda di prima si è fermata e chiusa, e la nuova suona.
+        assert vecchio.azioni == ["start", "stop", "close"] and vecchio.chiuso
+        nuovo = motore.flusso
+        assert nuovo is not vecchio and nuovo is sd_finto.aperti[-1] and nuovo.opzioni["device"] == 19 and nuovo.attivo
+        assert esito == {"aperta": True, "quale": "scelta", "richiesta": SCELTA_DIGITALE, "mancante": False, "non_si_apre": False, "dispositivo": DIGITALE,
+                         "interfaccia": "Windows WASAPI", "latenza": LATENZA_FINTA, "errore": "", "rilettura": None, "errore_della_rilettura": None}
+        assert esito == motore.esito_dell_apertura and esito is not motore.esito_dell_apertura
+        assert motore.scelta == SCELTA_DIGITALE and motore.ultimo_errore is None and not motore.muto
+        stato = motore.stato()
+        assert stato["aperto"] and stato["dispositivo"] == DIGITALE and stato["quale"] == "scelta" and stato["latenza"] == LATENZA_FINTA
+        # Il conto dei campioni riparte da dove si era fermato, e il campione udibile non torna indietro.
+        assert motore.campione_scritto == 6 * BLOCCO
+        assert motore.campione_udibile() == 6 * BLOCCO >= prima
+        # Il callback della scheda lasciata, se arrivasse ancora, scrive silenzio e non conta.
+        assert np.all(vecchio.avanza(3) == 0.0)
+        assert motore.campione_scritto == 6 * BLOCCO
+        # La scheda nuova continua la voce dal campione giusto, col volume di prima.
+        uscita = nuovo.avanza(4)
+        np.testing.assert_allclose(uscita, 0.5 * buffer[6 * BLOCCO:10 * BLOCCO], rtol=0, atol=1e-6)
+        assert motore.campione_scritto == 10 * BLOCCO and not voce.finita
+        assert 6 * BLOCCO < motore.campione_udibile() < 10 * BLOCCO
+        # L'evento scatta al campione esatto, e il tempo di gioco va avanti come se niente fosse.
+        assert scattati == [6 * BLOCCO + 701] and evento.campione == 6 * BLOCCO + 701
+        assert motore.tempo_di_gioco(motore.campione_scritto) == pytest.approx(10 * BLOCCO / FS * VELOCITA_DEL_TEMPO)
+        assert not [n for n in motore.notifiche() if n.tipo in ("errore", "flusso_perso")]
+        # La guardia guarda la scheda nuova.
+        assert motore.controlla() is False and not motore.flusso_perso
+    finally:
+        motore.chiudi()
+    assert nuovo.chiuso
+
+
+def test_cambia_scheda_verso_l_automatica(schede_finte, sd_finto, apri_vera):
+    motore = Motore(apri=apri_vera, scelta=SCELTA_DIGITALE)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        vecchio.avanza(2)
+        esito = motore.cambia_scheda({})
+        assert vecchio.chiuso and motore.flusso.opzioni["device"] == 18
+        assert esito["quale"] == "automatica" and esito["richiesta"] == {} and motore.scelta == {} and esito["dispositivo"] == ALTOPARLANTI
+        # L'automatica si rifà da capo: Windows può aver cambiato la scheda predefinita.
+        assert schede_finte.chiamate[-1] == ("scegli", "callback", True)
+        assert motore.campione_scritto == 2 * BLOCCO
+    finally:
+        motore.chiudi()
+
+
+@pytest.mark.parametrize(("scelta", "rotte", "mancante"), [(SCELTA_CUFFIE, (), True), (SCELTA_ASIO, (16,), False)])
+def test_cambia_scheda_verso_una_scheda_che_manca_o_non_si_apre(schede_finte, sd_finto, apri_vera, scelta, rotte, mancante):
+    motore = Motore(apri=apri_vera, scelta=SCELTA_DIGITALE)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        vecchio.avanza(2)
+        sd_finto.rotte = set(rotte)
+        esito = motore.cambia_scheda(scelta)
+        assert vecchio.chiuso and motore.flusso is sd_finto.aperti[-1] and motore.flusso.opzioni["device"] == 18
+        assert esito["aperta"] and esito["quale"] == "automatica" and esito["mancante"] == mancante and esito["non_si_apre"] != mancante
+        assert esito["richiesta"] == scelta and motore.scelta == scelta
+        assert motore.ultimo_errore == f"apertura: {esito['errore']}" and esito["errore"].startswith("scheda scelta ")
+        motore.flusso.avanza(1)
+        assert motore.campione_scritto == 3 * BLOCCO
+    finally:
+        motore.chiudi()
+
+
+def _aspetta_campioni(motore, oltre):
+    """Aspetta in tempo vero che il filo muto porti il conto oltre quel campione."""
+    return _aspetta(lambda: motore.campione_scritto > oltre)
+
+
+def test_cambia_scheda_senza_niente_che_si_apra_e_ritorno(schede_finte, sd_finto, apri_vera):
+    """Se non si apre niente il motore va muto dal campione scritto; scegliendo di nuovo una scheda
+    che si apre, il filo muto se ne va, e il conto lo porta soltanto la scheda: mai due produttori."""
+    motore = Motore(apri=apri_vera)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        vecchio.avanza(4)
+        sd_finto.rotte = {19, 18, None}
+        esito = motore.cambia_scheda(SCELTA_DIGITALE)
+        assert vecchio.chiuso and motore.flusso is None and motore.muto and not motore.flusso_perso
+        assert not esito["aperta"] and esito["quale"] is None and esito["non_si_apre"] and esito["dispositivo"] is None
+        assert motore.ultimo_errore.startswith("apertura: scheda scelta ")
+        stato = motore.stato()
+        assert not stato["aperto"] and stato["muto"] and stato["dispositivo"] is None and stato["quale"] is None
+        muto = motore._filo_muto
+        assert muto.is_alive()
+        # Il filo muto porta avanti il conto, il tempo di gioco e gli eventi, dal campione scritto.
+        evento = motore.programma(motore.tempo_di_gioco(motore.campione_scritto) + 0.02, lambda campione: None)
+        assert _aspetta(lambda: evento.scattato) and evento.campione > 4 * BLOCCO
+        assert motore.campione_udibile() >= 4 * BLOCCO
+        sd_finto.rotte = set()
+        esito = motore.cambia_scheda(SCELTA_DIGITALE)
+        assert esito["aperta"] and esito["quale"] == "scelta" and not motore.muto and motore.ultimo_errore is None
+        assert not muto.is_alive()
+        nuovo = motore.flusso
+        fermo = motore.campione_scritto
+        time.sleep(0.05)
+        assert motore.campione_scritto == fermo
+        nuovo.avanza(2)
+        assert motore.campione_scritto == fermo + 2 * BLOCCO
+    finally:
+        motore.chiudi()
+
+
+def test_cambia_scheda_dal_modo_muto_dell_avvio(schede_finte, sd_finto, apri_vera):
+    sd_finto.rotte = {18, None}
+    motore = Motore(apri=apri_vera)
+    try:
+        assert motore.avvia() is False
+        muto = motore._filo_muto
+        assert _aspetta_campioni(motore, 2 * BLOCCO)
+        sd_finto.rotte = set()
+        esito = motore.cambia_scheda({})
+        assert esito["aperta"] and esito["quale"] == "automatica" and not motore.muto and motore.stato()["aperto"]
+        assert not muto.is_alive()
+        fermo = motore.campione_scritto
+        assert motore.campione_udibile() == fermo
+        time.sleep(0.05)
+        assert motore.campione_scritto == fermo
+        motore.flusso.avanza(1)
+        assert motore.campione_scritto == fermo + BLOCCO
+    finally:
+        motore.chiudi()
+
+
+def test_cambia_scheda_dopo_un_flusso_perso_con_la_rilettura(schede_finte, sd_finto, apri_vera):
+    """Le cuffie si spengono, il flusso si perde e il motore va muto; le cuffie si riaccendono, e
+    PortAudio le vede soltanto rileggendolo, quando il flusso perso è chiuso e il filo muto fermo."""
+    motore = Motore(apri=apri_vera)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        vecchio.avanza(4)
+        vecchio.active = False
+        assert motore.controlla() is True and motore.muto and motore.flusso_perso
+        assert _aspetta_campioni(motore, 4 * BLOCCO)
+        schede_finte.arrivate = [CUFFIE_FINTE]
+        schede_finte.alla_rilettura = lambda: (list(vecchio.azioni), motore._filo_muto.is_alive(), motore.flusso)
+        esito = motore.cambia_scheda(SCELTA_CUFFIE, rileggi=True)
+        # Alla rilettura il flusso perso era chiuso, il filo muto fermo, e nessun flusso aperto.
+        assert schede_finte.riletture == [(["start", "abort", "close"], False, None)]
+        assert esito["rilettura"]["arrivate"] == [(CUFFIE, "Windows WASAPI")] and esito["errore_della_rilettura"] is None
+        # Le uscite si leggono dopo la rilettura, e le cuffie si aprono.
+        chiamate = [chiamata[0] for chiamata in schede_finte.chiamate]
+        assert chiamate.index("rileggi") < len(chiamate) - 1 - chiamate[::-1].index("elenco")
+        assert esito["quale"] == "scelta" and esito["dispositivo"] == CUFFIE and motore.flusso.opzioni["device"] == 40
+        assert not motore.flusso_perso and not motore.muto and motore.ultimo_errore is None
+        stato = motore.stato()
+        assert stato["aperto"] and not stato["perso"]
+        # La guardia riparte da capo: la scheda nuova che chiede i suoi blocchi non si perde.
+        nuovo = motore.flusso
+        for _blocco in range(3):
+            nuovo.avanza(1)
+            assert motore.controlla() is False
+        nuovo.time += 0.6 * FLUSSO_FERMO_DOPO
+        assert motore.controlla() is False
+        nuovo.time += 0.6 * FLUSSO_FERMO_DOPO
+        assert motore.controlla() is True
+    finally:
+        motore.chiudi()
+
+
+def test_rilettura_soltanto_a_flusso_chiuso(schede_finte, sd_finto, apri_vera):
+    motore = Motore(apri=apri_vera, scelta=SCELTA_DIGITALE)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        schede_finte.alla_rilettura = lambda: (list(vecchio.azioni), vecchio.chiuso, motore.flusso)
+        esito = motore.rileggi_le_schede()
+        assert schede_finte.riletture == [(["start", "stop", "close"], True, None)]
+        # Si torna sulla stessa scelta, su un flusso nuovo.
+        assert esito["quale"] == "scelta" and esito["richiesta"] == SCELTA_DIGITALE and motore.flusso is not vecchio
+        assert esito["rilettura"] == {"prima": 9, "dopo": 9, "arrivate": [], "sparite": [], "mixer": None}
+    finally:
+        motore.chiudi()
+
+
+class _FlussoCheNonSiChiude(FlussoFinto):
+    """Un flusso il cui stop resta dentro il driver finché la prova non lo lascia andare."""
+
+    def __init__(self, *argomenti, **opzioni):
+        super().__init__(*argomenti, **opzioni)
+        self.via = threading.Event()
+
+    def stop(self):
+        self.via.wait(5.0)
+        super().stop()
+
+
+def test_rilettura_saltata_se_la_scheda_di_prima_non_si_chiude(monkeypatch, schede_finte):
+    monkeypatch.setattr(motore_audio, "ATTESA_DELLA_CHIUSURA", 0.1)
+    aperti = []
+
+    def apri(callback, fs, blocco, scelta=None):
+        flusso = (FlussoFinto if aperti else _FlussoCheNonSiChiude)(callback, fs, blocco)
+        flusso.start()
+        aperti.append(flusso)
+        return flusso
+
+    motore = Motore(apri=apri)
+    try:
+        motore.avvia()
+        vecchio = motore.flusso
+        vecchio.avanza(2)
+        esito = motore.cambia_scheda(SCELTA_DIGITALE, rileggi=True)
+        # La rilettura non c'è stata: PortAudio poteva avere ancora dentro la scheda di prima.
+        assert schede_finte.riletture == [] and esito["rilettura"] is None
+        assert "PortAudio" in esito["errore_della_rilettura"]
+        assert motore.ultimo_errore.startswith("chiusura: la scheda di prima non si è chiusa in 0,1 secondi; rilettura: ")
+        # La scheda nuova suona lo stesso, e quella di prima, se chiedesse ancora blocchi, scrive silenzio.
+        assert esito["aperta"] and motore.flusso is aperti[1]
+        assert np.all(vecchio.avanza(1) == 0.0) and motore.campione_scritto == 2 * BLOCCO
+        # Quando la scheda di prima finalmente si chiude, la rilettura si può fare.
+        vecchio.via.set()
+        motore._filo_della_chiusura.join(ATTESA_DEL_FILO)
+        esito = motore.cambia_scheda(SCELTA_DIGITALE, rileggi=True)
+        assert len(schede_finte.riletture) == 1 and esito["errore_della_rilettura"] is None and motore.ultimo_errore is None
+    finally:
+        vecchio.via.set()
+        motore.chiudi()
+    assert vecchio.chiuso
+
+
+def test_rilettura_che_fallisce(schede_finte, sd_finto, apri_vera):
+    schede_finte.rotta = RuntimeError("il filo del mixer non si è fermato")
+    motore = Motore(apri=apri_vera)
+    try:
+        motore.avvia()
+        esito = motore.cambia_scheda(SCELTA_DIGITALE, rileggi=True)
+        assert esito["rilettura"] is None and esito["errore_della_rilettura"] == "RuntimeError: il filo del mixer non si è fermato"
+        assert esito["aperta"] and esito["quale"] == "scelta"
+        assert motore.ultimo_errore == "rilettura: RuntimeError: il filo del mixer non si è fermato"
+    finally:
+        motore.chiudi()
+
+
+def test_cambio_di_scheda_con_la_partita_in_pausa(finto):
+    """La partita in pausa: tempo di gioco fermo, voci a guadagno zero, un evento che aspetta. Dopo il
+    cambio tutto è com'era, e alla ripresa l'evento scatta al campione giusto."""
+    motore, vecchio = finto
+    voce = motore.suona(_costante(0.5, 100_000), inizio=0)
+    vecchio.avanza(2)
+    motore.guadagno_voce(voce, 0.0, rampa=0.0)
+    fermo = motore.ferma_tempo(campione=3 * BLOCCO)
+    tempo = motore.tempo_di_gioco(fermo)
+    evento = motore.programma(tempo + 0.001, lambda campione: None)
+    vecchio.avanza(6)
+    assert not evento.scattato
+    esito = motore.cambia_scheda(SCELTA_DIGITALE)
+    nuovo = motore.flusso
+    assert esito["aperta"] and nuovo is not vecchio and nuovo.scelta == SCELTA_DIGITALE and nuovo.riprova is True
+    assert motore.stato()["dispositivo"] == DIGITALE and motore.stato()["interfaccia"] == "Windows WASAPI"
+    assert np.all(nuovo.avanza(4) == 0.0)
+    assert not evento.scattato and not motore.tempo_scorre
+    assert motore.tempo_di_gioco(motore.campione_scritto) == tempo
+    ripresa = motore.fai_scorrere_tempo(campione=12 * BLOCCO)
+    motore.guadagno_voce(voce, 1.0, rampa=0.0)
+    uscita = nuovo.avanza(2)
+    assert evento.scattato and evento.campione == ripresa + math.ceil(0.001 * FS / VELOCITA_DEL_TEMPO)
+    assert np.all(uscita == 0.5)
+
+
+def test_cambia_scheda_su_motore_chiuso_o_mai_avviato():
+    motore = Motore(apri=apri_finto)
+    # Mai avviato: la scelta resta per l'avvio.
+    assert motore.cambia_scheda(SCELTA_DIGITALE) is None
+    assert motore.scelta == SCELTA_DIGITALE and motore.esito_dell_apertura is None
+    try:
+        assert motore.avvia() is True
+        assert motore.flusso.scelta == SCELTA_DIGITALE and motore.flusso.riprova is False
+    finally:
+        motore.chiudi()
+    # Chiuso: niente cambia.
+    assert motore.cambia_scheda({}) is None and motore.scelta == SCELTA_DIGITALE and motore.flusso is not None and motore.chiuso
+
+
+def test_chiudi_aspetta_le_chiusure(monkeypatch):
+    """chiudi aspetta anche i fili che chiudono le schede lasciate."""
+    monkeypatch.setattr(motore_audio, "ATTESA_DELLA_CHIUSURA", 0.05)
+    aperti = []
+
+    def apri(callback, fs, blocco):
+        flusso = (FlussoFinto if aperti else _FlussoCheNonSiChiude)(callback, fs, blocco)
+        flusso.start()
+        aperti.append(flusso)
+        return flusso
+
+    motore = Motore(apri=apri)
+    motore.avvia()
+    motore.cambia_scheda({})
+    filo = motore._filo_della_chiusura
+    assert filo.is_alive()
+    monkeypatch.setattr(motore_audio, "ATTESA_DELLA_CHIUSURA", ATTESA_DEL_FILO)
+    threading.Timer(0.05, aperti[0].via.set).start()
+    motore.chiudi()
+    assert not filo.is_alive() and aperti[0].chiuso and aperti[1].chiuso
 
 
 def test_comandi_da_un_altro_filo(finto):

@@ -30,6 +30,8 @@ Un tiro a vuoto costa un colpo, un centro non costa niente e vale fino al doppio
 
 Proiettile, nel menu Impostazioni, sceglie il timbro del proiettile in volo, seno, triangolo o sega morbida, e fa sentire un esempio di ciascuno mentre scorri l'elenco; la forma scelta vale dalla partita seguente, e i bersagli non la usano mai, così il colpo non si confonde con loro.
 
+Scheda audio, nel menu Impostazioni, o Ctrl+Maiusc+X, sceglie dove suona Ciechino: rilegge le schede, così nell'elenco ci sono anche le cuffie Bluetooth accese dopo l'avvio, e dice la latenza di ognuna. La scheda scelta vale da subito e resta per i prossimi avvii; se manca, Ciechino suona su quella automatica, la scheda di Windows, e lo dice. Lo stesso tasto ridà il suono quando la scheda si stacca durante il gioco.
+
 Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere. La partita si ferma da sola, in silenzio, anche quando si apre un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
 
 ## Aiuto
@@ -74,7 +76,7 @@ Il pacchetto si compila con PyInstaller dalla ricetta Ciechino.spec, a cartella,
 
 Ciechino nasce in italiano, ma ogni testo per l'utente passa da lingua.py, con le funzioni _, ngettext e plurale, così si può tradurre senza toccare il programma. babel.cfg dice a pybabel quali file leggere; il modello dei testi si estrae con le parole chiave _, ngettext:1,2 e plurale:2,3, e con i commenti per i traduttori:
 
-    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: -o locales/messages.pot .
+    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.1.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
     pybabel init -i locales/messages.pot -d locales -l en
     pybabel update -i locales/messages.pot -d locales
     pybabel compile -d locales
@@ -83,7 +85,7 @@ Una traduzione è il file locales/CODICE/LC_MESSAGES/messages.po, dove CODICE è
 
 ## Dati
 
-Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la forma del proiettile, la lettura dei resoconti, l'uscita della sintesi e l'ultimo nome usato in classifica. L'uscita della sintesi non è la scheda audio, che Ciechino sceglie da solo: dice chi legge i resoconti, automatica, oppure nvda, jaws o sapi5, la voce di Windows, e si cambia soltanto scrivendola nel file, a Ciechino chiuso. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, Ciechino - Registri per il PUB.txt, quando lo prepari, e selected_language.json, la lingua scelta. Chi gioca dai sorgenti li trova nella cartella del repository: sono dati personali di chi gioca, e .gitignore li tiene tutti fuori da git, con le loro copie .bak, .tmp e .illeggibile, come in MeTeOra (decisione D15).
+Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la forma del proiettile, la scheda audio scelta, la lettura dei resoconti, l'uscita della sintesi e l'ultimo nome usato in classifica. L'uscita della sintesi non è la scheda audio, che si sceglie con Ctrl+Maiusc+X: dice chi legge i resoconti, automatica, oppure nvda, jaws o sapi5, la voce di Windows, e si cambia soltanto scrivendola nel file, a Ciechino chiuso. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, Ciechino - Registri per il PUB.txt, quando lo prepari, e selected_language.json, la lingua scelta. Chi gioca dai sorgenti li trova nella cartella del repository: sono dati personali di chi gioca, e .gitignore li tiene tutti fuori da git, con le loro copie .bak, .tmp e .illeggibile, come in MeTeOra (decisione D15).
 
 I suoni degli eventi vengono dalla collezione comune Acu_Collection.json di GBUtils, con il prefisso ciechino_; l'elenco delle azioni con il loro preset è suoni_di_ciechino.txt. Le scivolate, i bersagli e il proiettile li crea il motore audio di Ciechino mentre suonano. Tutti i numeri della meccanica di gioco, dal cubo ai punti, stanno in costanti.py, per tararli giocando; il progetto e le decisioni stanno in docs/progetto.txt, l'idea di partenza in docs/idea_73.txt.
 

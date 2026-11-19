@@ -26,6 +26,11 @@ finestra perde l'attivazione, e riprende da sola al ritorno, ma soltanto se la p
 finestra: una pausa chiesta con Ctrl+P resta (D14). A ogni battito la finestra chiede anche al motore
 audio se il flusso è vivo, e ne legge le notizie: gli errori del filo dell'audio, i buchi e il flusso
 perso finiscono nel registro, riassunti, perché il filo di PortAudio non arriva alla rete degli errori.
+La scheda audio la sceglie chi gioca (D20, sul modello della voce Scheda audio di MeTeOra): il motore
+nasce con la scheda delle impostazioni, e se quella non c'è o non si apre la vista e la sintesi lo
+dicono, e Ciechino suona su quella automatica, senza cancellare la scelta, perché le cuffie possono
+tornare. Ctrl+Maiusc+X, Scheda audio del menu Impostazioni, fa rileggere le schede al motore, così
+compaiono anche le cuffie Bluetooth accese dopo l'avvio, e il suono perso torna; poi apre l'elenco.
 """
 
 import contextlib
@@ -49,6 +54,7 @@ import lingua
 import percorsi
 import pub
 import registro
+import schede
 import suoni as modulo_suoni
 import testi
 from gui import dialoghi
@@ -152,7 +158,8 @@ class FinestraPrincipale(wx.Frame):
     """
     La finestra di Ciechino. crash_precedente è il resoconto del crash della volta prima, che la vista
     dice all'apertura. fabbrica_della_partita(motore, suoni, statistiche) crea la partita: senza, quella
-    di partita.py. motore è il motore audio, già avviato o da avviare: senza, la finestra ne crea uno.
+    di partita.py. motore è il motore audio, già avviato o da avviare, con la sua scelta della scheda:
+    senza, la finestra ne crea uno con la scheda delle impostazioni (D20).
     """
 
     def __init__(self, crash_precedente=None, fabbrica_della_partita=None, motore=None):
@@ -204,14 +211,21 @@ class FinestraPrincipale(wx.Frame):
             self.avvisi_dei_dati.append(avviso)
         # Vero dopo un salvataggio della classifica non riuscito: allora vale quella in memoria, fino all'uscita.
         self._classifica_in_memoria = False
-        self.motore = motore if motore is not None else Motore()
+        # Il motore nasce con la scheda delle impostazioni, lette qui sopra (D20).
+        self.motore = motore if motore is not None else Motore(scelta=self.impostazioni["scheda"])
         if not self.motore.avviato:
             self.motore.avvia()
         # Perché la scheda non si è aperta, o che cosa non è andato all'avvio del motore: la vista dice
-        # soltanto che il gioco è muto, e il motivo lo legge chi sviluppa, nel registro.
+        # soltanto che il gioco è muto, o che la scheda scelta non si è aperta, e il motivo lo legge chi
+        # sviluppa, nel registro.
         ultimo_errore = getattr(self.motore, "ultimo_errore", None)
         if ultimo_errore:
             registro.scrivi(f"Motore audio: {ultimo_errore}")
+        # Com'è andata l'apertura della scheda all'avvio: se la scheda scelta non c'era o non si è
+        # aperta, lo dicono la vista, il suono e la sintesi, quando la finestra compare.
+        self._esito_all_avvio = dict(self._esito_della_scheda())
+        if self._scelta_mancata(self._esito_all_avvio):
+            self.statistiche.conta("scheda_non_aperta")
         self.motore.volume = guadagno_del_volume(self.impostazioni["volume"])
         self.suoni = modulo_suoni.Suoni(self.motore, conta=self.statistiche.suono)
         # Tutti i preset si sintetizzano adesso, così il primo sparo non aspetta la sintesi di un rumore.
@@ -275,6 +289,8 @@ class FinestraPrincipale(wx.Frame):
             )),
             (_("&Impostazioni"), (
                 Voce(_("&Volume..."), None, self.cambia_volume),
+                # Il tasto di MeTeOra per la stessa scelta (D20): il gancio dei tasti lo lascia ai menu, perché ha i modificatori.
+                Voce(_("Scheda &audio..."), "Ctrl+Shift+X", self.scegli_la_scheda),
                 Voce(_("&Proiettile..."), None, self.cambia_proiettile),
                 Voce(_("&Leggi i resoconti con la sintesi"), None, self.cambia_sintesi, True),
                 Voce(_("L&ingua..."), None, self.cambia_lingua),
@@ -352,7 +368,8 @@ class FinestraPrincipale(wx.Frame):
         righe.append(_("Oggi è {data}.").format(data=testi.data_lunga(datetime.datetime.now())))
         righe.append(_("Per cominciare una partita premi Spazio; F1 ti dice tutti i comandi."))
         righe.append(self._riga_del_record())
-        righe.append(self._riga_della_scheda())
+        # La scheda audio: se quella scelta non c'era o non si è aperta, prima la riga che lo dice, poi quella di dove suona.
+        righe.extend(self._righe_della_scheda())
         if self.crash_precedente:
             # Traduttori: {file} è il percorso del resoconto del crash.
             righe.append(_("La volta scorsa Ciechino si è chiuso per un errore grave, e il resoconto è nel file {file}: se chiedi aiuto al PUB, "
@@ -371,37 +388,92 @@ class FinestraPrincipale(wx.Frame):
         # Traduttori: «Il record della classifica è di Gabry, con 12.340 punti, 3 giorni fa.».
         return _("Il record della classifica è di {nome}, con {punti}, {eta}.").format(nome=primo["nome"], punti=punti, eta=testi.eta_in_giorni(giorni))
 
-    def _riga_della_scheda(self):
-        """La scheda audio su cui suona Ciechino, dallo stato del motore, o che il gioco è muto."""
+    def _righe_della_scheda(self, esito=None):
+        """
+        La scheda audio su cui suona Ciechino, dallo stato del motore, o che il gioco è muto; e prima, se
+        la scheda scelta da chi gioca non c'era o non si è aperta, quale e perché (D20): una frase per
+        riga, come le vuole l'apertura della vista. esito è quello di un'apertura del motore; None vuol
+        dire quello dell'avvio.
+        """
+        perche = self._perche_non_la_scelta(self._esito_all_avvio if esito is None else esito)
+        return [riga for riga in (perche, self._dove_suona()) if riga]
+
+    def _riga_della_scheda(self, esito=None):
+        """Le righe di _righe_della_scheda in una frase sola, per la sintesi, per le notizie del dialogo e per i messaggi della vista."""
+        return " ".join(self._righe_della_scheda(esito))
+
+    def _dove_suona(self):
+        """La frase che dice dove suona Ciechino adesso: la scheda con la latenza, dallo stato del motore, o che il gioco è muto."""
         stato = self.motore.stato()
         if not stato.get("aperto"):
             return _("Non trovo una scheda audio che si apra: Ciechino funziona lo stesso, ma senza suono.")
-        scheda = ", ".join(str(parte) for parte in (stato.get("dispositivo"), stato.get("interfaccia")) if parte) or _("una scheda senza nome")
+        scheda = self._nome_in_uso(stato)
         latenza = stato.get("latenza")
         if isinstance(latenza, int | float) and latenza > 0:
             millesimi = round(latenza * MILLESIMI)
-            # Traduttori: {scheda} è il dispositivo con l'interfaccia, come «Altoparlanti, Windows WASAPI».
+            # Traduttori: {scheda} è il dispositivo con l'interfaccia, come «Altoparlanti (Realtek(R) Audio), WASAPI».
             return _("Il suono esce da {scheda}, con una latenza di {latenza}.").format(
                 scheda=scheda, latenza=plurale(millesimi, "{n} millesimo di secondo", "{n} millesimi di secondo", come=testi.intero(millesimi)))
         return _("Il suono esce da {scheda}.").format(scheda=scheda)
 
+    @staticmethod
+    def _nome_in_uso(stato):
+        """Il nome della scheda su cui suona il motore, come lo dice schede.nome_della_scheda: «Altoparlanti (Realtek(R) Audio), WASAPI»."""
+        dispositivo, interfaccia = stato.get("dispositivo"), stato.get("interfaccia")
+        nome = schede.nome_della_scheda({"dispositivo": dispositivo, "interfaccia": interfaccia}) if dispositivo else ""
+        return nome or ", ".join(str(parte) for parte in (dispositivo, interfaccia) if parte) or _("una scheda senza nome")
+
+    def _esito_della_scheda(self):
+        """Com'è andata l'ultima apertura della scheda nel motore, con le chiavi di motore_audio.ESITO_VUOTO; vuoto se il motore non lo sa dire."""
+        esito = getattr(self.motore, "esito_dell_apertura", None)
+        return esito if isinstance(esito, dict) else {}
+
+    @staticmethod
+    def _scelta_mancata(esito):
+        """Vero se l'apertura chiedeva una scheda scelta da chi gioca, e quella non c'era o non si è aperta (D20)."""
+        return bool(esito and esito.get("richiesta")) and esito.get("quale") != "scelta"
+
+    @classmethod
+    def _perche_non_la_scelta(cls, esito):
+        """La frase che dice che la scheda scelta non c'è o non si apre, e se Ciechino suona su quella automatica; vuota se la scelta suona, o è l'automatica."""
+        if not cls._scelta_mancata(esito):
+            return ""
+        scheda = schede.nome_della_scheda(esito.get("richiesta"))
+        if esito.get("mancante"):
+            if esito.get("aperta"):
+                # Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4), WASAPI»: è sparita, e Ciechino suona sulla scelta automatica.
+                return _("La scheda audio scelta, {scheda}, non c'è: Ciechino suona su quella automatica.").format(scheda=scheda)
+            # Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4), WASAPI»; segue la frase che dice che il gioco è muto.
+            return _("La scheda audio scelta, {scheda}, non c'è.").format(scheda=scheda)
+        if esito.get("aperta"):
+            # Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»: c'è, ma non si apre, e Ciechino suona sulla scelta automatica.
+            return _("La scheda audio scelta, {scheda}, non si apre: Ciechino suona su quella automatica.").format(scheda=scheda)
+        # Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»; segue la frase che dice che il gioco è muto.
+        return _("La scheda audio scelta, {scheda}, non si apre.").format(scheda=scheda)
+
     def suoni_d_avvio(self):
         """
-        Il suono dell'avvio, da chiamare quando la finestra è comparsa; poi, staccata di PAUSA_DOPO_L_AVVIO,
-        la notizia più importante, se c'è: il crash della volta prima, o i dati che non si leggevano.
-        Il motore mette la notizia al campione giusto, così le due non si sovrappongono.
+        Il suono dell'avvio, da chiamare quando la finestra è comparsa; poi, ognuna staccata di
+        PAUSA_DOPO_L_AVVIO dalla precedente, le notizie: la più importante fra il crash della volta prima
+        e i dati che non si leggevano, se c'è, e la scheda audio scelta che non c'è o non si apre (D20),
+        che dice anche la sintesi. Il motore mette ogni notizia al campione giusto, così non si sovrappongono.
         """
         voce = self.suoni.suona("avvio")
+        notizie = []
         if self.crash_precedente:
-            notizia = "crash_precedente"
+            notizie.append("crash_precedente")
         elif self.avvisi_dei_dati:
-            notizia = "dati_rovinati"
-        else:
-            return
-        inizio = None
-        if voce is not None:
-            inizio = voce.inizio + len(voce.buffer) + round(PAUSA_DOPO_L_AVVIO * self.motore.fs)
-        self.suoni.suona(notizia, inizio=inizio)
+            notizie.append("dati_rovinati")
+        scheda_mancata = self._scelta_mancata(self._esito_all_avvio)
+        if scheda_mancata:
+            notizie.append("scheda_non_aperta")
+        for notizia in notizie:
+            inizio = None
+            if voce is not None:
+                inizio = voce.inizio + len(voce.buffer) + round(PAUSA_DOPO_L_AVVIO * self.motore.fs)
+            voce = self.suoni.suona(notizia, inizio=inizio) or voce
+        if scheda_mancata:
+            self._dici(self._riga_della_scheda())
 
     # I comandi e i tasti.
 
@@ -971,6 +1043,141 @@ class FinestraPrincipale(wx.Frame):
         testo = _("Il volume è {volume}.").format(volume=valore)
         self._in_coda(testo, testo)
 
+    # La scheda audio (D20).
+
+    def scegli_la_scheda(self):
+        """
+        Ctrl+Maiusc+X, Scheda audio del menu Impostazioni, sul modello della voce Scheda audio di
+        MeTeOra. La partita si ferma come con ogni dialogo (D14), e prima dell'elenco il motore rilegge
+        le schede restando sulla scelta di adesso: così compaiono anche le cuffie Bluetooth accese dopo
+        l'avvio, una scheda scelta che era sparita ed è tornata riprende a suonare, e dopo un flusso
+        perso il suono torna. Poi, col suo suono, il dialogo delle schede, con la scheda in uso già
+        scelta. OK su un'altra riga, o su una scelta diversa da quella salvata, cambia la scheda del
+        motore e salva la scelta, che resta anche se non si apre, perché le cuffie possono tornare; la
+        vista e la sintesi dicono dove suona Ciechino adesso, o che la scheda scelta non si è aperta.
+        OK sulla riga in uso, come Annulla, non cambia niente; la riga in uso è quella di quando il
+        dialogo si chiude, perché se il flusso si è perso intanto OK sulla stessa riga la riapre.
+        """
+        prima = schede.valida(self.impostazioni.get("scheda"))
+        # Come _modale, ma la partita si ferma già per la rilettura, e resta ferma fino al cambio di scheda.
+        self._modali += 1
+        try:
+            self._ferma_la_partita()
+            rilettura = self._rileggi_le_schede()
+            notizie = []
+            try:
+                elenco = schede.uscite()
+            except Exception as errore:  # noqa: BLE001 - PortAudio fallisce in molti modi: resta la scelta automatica
+                elenco = []
+                # Traduttori: {errore} è il perché, come lo dice PortAudio, spesso in inglese.
+                notizie.append(_("Non riesco a leggere l'elenco delle schede audio: {errore}. Resta la scelta automatica.").format(errore=errore))
+            in_uso, automatica = self._riga_in_uso(elenco)
+            # Dove suona Ciechino dopo la rilettura, e prima, se la scheda scelta non c'è o non si apre, quale.
+            notizie.insert(0, self._riga_della_scheda(rilettura or {}))
+            if rilettura and rilettura.get("errore_della_rilettura"):
+                notizie.append(_("Non ho potuto rileggere le schede audio: quelle accese da poco, come delle cuffie Bluetooth, possono mancare."))
+            selezionata = in_uso if in_uso is not None else self._riga_della_scelta(prima, elenco)
+            self.suoni.suona("scheda_audio")
+            dialogo = dialoghi.SceltaScheda(self, elenco, in_uso, automatica, selezionata, notizie, self.suoni.suona)
+            try:
+                codice = self._modale(dialogo)
+                indice, nuova = dialogo.indice, dialogo.scelta
+            finally:
+                dialogo.Destroy()
+            # Si parla della scelta, non della scheda: la rilettura prima dell'elenco può aver già spostato il suono,
+            # per esempio nelle cuffie scelte appena riaccese.
+            if codice != wx.ID_OK or nuova is None:
+                self.suoni.suona("annullato")
+                testo = _("La scelta della scheda audio non cambia.") + " " + self._dove_suona()
+                self._in_coda(testo, testo)
+                return
+            # La riga in uso si ricalcola: il battito gira anche dentro il dialogo, e la guardia del motore può
+            # aver perso il flusso; allora OK sulla stessa riga riapre la scheda, invece di lasciare il gioco muto.
+            if indice == self._riga_in_uso(elenco)[0] and nuova == prima:
+                self.suoni.suona("confermato")
+                testo = _("La scelta della scheda audio resta quella di prima.") + " " + self._dove_suona()
+                self._in_coda(testo, testo)
+                return
+            esito = self._cambia_la_scheda(nuova)
+        finally:
+            self._modali -= 1
+            self._dopo_un_modale()
+        self._di_la_scheda_nuova(nuova, prima, esito)
+
+    def _rileggi_le_schede(self):
+        """
+        Il motore rilegge le schede e torna sulla scelta di adesso, con rileggi_le_schede; restituisce
+        l'esito, o None per un motore chiuso o che non lo sa fare.
+        """
+        rileggi = getattr(self.motore, "rileggi_le_schede", None)
+        esito = rileggi() if callable(rileggi) else None
+        self._dopo_il_cambio(esito)
+        return esito
+
+    def _cambia_la_scheda(self, scelta):
+        """Il motore passa alla scheda scelta, già riletta; restituisce l'esito, o None per un motore chiuso o che non lo sa fare."""
+        cambia = getattr(self.motore, "cambia_scheda", None)
+        esito = cambia(scelta) if callable(cambia) else None
+        self._dopo_il_cambio(esito)
+        return esito
+
+    def _dopo_il_cambio(self, esito):
+        """
+        Dopo un cambio di scheda, o una rilettura: quel che non è andato va nel registro, come all'avvio,
+        e con una scheda che suona un flusso perso si potrà dire di nuovo.
+        """
+        if not esito:
+            return
+        if esito.get("aperta"):
+            self._flusso_perso_detto = False
+        ultimo_errore = getattr(self.motore, "ultimo_errore", None)
+        if ultimo_errore:
+            registro.scrivi(f"Motore audio, cambio di scheda: {ultimo_errore}")
+
+    def _riga_in_uso(self, elenco):
+        """
+        La riga dell'elenco delle schede su cui suona Ciechino, zero per l'automatica, o None se è muto o
+        se la scheda scelta non sta nell'elenco; e per l'automatica il nome della scheda dove suona.
+        """
+        stato = self.motore.stato()
+        if not stato.get("aperto"):
+            return None, ""
+        if stato.get("quale") == "scelta":
+            uscita = schede.ritrova(stato.get("scelta"), elenco)
+            return (elenco.index(uscita) + 1, "") if uscita is not None else (None, "")
+        return 0, self._nome_in_uso(stato)
+
+    @staticmethod
+    def _riga_della_scelta(scelta, elenco):
+        """La riga dell'elenco della scelta salvata, o zero, l'automatica, se la scelta è vuota o la scheda non c'è."""
+        uscita = schede.ritrova(scelta, elenco)
+        return elenco.index(uscita) + 1 if uscita is not None else 0
+
+    def _di_la_scheda_nuova(self, nuova, prima, esito):
+        """
+        Dopo il cambio di scheda: la scelta nuova si salva e si conta; poi la vista e la sintesi dicono
+        dove suona Ciechino adesso, col suono confermato, o che la scheda scelta non c'è o non si apre,
+        col suo suono, che si conta anche lui. Un salvataggio non riuscito lo dice, e la scelta vale
+        fino all'uscita.
+        """
+        salvata = True
+        if nuova != prima:
+            self.impostazioni["scheda"] = dict(nuova)
+            self.statistiche.conta("scheda_cambiata")
+            salvata = self._salva_le_impostazioni()
+        esito = esito or {}
+        if self._scelta_mancata(esito) or not esito.get("aperta"):
+            self.statistiche.conta("scheda_non_aperta")
+            self.suoni.suona("scheda_non_aperta")
+            testo = self._riga_della_scheda(esito)
+        else:
+            if salvata:
+                self.suoni.suona("confermato")
+            testo = self._dove_suona()
+            if not nuova:
+                testo = _("Ciechino suona sulla scheda automatica, quella di Windows.") + " " + testo
+        self._in_coda(testo, testo)
+
     def _dai_il_proiettile(self, forma):
         """
         La forma del proiettile alla partita, che la usa dalla partita seguente, o subito se nessuna è in
@@ -1396,7 +1603,10 @@ class FinestraPrincipale(wx.Frame):
         motivo = getattr(notifica, "testo", "") or getattr(self.motore, "ultimo_errore", None) or "il callback non arriva più"
         registro.scrivi(self._riga_della_notifica(notifica, f"Flusso audio perso al campione {getattr(notifica, 'campione', '?')}: {motivo}. "
                                                             "Ciechino continua senza suono."))
-        testo = _("La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono esci e riapri Ciechino.")
+        # Il suono torna scegliendo la scheda con Ctrl+Maiusc+X (D20): il motore la rilegge e la riapre, e il
+        # flusso perso, se torna a perdersi, si dice di nuovo.
+        testo = _("La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono scegli la scheda "
+                  "con Ctrl+Maiusc+X.")
         self._in_coda(testo, testo)
 
     def _riassunto_del_motore(self, finale=False):

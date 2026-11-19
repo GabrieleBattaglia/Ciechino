@@ -27,17 +27,19 @@ nella cartella temporanea del conftest, e la prova le rilegge dal disco.
 """
 
 import importlib
+import importlib.util
 import json
 import math
 import random
 import sys
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
 import wx
-from aiuti_audio import motore_finto
+from aiuti_audio import ALTOPARLANTI, CUFFIE, CUFFIE_FINTE, DIGITALE, motore_finto, sounddevice_finto
 
 import classifica
 import costanti
@@ -891,6 +893,128 @@ def test_lo_spazio_della_partita_nuova_riavvia_il_battito_guasto(app_wx, preset_
         assert tavolo.partita.fase == "mira" and not finestra.timer.IsRunning()
     finally:
         _chiudi(finestra)
+
+
+# La scheda audio (D20).
+
+def _apri_flusso_vera():
+    """apri_flusso vera, da una copia di motore_audio: quella del modulo il conftest la sostituisce perché non apra la scheda."""
+    specifica = importlib.util.spec_from_file_location("motore_audio_copia_d_integrazione", Path(motore_audio.__file__))
+    copia = importlib.util.module_from_spec(specifica)
+    specifica.loader.exec_module(copia)
+    return copia.apri_flusso
+
+
+def test_la_scheda_audio_scelta_nella_finestra_vera(app_wx, preset_finti, messaggi_wx, voce_finta, schede_finte, monkeypatch):
+    """D20 coi pezzi veri: la finestra fa nascere il motore con la scheda delle impostazioni, e apri_flusso vera la cerca
+    fra le uscite e la apre con un sounddevice finto. All'avvio le cuffie scelte non ci sono, e Ciechino suona sugli
+    altoparlanti, l'automatica, e lo dice. Le cuffie si accendono a partita in corso: Ctrl+Maiusc+X ferma la partita,
+    chiude il flusso, rilegge PortAudio a flusso chiuso, e il motore rientra nelle cuffie; nell'elenco si sceglie l'uscita
+    digitale, che suona subito, resta sul disco e si conta, e la partita riprende e si gioca. Poi la scheda si stacca, il
+    flusso si perde, e Ctrl+Maiusc+X ridà il suono anche se si annulla l'elenco."""
+    sd_finto = sounddevice_finto(schede_finte)
+    monkeypatch.setitem(sys.modules, "sounddevice", sd_finto)
+    monkeypatch.setattr(motore_audio, "apri_flusso", _apri_flusso_vera())
+    cuffie = {"dispositivo": CUFFIE, "interfaccia": "Windows WASAPI"}
+    digitale = {"dispositivo": DIGITALE, "interfaccia": "Windows WASAPI"}
+    sul_digitale = "Il suono esce da Realtek Digital Output (Realtek(R) Audio), WASAPI, con una latenza di 20 millesimi di secondo."
+    with open(percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI), "w", encoding="utf-8") as file:
+        json.dump({"scheda": cuffie}, file)
+    # A ogni rilettura, quali flussi aperti fin lì erano già chiusi: la rilettura con un flusso aperto può far cadere Ciechino.
+    schede_finte.alla_rilettura = lambda: [flusso.chiuso for flusso in sd_finto.aperti]
+    finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([]))
+    motore = finestra.motore
+    try:
+        finestra.Show()
+        assert motore.scelta == cuffie and motore.flusso.opzioni["device"] == 18
+        perche = f"La scheda audio scelta, {CUFFIE}, WASAPI, non c'è: Ciechino suona su quella automatica."
+        dove = f"Il suono esce da {ALTOPARLANTI}, WASAPI, con una latenza di 20 millesimi di secondo."
+        riga = f"{perche} {dove}"
+        # Nella vista il perché e il dove stanno su due righe; la sintesi li ha in una frase.
+        righe = finestra.vista.GetValue().splitlines()
+        assert righe[righe.index(perche) + 1] == dove
+        tavolo = Tavolo(finestra, monkeypatch, flusso=motore.flusso)
+        finestra.suoni_d_avvio()
+        assert [nome for nome, _voce in tavolo.suonati] == ["avvio", "scheda_non_aperta"] and voce_finta == [riga]
+        avviso = tavolo.voce("scheda_non_aperta")
+        tavolo.flusso.avanza_fino(avviso.inizio + len(avviso.buffer))
+        assert finestra.statistiche.dati["conti"]["scheda_non_aperta"] == 1
+
+        # La partita, e le cuffie che si accendono.
+        partita = tavolo.partita
+        tavolo.spazio()
+        _riposo(tavolo)
+        assert partita.fase == "ascolto"
+        schede_finte.arrivate = [CUFFIE_FINTE]
+        visti = []
+
+        def sceglie(dialogo):
+            in_uso = [n for n, riga in enumerate(dialogo.righe) if riga.endswith(", in uso")]
+            visti.append((partita.in_pausa, motore.flusso.opzioni["device"], in_uso, dialogo.elenco.GetSelection(), dialogo.righe[in_uso[0]]))
+            if len(visti) == 1:
+                dialogo.elenco.SetSelection(next(n for n, u in enumerate(dialogo.uscite, 1) if u["dispositivo"] == DIGITALE))
+                dialogo.conferma()
+                return dialogo.GetReturnCode()
+            return wx.ID_CANCEL
+
+        monkeypatch.setattr(dialoghi.SceltaScheda, "ShowModal", sceglie)
+        # Ctrl+Maiusc+X: il gancio della finestra lo lascia ai menu, e il tasto rapido manda il comando.
+        evento = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        evento.SetEventObject(finestra.vista)
+        evento.SetKeyCode(ord("X"))
+        evento.SetControlDown(True)
+        evento.SetShiftDown(True)
+        finestra.vista.GetEventHandler().ProcessEvent(evento)
+        assert evento.GetSkipped()
+        suonati = len(tavolo.suonati)
+        _menu(finestra, finestra.scegli_la_scheda)
+        # Nel dialogo la partita era ferma, e il motore era già rientrato nelle cuffie, la riga in uso e già scelta.
+        assert visti[0][:4] == (True, 40, [visti[0][3]], visti[0][3]) and visti[0][4] == f"{CUFFIE}, WASAPI, 3 ms, in uso"
+        # Alla rilettura il flusso degli altoparlanti era chiuso.
+        assert schede_finte.riletture == [[True]]
+        assert [nome for nome, _voce in tavolo.suonati[suonati:]] == ["scheda_audio", "confermato"]
+        assert motore.scelta == digitale and motore.flusso.opzioni["device"] == 19 and motore.stato()["quale"] == "scelta"
+        assert [flusso.chiuso for flusso in sd_finto.aperti] == [True, True, False]
+        assert _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == digitale
+        assert finestra.vista.GetValue().endswith("\n" + sul_digitale) and voce_finta[-1] == sul_digitale
+        conti = finestra.statistiche.dati["conti"]
+        assert (conti["scheda_cambiata"], conti["scheda_non_aperta"]) == (1, 1)
+
+        # La partita riprende sulla scheda nuova, e si gioca: il tiro arriva sul bersaglio.
+        tavolo.flusso = motore.flusso
+        tavolo.battito()
+        assert not partita.in_pausa and partita.fase == "ascolto"
+        assert np.abs(tavolo.flusso.avanza(BLOCCHI_DEGLI_EFFETTI)).max() > 0
+        _riposo(tavolo)
+        _bersaglio, valori = _valori_sul_centro(tavolo)
+        _mira(tavolo, valori)
+        nuovi = _volo(tavolo)
+        assert nuovi[0].tipo == "resoconto" and nuovi[0].dati["colpito"]
+        _riposo(tavolo)
+
+        # La scheda si stacca: il flusso si perde, e la vista dice come riavere il suono.
+        perso = ("La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono scegli la scheda "
+                 "con Ctrl+Maiusc+X.")
+        tavolo.flusso.active = False
+        tavolo.battito()
+        assert motore.muto and motore.flusso_perso and finestra.vista.GetValue().endswith("\n" + perso) and voce_finta[-1] == perso
+        suonati = len(tavolo.suonati)
+        _menu(finestra, finestra.scegli_la_scheda)
+        # La rilettura ha chiuso il flusso perso prima di rileggere, e ha ridato il suono già prima dell'elenco, sulla scheda scelta.
+        assert schede_finte.riletture[-1] == [True, True, True]
+        assert visti[1][1] == 19 and visti[1][2] == [visti[1][3]] and visti[1][4].startswith("Realtek Digital Output (Realtek(R) Audio), WASAPI, ")
+        assert [nome for nome, _voce in tavolo.suonati[suonati:]] == ["scheda_audio", "annullato"]
+        assert finestra.vista.GetValue().endswith("\nLa scelta della scheda audio non cambia. " + sul_digitale)
+        stato = motore.stato()
+        assert stato["aperto"] and not stato["perso"] and not motore.muto and motore.scelta == digitale
+        assert _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == digitale and conti["scheda_cambiata"] == 1
+        tavolo.flusso = motore.flusso
+        tavolo.battito()
+        assert not partita.in_pausa and np.abs(tavolo.flusso.avanza(BLOCCHI_DEGLI_EFFETTI)).max() > 0
+        assert messaggi_wx == []
+    finally:
+        _chiudi(finestra)
+    assert motore.chiuso
 
 
 # Il punto d'avvio.

@@ -79,11 +79,16 @@ GRUPPI = [
         "crash_precedente": "ciechino_crash_precedente",
         "dati_rovinati": "ciechino_dati_rovinati",
         "salvataggio_non_riuscito": "ciechino_salvataggio_non_riuscito",
+        # La scheda audio scelta che non c'è o non si apre (D20): il selettore della scelta della scheda che s'inceppa.
+        "scheda_non_aperta": "ciechino_scheda_non_aperta",
     }),
     (_("La finestra, i menu"), {
         "classifica": "ciechino_classifica",
         "statistiche": "ciechino_statistiche",
         "volume": "ciechino_volume",
+        # La scelta della scheda audio (D20): un selettore che gira e si ferma. La scheda cambiata con
+        # successo suona confermato, come ogni dialogo confermato con OK.
+        "scheda_audio": "ciechino_scheda_audio",
         # La scelta della forma del proiettile (D17): una piccola parabola, come un colpo in volo.
         "proiettile": "ciechino_proiettile",
         # La lettura dei resoconti con la sintesi: l'interruttore che si accende e quello che si spegne.
@@ -157,9 +162,13 @@ AZIONI = {
     "crash_precedente": _("all'avvio, dopo il suono d'apertura: la volta scorsa Ciechino si è chiuso per un errore grave, e la vista dice dov'è il resoconto"),
     "dati_rovinati": _("un file dei dati, la classifica, le statistiche o le impostazioni, non si leggeva: Ciechino lo mette da parte e riparte dalla copia o da zero"),
     "salvataggio_non_riuscito": _("la classifica, le statistiche o le impostazioni non si sono potute salvare"),
+    "scheda_non_aperta": _("la scheda audio scelta non c'è o non si apre, all'avvio o appena scelta con Ctrl+Maiusc+X, e Ciechino suona su quella "
+                           "automatica, se si apre"),
     "classifica": _("si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita"),
     "statistiche": _("si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita"),
     "volume": _("Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo"),
+    "scheda_audio": _("si apre la scelta della scheda audio, con Ctrl+Maiusc+X o con Scheda audio del menu Impostazioni, appena Ciechino ha "
+                      "riletto le schede"),
     "proiettile": _("si apre la scelta della forma del proiettile, con Proiettile del menu Impostazioni"),
     "impostazioni": _("la lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni"),
     "sintesi_spenta": _("la lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni"),
@@ -175,7 +184,8 @@ AZIONI = {
     "pub": _("Entra al PUB, dal menu Aiuto"),
     "pub_aiuto": _("Chiedi aiuto al PUB, dal menu Aiuto"),
     "domanda": _("una domanda col sì e col no, come Ctrl+N o l'uscita con una partita in corso"),
-    "confermato": _("un dialogo confermato con OK, come il nome in classifica, il volume o il proiettile, o una mail del PUB pronta"),
+    "confermato": _("un dialogo confermato con OK, come il nome in classifica, il volume, il proiettile o la scheda audio che si apre, o una mail del "
+                    "PUB pronta"),
     "annullato": _("un dialogo chiuso con Annulla o con Esc, o il no a una domanda"),
     "campo_da_correggere": _("OK in un dialogo con un campo da correggere, come un nome vuoto in classifica"),
     "aggiornamento_disponibile": _("all'avvio del programma compilato, su GitHub c'è una versione nuova, e la proposta si apre"),

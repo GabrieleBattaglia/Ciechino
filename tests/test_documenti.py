@@ -12,6 +12,9 @@ Gabriele per lo screen reader.
 Dopo i banchi d'ascolto del 19 novembre 2026 il manuale dice anche la scala dell'alzo (D19), quante
 sono le forme dei bersagli e di quanto varia la loro escursione (D18), e le forme del proiettile (D17):
 anche questi numeri si confrontano con costanti.py.
+Con la scelta della scheda audio (D20) il menu Impostazioni ha il suo primo tasto rapido, Ctrl+Maiusc+X: il
+manuale dice ogni voce dei menu che ha un tasto, col tasto come lo scrive la guida F1, e la prova lo legge dalla
+tabella dei menu della finestra, senza aprirla.
 """
 
 import re
@@ -173,6 +176,27 @@ def test_il_manuale_dice_le_forme_del_proiettile():
     for forma in PROIETTILE_FORME:
         assert f"{PROIETTILI_A_PAROLE[forma]}, " in manuale, f"il manuale non descrive la forma {forma} del proiettile"
     assert f"All'inizio è {PROIETTILI_A_PAROLE[PROIETTILE_FORMA]}." in manuale
+
+
+class _ComandiFinti:
+    """Al posto della finestra, per leggere la tabella dei menu senza aprirla: ogni comando vale None."""
+
+    def __getattr__(self, nome):
+        return None
+
+
+def test_il_manuale_dice_ogni_voce_dei_menu_col_suo_tasto():
+    """D20: Scheda audio con Ctrl+Maiusc+X, e ogni altra voce dei menu con un tasto rapido, sta nel manuale come
+    «<li>Voce, <kbd>Tasto</kbd>», col tasto detto come nella guida F1, Maiusc al posto di Shift."""
+    from gui.finestra import FinestraPrincipale
+
+    finta = _ComandiFinti()
+    finta.voci_menu = lambda: FinestraPrincipale.voci_menu(finta)
+    manuale = _leggi("manuale.html")
+    con_tasto = [(voce, tasto) for _titolo, comandi in FinestraPrincipale.voci_guida(finta) for voce, tasto in comandi if tasto]
+    assert ("Scheda audio", "Ctrl+Maiusc+X") in con_tasto, "nei menu manca Scheda audio con Ctrl+Maiusc+X"
+    mancanti = [f"{voce}, {tasto}" for voce, tasto in con_tasto if f"<li>{voce}, <kbd>{tasto}</kbd>" not in manuale]
+    assert not mancanti, f"voci dei menu che il manuale non dice col loro tasto: {mancanti}"
 
 
 def test_niente_separatori_grafici_nei_documenti():

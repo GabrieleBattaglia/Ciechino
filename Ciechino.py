@@ -15,6 +15,8 @@ Una copia lanciata mentre questa si sta già chiudendo, durante il congedo, non 
 portare in primo piano, e se ne andrebbe senza aprire niente. Perciò la finestra dice a main quando
 comincia a chiudersi, e la richiesta che arriva da lì in poi si rimanda: all'uscita pulita main lancia,
 con istanza.riapri, la copia nuova, che aspetta l'uscita di questa e poi si apre.
+La scheda audio scelta da chi gioca (D20) la legge la finestra dalle impostazioni, prima di far nascere
+il motore; il motore di riserva per il suono dell'errore fatale la rilegge da sé.
 """
 
 import contextlib
@@ -162,12 +164,17 @@ def _apri_la_copia_rimandata():
 
 
 def _suona_l_errore():
-    """Il suono dell'errore, con un motore tutto suo: quello della finestra, a questo punto, può non esserci più."""
+    """
+    Il suono dell'errore, con un motore tutto suo: quello della finestra, a questo punto, può non esserci
+    più. Il motore nasce con la scheda audio delle impostazioni (D20), così l'errore si sente dove si
+    sentiva il gioco, per esempio nelle cuffie; se quella non c'è, sulla scheda automatica.
+    """
     with contextlib.suppress(Exception):
+        import impostazioni
         from motore_audio import Motore
         from suoni import Suoni
 
-        motore = Motore()
+        motore = Motore(scelta=impostazioni.carica().get("scheda"))
         try:
             motore.avvia()
             voce = Suoni(motore).suona("errore")

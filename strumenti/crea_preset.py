@@ -300,6 +300,17 @@ PRESET = {
                         "si 3 e, dopo una breve pausa, un fa 3 più lungo, il tritono che scende, al centro, in 410 ms. Va bene per un "
                         "salvataggio fallito, un disco che non scrive o un lavoro che non resta."),
     },
+    # La scelta della scheda audio (D20): la scheda scelta che non c'è o non si apre.
+    "ciechino_scheda_non_aperta": {
+        "score": [["d5", 0.025, -0.4, -0.2], ["p", 0.025, 0.0, -0.5], ["e5", 0.025, 0.0, -0.2], ["p", 0.06, 0.0, -0.5],
+                  ["c5.f#4", 0.22, 0.4, [-0.2, -0.32]]],
+        "kind": 4,
+        "adsr": [3.0, 30.0, 55.0, 30.0],
+        "descrizione": ("Ciechino, la scheda audio scelta non c'è o non si apre, e il suono va su quella automatica: il selettore di "
+                        "ciechino_scheda_audio che s'inceppa, dente di sega piano, due scatti brevissimi, re 5 e mi 5, e dopo una breve "
+                        "pausa una scivolata che cade dal do 5 al fa diesis 4 spegnendosi, da sinistra a destra, in 355 ms. Va bene per "
+                        "un collegamento che non riesce, un dispositivo che manca o un'uscita di ripiego."),
+    },
     # La finestra, i menu.
     "ciechino_classifica": {
         "score": [["e5", 0.08, -0.5, -0.05], ["p", 0.03, 0.0, -0.5], ["g5", 0.12, 0.0, 0.0], ["p", 0.03, 0.0, -0.5],
@@ -326,6 +337,19 @@ PRESET = {
         "descrizione": ("Ciechino, il volume cambiato dal menu Impostazioni: una sola nota di seno, la 5 al centro, che cresce dal "
                         "quasi silenzio al livello pieno, in 220 ms, così si sente il volume scelto. Va bene per provare un volume, un "
                         "livello o un guadagno."),
+    },
+    # La scelta della scheda audio (D20), con Ctrl+Maiusc+X: un selettore che gira e si ferma.
+    "ciechino_scheda_audio": {
+        "score": [["d6", 0.02, -0.6, -0.12], ["p", 0.025, 0.0, -0.5], ["e6", 0.02, -0.2, -0.12], ["p", 0.025, 0.0, -0.5],
+                  ["f#6", 0.02, 0.2, -0.12], ["p", 0.025, 0.0, -0.5], ["g#6", 0.02, 0.6, -0.12], ["p", 0.04, 0.0, -0.5],
+                  ["b5", 0.12, 0.0, -0.08]],
+        "kind": 3,
+        "adsr": [3.0, 35.0, 35.0, 30.0],
+        "descrizione": ("Ciechino, si apre la scelta della scheda audio, con Ctrl+Maiusc+X o dal menu Impostazioni: un selettore che "
+                        "gira e si ferma, onda triangolare, quattro scatti brevissimi che salgono per toni interi da sinistra a destra, "
+                        "re 6, mi 6, fa diesis 6 e sol diesis 6, e un si 5 più lungo al centro, dove il selettore si ferma, in 315 ms. "
+                        "Il suo seguito, quando la scheda scelta non si apre, è ciechino_scheda_non_aperta. Va bene per la scelta di "
+                        "un'uscita audio, un collegamento o un selettore."),
     },
     "ciechino_proiettile": {
         "score": [["e5.b5", 0.12, -0.6, -0.1], ["b5.f#5", 0.16, 0.6, -0.12]],

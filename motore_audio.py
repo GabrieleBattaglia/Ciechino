@@ -22,6 +22,15 @@ il tempo di gioco e gli eventi programmati: una partita bloccata e muta, senza u
 questo la finestra chiama controlla a ogni battito: un flusso che PortAudio dice non più attivo, o
 il cui callback tace da più di FLUSSO_FERMO_DOPO secondi, si dà per perso, e il motore passa al modo
 muto dal campione già scritto, così la partita va avanti senza suono e la finestra lo può dire.
+La scheda scelta (D20, 19 novembre 2026): chi gioca sceglie l'uscita fra quelle di schede.uscite(), cuffie Bluetooth
+comprese, e la scelta, salvata nelle impostazioni, arriva al motore. apri_flusso prova la scheda scelta, ritrovata per
+nome e interfaccia, poi l'automatica, poi il dispositivo predefinito, e dice com'è andata. cambia_scheda passa a un'altra
+scheda a motore avviato, anche a partita in corso: ferma e chiude il flusso di prima, o il filo muto, rilegge PortAudio se
+glielo si chiede, soltanto a flusso chiuso, e apre la scheda nuova, o lavora muto se non si apre niente. Il conto dei
+campioni riprende da dove si era fermato, quindi il tempo di gioco, gli eventi, le voci e il volume restano come erano.
+A produrre i campioni è sempre uno solo, il callback di un flusso o il filo muto: ognuno ha un numero, e soltanto quello
+del produttore attivo, controllato sotto il lucchetto del callback, fa avanzare il conto. Un callback di una scheda
+lasciata, che arrivasse ancora, scrive silenzio; un filo muto lasciato se ne va.
 Le notizie del filo dell'audio, voci finite, eventi scattati, buchi, errori e il flusso perso,
 arrivano al filo principale con notifiche(), perché il filo dell'audio non scrive mai su disco: ogni
 errore porta da dove viene, quante volte è già successo e, la prima volta, la pila delle chiamate,
@@ -31,6 +40,8 @@ così il registro degli errori ha ciò che serve per capire il guasto.
 import atexit
 import collections
 import contextlib
+import functools
+import inspect
 import threading
 import time
 import traceback
@@ -55,7 +66,8 @@ EVENTI_PER_BLOCCO = 64
 # rincorre il tempo perso con una raffica di blocchi: riparte da adesso.
 RITARDO_MASSIMO_MUTO = 0.25
 # Quanti secondi chiudi aspetta il filo muto, e quello che lascia un flusso perso, prima di andarsene
-# comunque.
+# comunque. Lo stesso tempo aspetta cambia_scheda la chiusura della scheda di prima: un driver bloccato
+# non deve bloccare la finestra per sempre.
 ATTESA_DELLA_CHIUSURA = 2.0
 # La guardia del flusso: un callback che tace per più di tanti secondi dell'orologio del flusso,
 # mentre il filo principale è sveglio e controlla, vuol dire una scheda che non risponde più. Mezzo
@@ -64,11 +76,15 @@ ATTESA_DELLA_CHIUSURA = 2.0
 # meccanica di gioco, come gli altri qui sopra: resta qui finché nessuno lo vorrà tarare.
 FLUSSO_FERMO_DOPO = 0.5
 
-# Perché l'ultima apri_flusso non ha aperto niente, o ha dovuto ripiegare sul dispositivo
-# predefinito: un pezzo per tentativo fallito, separati da punto e virgola; vuoto se il primo
-# tentativo è riuscito. La firma di apri_flusso non cambia, perché le prove la sostituiscono: il
-# motore legge qui il perché, dopo averla chiamata.
+# Perché l'ultima apri_flusso non ha aperto niente, o ha dovuto ripiegare su un'altra scheda: un
+# pezzo per tentativo fallito, separati da punto e virgola; vuoto se il primo tentativo è riuscito.
+# È lo stesso testo che apri_flusso scrive nella chiave errore del suo esito, che è da dove il motore
+# lo legge; qui resta per il registro, e per le funzioni d'apertura delle prove che lo scrivono.
 ULTIMO_ERRORE_DI_APERTURA = ""
+# Le chiavi dell'esito di un'apertura, che il motore tiene in esito_dell_apertura e cambia_scheda
+# restituisce, coi loro valori quando non si è aperto ancora niente.
+ESITO_VUOTO = {"aperta": False, "quale": None, "richiesta": {}, "mancante": False, "non_si_apre": False, "dispositivo": None, "interfaccia": None,
+               "latenza": None, "errore": "", "rilettura": None, "errore_della_rilettura": None}
 
 
 def _testo_dell_errore(errore):
@@ -372,33 +388,45 @@ def _tempo_scalare(ancore, campione, fs):
     return tempo + (campione - inizio) / fs * VELOCITA_DEL_TEMPO
 
 
-def apri_flusso(callback, fs, blocco):
-    """Apre e avvia il flusso di uscita a callback, stereo float32, blocco campioni per blocco, a
-    latenza AUDIO_LATENZA, sul dispositivo che scegli_dispositivo_audio di GBUtils trova per il
-    modo callback, con la conversione automatica di WASAPI se l'interfaccia è quella; se non si
-    apre ripiega sul dispositivo predefinito. Restituisce il flusso, o None se non si apre niente.
-    Il perché di ogni tentativo fallito resta in ULTIMO_ERRORE_DI_APERTURA, per il registro: senza,
-    chi gioca muto saprebbe soltanto che la scheda non si apre.
-    Le prove la sostituiscono, e il motore la cerca qui al momento di avviarsi."""
+def _concludi_l_apertura(esito, flusso, quale, falliti):
+    """La fine di apri_flusso: scrive nell'esito quale scheda si è aperta, None se nessuna, e il
+    perché dei tentativi falliti, che resta anche in ULTIMO_ERRORE_DI_APERTURA; restituisce il flusso."""
     global ULTIMO_ERRORE_DI_APERTURA
-    ULTIMO_ERRORE_DI_APERTURA = ""
+    esito["quale"] = quale if flusso is not None else None
+    esito["errore"] = ULTIMO_ERRORE_DI_APERTURA = "; ".join(falliti)
+    return flusso
+
+
+def apri_flusso(callback, fs, blocco, scelta=None, riprova=False, esito=None):
+    """Apre e avvia il flusso di uscita a callback, stereo float32, blocco campioni per blocco, a
+    latenza AUDIO_LATENZA, con la conversione automatica di WASAPI se l'interfaccia è quella.
+    Prova le schede in quest'ordine, e si ferma alla prima che si apre: la scheda della scelta
+    salvata, {"dispositivo", "interfaccia"}, ritrovata per nome e interfaccia fra schede.uscite(), se
+    la scelta non è vuota (D20); l'automatica, quella che scegli_dispositivo_audio di GBUtils trova per
+    il modo callback, rifatta da capo se riprova è vero, come serve dopo una rilettura delle schede,
+    che ne cambia gli indici; il dispositivo predefinito. Una scheda già provata non si riprova.
+    Restituisce il flusso, o None se non si apre niente. Se esito è un dizionario, lo riempie con
+    com'è andata: quale, la scheda aperta, "scelta", "automatica" o "predefinito", None se nessuna;
+    mancante, vero se la scelta non c'è fra le uscite, o se l'elenco non si legge; non_si_apre, vero
+    se c'è ma non si apre; errore, il perché di ogni tentativo fallito, separati da punto e virgola,
+    vuoto se il primo è riuscito. Lo stesso perché resta in ULTIMO_ERRORE_DI_APERTURA, per il
+    registro: senza, chi gioca muto saprebbe soltanto che la scheda non si apre.
+    Oltre ai tentativi, apre soltanto ciò che apre scegli_dispositivo_audio per provare l'automatica,
+    e soltanto se ci arriva; l'elenco delle uscite si legge senza aprire niente.
+    Le prove la sostituiscono, e il motore la cerca qui al momento di aprire la scheda."""
+    esito = {} if esito is None else esito
+    esito.update(quale=None, mancante=False, non_si_apre=False, errore="")
+    # Una scelta che non è un dizionario non si può ritrovare: vale l'automatica.
+    scelta = scelta if isinstance(scelta, dict) else {}
+    falliti = []
     try:
         import sounddevice as sd
     except Exception as errore:  # noqa: BLE001 - senza sounddevice si gioca muti, non si cade
-        ULTIMO_ERRORE_DI_APERTURA = f"sounddevice non si importa, {_testo_dell_errore(errore)}"
-        return None
-    falliti = []
-    tentativi = []
-    try:
-        from GBUtils import scegli_dispositivo_audio
+        falliti.append(f"sounddevice non si importa, {_testo_dell_errore(errore)}")
+        return _concludi_l_apertura(esito, None, None, falliti)
 
-        dispositivo, interfaccia = scegli_dispositivo_audio(modo="callback")
-        if dispositivo is not None:
-            tentativi.append((dispositivo, interfaccia))
-    except Exception as errore:  # noqa: BLE001 - senza la scelta si va col dispositivo predefinito
-        falliti.append(f"scelta del dispositivo, {_testo_dell_errore(errore)}")
-    tentativi.append((None, None))
-    for dispositivo, interfaccia in tentativi:
+    def prova(dispositivo, interfaccia, quale):
+        """Il flusso del dispositivo avviato, o None col perché in falliti."""
         flusso = None
         try:
             # Senza la conversione WASAPI accetta soltanto la frequenza impostata in Windows: un
@@ -408,29 +436,83 @@ def apri_flusso(callback, fs, blocco):
                                      device=dispositivo, extra_settings=extra, callback=callback)
             flusso.start()
         except Exception as errore:  # noqa: BLE001 - il dispositivo audio fallisce in molti modi, e si prova il seguente
-            if dispositivo is None:
-                quale = "dispositivo predefinito"
-            else:
-                quale = f"dispositivo {dispositivo}" + (f" di {interfaccia}" if interfaccia else "")
             falliti.append(f"{quale}, {_testo_dell_errore(errore)}")
             if flusso is not None:
                 # Un flusso che non si è avviato si chiude come può.
                 with contextlib.suppress(Exception):
                     flusso.close()
-            continue
-        ULTIMO_ERRORE_DI_APERTURA = "; ".join(falliti)
+            return None
         return flusso
-    ULTIMO_ERRORE_DI_APERTURA = "; ".join(falliti)
-    return None
+
+    provati = []
+    if scelta:
+        nome = f"scheda scelta {scelta.get('dispositivo')} di {scelta.get('interfaccia')}"
+        uscita = None
+        try:
+            import schede
+
+            uscita = schede.ritrova(scelta, schede.uscite())
+        except Exception as errore:  # noqa: BLE001 - senza l'elenco la scelta non si ritrova, e si va con l'automatica
+            falliti.append(f"elenco delle schede, {_testo_dell_errore(errore)}")
+        if uscita is None:
+            esito["mancante"] = True
+            falliti.append(f"{nome}, non è fra le uscite")
+        else:
+            flusso = prova(uscita["indice"], uscita["interfaccia"], f"{nome}, dispositivo {uscita['indice']}")
+            if flusso is not None:
+                return _concludi_l_apertura(esito, flusso, "scelta", falliti)
+            esito["non_si_apre"] = True
+            provati.append(uscita["indice"])
+    try:
+        from GBUtils import scegli_dispositivo_audio
+
+        dispositivo, interfaccia = scegli_dispositivo_audio(modo="callback", riprova=bool(riprova))
+    except Exception as errore:  # noqa: BLE001 - senza la scelta si va col dispositivo predefinito
+        falliti.append(f"scelta del dispositivo, {_testo_dell_errore(errore)}")
+    else:
+        if dispositivo is not None and dispositivo not in provati:
+            flusso = prova(dispositivo, interfaccia, f"dispositivo {dispositivo}" + (f" di {interfaccia}" if interfaccia else ""))
+            if flusso is not None:
+                return _concludi_l_apertura(esito, flusso, "automatica", falliti)
+    return _concludi_l_apertura(esito, prova(None, None, "dispositivo predefinito"), "predefinito", falliti)
 
 
-def _lascia_il_flusso(flusso):
-    """Chiude un flusso perso, nel filo che controlla gli fa partire accanto: prima abort, che non
-    aspetta di suonare ciò che resta, poi close. Un guasto non conta, perché la scheda non risponde
-    comunque; il filo a parte serve perché un driver bloccato non blocchi la finestra."""
-    for azione in ("abort", "close"):
-        with contextlib.suppress(Exception):
+def _chiudi_il_flusso(flusso, azioni, esito):
+    """Ferma e chiude un flusso, un'azione dopo l'altra, nel filo che il motore gli fa partire accanto,
+    perché un driver bloccato non blocchi la finestra. esito, un dizionario, riceve in fermato vero
+    se stop o abort sono riusciti, in chiuso vero se close è riuscita, e in errori il perché di ogni
+    azione fallita: un flusso perso fallisce spesso, e si va avanti lo stesso. Fermato o chiuso vuol
+    dire che il callback di quel flusso è uscito da PortAudio e non ci torna."""
+    for azione in azioni:
+        try:
             getattr(flusso, azione)()
+        except Exception as errore:  # noqa: BLE001 - un flusso guasto si chiude come si può
+            esito["errori"].append(f"{azione}, {_testo_dell_errore(errore)}")
+        else:
+            esito["chiuso" if azione == "close" else "fermato"] = True
+
+
+def _opzioni_accettate(funzione, opzioni):
+    """Delle opzioni, quelle che funzione accetta per nome: tutte se ha un parametro con due
+    asterischi, nessuna se la sua firma non si legge. Così una funzione d'apertura scritta come prima
+    di D20, apri(callback, fs, blocco), resta buona: apre la sua scheda, e il motore non le chiede altro."""
+    try:
+        parametri = list(inspect.signature(funzione).parameters.values())
+    except (TypeError, ValueError):
+        return {}
+    if any(parametro.kind is inspect.Parameter.VAR_KEYWORD for parametro in parametri):
+        return dict(opzioni)
+    nomi = {parametro.name for parametro in parametri if parametro.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)}
+    return {nome: valore for nome, valore in opzioni.items() if nome in nomi}
+
+
+def _scelta_valida(scelta):
+    """La scelta della scheda ripulita da schede.valida, o il dizionario vuoto dell'automatica."""
+    if not scelta:
+        return {}
+    import schede
+
+    return schede.valida(scelta)
 
 
 def _descrivi_flusso(flusso):
@@ -472,19 +554,31 @@ class _StatoMuto:
 class Motore:
     """Il motore audio: un flusso solo, le voci, il tempo di gioco, gli eventi programmati.
     apri è la funzione che apre il flusso, apri(callback, fs, blocco); None vuol dire
-    motore_audio.apri_flusso, cercata al momento di avvia così le prove la sostituiscono.
-    Gli attributi che si leggono da fuori: fs e blocco; flusso, None se il motore è muto; muto, vero
-    se lavora senza scheda, dall'avvio o da quando il flusso si è perso; flusso_perso, vero da quando
-    controlla ha dato il flusso per perso; avviato e chiuso; ultimo_errore, il perché dell'ultimo
-    guasto visto dal filo principale, None se non ce ne sono stati: dopo avvia dice perché la scheda
-    non si è aperta, o perché il timer di Windows non si è alzato, più pezzi separati da punto e
-    virgola; dopo controlla, perché il flusso si è perso. Gli errori del filo dell'audio arrivano
-    invece con notifiche()."""
+    motore_audio.apri_flusso, cercata al momento di aprire così le prove la sostituiscono. Se apri
+    accetta per nome scelta, riprova ed esito, come apri_flusso, il motore glieli passa: la scelta
+    della scheda, vero quando la scelta automatica va rifatta da capo, e un dizionario da riempire
+    con com'è andata; una funzione che non li accetta li riceve senza, apre la sua scheda, e il
+    motore la dà per la scheda chiesta.
+    scelta è la scheda salvata nelle impostazioni (D20), {"dispositivo", "interfaccia"}, o vuota per
+    l'automatica; la si cambia, anche a motore avviato, con cambia_scheda.
+    Gli attributi che si leggono da fuori: fs e blocco; scelta, la scelta della scheda che il motore
+    usa, ripulita da schede.valida; flusso, None se il motore è muto; muto, vero se lavora senza
+    scheda, dall'avvio, da quando il flusso si è perso o da un cambio di scheda che non ne ha aperta
+    nessuna; flusso_perso, vero da quando controlla ha dato il flusso per perso, fino a quando una
+    scheda nuova suona; avviato e chiuso; esito_dell_apertura, com'è andata l'ultima apertura, un
+    dizionario con le chiavi di ESITO_VUOTO che cambia_scheda descrive, None prima di avvia;
+    ultimo_errore, il perché dell'ultimo guasto visto dal filo principale, None se non ce ne sono
+    stati: dopo avvia dice perché la scheda scelta non si è aperta, o nessuna, o perché il timer di
+    Windows non si è alzato, più pezzi separati da punto e virgola; dopo controlla, perché il flusso
+    si è perso; dopo cambia_scheda, che cosa non è andato nel cambio, None se niente. Gli errori del
+    filo dell'audio arrivano invece con notifiche()."""
 
-    def __init__(self, fs=FS, blocco=AUDIO_BLOCCO, apri=None):
+    def __init__(self, fs=FS, blocco=AUDIO_BLOCCO, apri=None, scelta=None):
         self.fs = int(fs)
         self.blocco = int(blocco)
         self._apri = apri
+        self.scelta = _scelta_valida(scelta)
+        self.esito_dell_apertura = None
         self.flusso = None
         self.muto = False
         self.flusso_perso = False
@@ -498,12 +592,20 @@ class Motore:
         # Il callback della scheda e quello del filo muto non girano mai insieme: dopo un flusso perso,
         # un callback della scheda ancora in corso finisce prima che il filo muto cominci.
         self._lucchetto_del_callback = threading.Lock()
+        # Il numero del produttore attivo, il solo che fa avanzare il conto dei campioni, e l'ultimo
+        # numero dato: ogni flusso aperto e ogni filo muto ne ha uno suo. Zero vuol dire nessuno, come
+        # nel mezzo di un cambio di scheda. Si cambia soltanto sotto il lucchetto del callback.
+        self._produttore = 0
+        self._ultimo_produttore = 0
         # La guardia di controlla: i blocchi che la scheda ha chiesto, quanti ne aveva visti l'ultimo
         # controllo, l'ora di quel controllo e l'ora da cui il callback tace, sull'orologio del flusso.
         self._blocchi_della_scheda = 0
         self._blocchi_visti = None
         self._ultimo_controllo = None
         self._vivo_dal = None
+        # I flussi lasciati, perso o cambiato, che si chiudono in un filo a parte: coppie (filo, esito
+        # di _chiudi_il_flusso), finché non hanno finito bene; _filo_della_chiusura è l'ultimo filo.
+        self._chiusure = []
         self._filo_della_chiusura = None
         # Le strutture del filo dell'audio: le tocca soltanto il callback.
         self._voci = []
@@ -513,6 +615,9 @@ class Motore:
         self._campione = 0
         # Il primo campione dell'ultimo blocco preparato e l'istante in cui uscirà dalle casse.
         self._riferimento = None
+        # Il campione udibile non scende mai sotto questo: dopo un cambio di scheda vale il campione da
+        # cui la scheda nuova riparte, che fino al suo primo blocco ha un orologio diverso dal riferimento.
+        self._udibile_minimo = 0.0
         # Il tempo di gioco: all'inizio vale zero e scorre, come nella fase d'ascolto.
         self._ancore = ((0, 0.0, True),)
         self._lucchetto_ancore = threading.Lock()
@@ -532,9 +637,11 @@ class Motore:
     # Avvio e chiusura.
 
     def avvia(self):
-        """Apre il flusso e comincia a contare i campioni. Vero se suona davvero; falso se lavora
-        muto, senza scheda, oppure se il motore è già stato chiuso. Se lavora muto, ultimo_errore
-        dice perché, "apertura: " col perché di ogni tentativo, per il registro."""
+        """Apre il flusso sulla scheda della scelta e comincia a contare i campioni. Vero se suona
+        davvero; falso se lavora muto, senza scheda, oppure se il motore è già stato chiuso.
+        esito_dell_apertura dice su quale scheda suona, e se la scheda scelta mancava o non si apriva.
+        Se un tentativo d'apertura è fallito, ultimo_errore dice perché, "apertura: " col perché di
+        ogni tentativo, per il registro: anche quando poi un'altra scheda si è aperta."""
         if self.chiuso:
             return False
         if self.avviato:
@@ -548,41 +655,203 @@ class Motore:
             self._timer_alzato = True
         except Exception as errore:  # noqa: BLE001 - un timer più lasco si sopporta, un motore fermo no
             problemi.append(f"timer: {_testo_dell_errore(errore)}")
-        apri = self._apri if self._apri is not None else apri_flusso
-        flusso = None
-        perche = None
-        try:
-            flusso = apri(self._callback_della_scheda, self.fs, self.blocco)
-        except Exception as errore:  # noqa: BLE001 - senza flusso si gioca muti
-            perche = _testo_dell_errore(errore)
-            flusso = None
-        if flusso is None:
-            if perche is None:
-                # Il perché lo sa soltanto apri_flusso, che lo lascia nel modulo; un'altra funzione
-                # d'apertura, come quelle delle prove, non lo dice.
-                perche = (ULTIMO_ERRORE_DI_APERTURA if apri is apri_flusso else "") or "nessuna scheda audio si è aperta"
-            problemi.append(f"apertura: {perche}")
+        flusso, esito = self._apri_la_scheda(riprova=False)
+        if esito["errore"]:
+            problemi.append(f"apertura: {esito['errore']}")
         if problemi:
             self.ultimo_errore = "; ".join(problemi)
         atexit.register(self.chiudi)
-        if flusso is None:
-            self._avvia_muto()
-            return False
-        self.flusso = flusso
+        self._comincia(flusso, esito)
+        return flusso is not None
+
+    def _nuovo_produttore(self):
+        """Dà un numero nuovo al prossimo produttore e lo rende attivo, sotto il lucchetto del
+        callback: un blocco in corso finisce prima, e da qui nessun altro produttore tocca niente. La
+        guardia di controlla riparte da capo."""
+        with self._lucchetto_del_callback:
+            self._ultimo_produttore += 1
+            self._produttore = produttore = self._ultimo_produttore
+            self._blocchi_della_scheda = 0
+        self._blocchi_visti = self._ultimo_controllo = self._vivo_dal = None
+        return produttore
+
+    def _ferma_i_produttori(self):
+        """Nessun produttore è più attivo: un blocco in corso finisce, e poi il conto dei campioni
+        resta fermo finché un produttore nuovo non comincia. Restituisce il campione da cui ripartirà."""
+        with self._lucchetto_del_callback:
+            self._produttore = 0
+            return self._campione
+
+    def _apri_la_scheda(self, riprova):
+        """Apre il flusso sulla scheda della scelta, con un produttore nuovo, attivo già quando il
+        flusso comincia a chiedere blocchi. Restituisce (flusso o None, esito), con l'esito completo
+        delle chiavi che la funzione d'apertura non ha scritto: quella di una prova che non le scrive
+        ha aperto la scheda chiesta, o non ha aperto niente."""
+        apri = self._apri if self._apri is not None else apri_flusso
+        callback = functools.partial(self._callback_della_scheda, self._nuovo_produttore())
+        dettagli = {}
+        opzioni = _opzioni_accettate(apri, {"scelta": dict(self.scelta), "riprova": bool(riprova), "esito": dettagli})
+        flusso = None
+        perche = ""
         try:
-            self._latenza = float(flusso.latency)
-        except (AttributeError, TypeError, ValueError):
-            self._latenza = None
-        self._interfaccia, self._dispositivo = _descrivi_flusso(flusso)
-        return True
+            flusso = apri(callback, self.fs, self.blocco, **opzioni)
+        except Exception as errore:  # noqa: BLE001 - senza flusso si gioca muti
+            flusso = None
+            perche = _testo_dell_errore(errore)
+        # Il perché lo dice apri_flusso nel suo esito; una funzione d'apertura delle prove che prende il
+        # suo posto può lasciarlo nel modulo, come faceva lei prima di D20.
+        perche = "; ".join(parte for parte in (dettagli.get("errore") or "", perche) if parte)
+        if not perche and apri is apri_flusso:
+            perche = ULTIMO_ERRORE_DI_APERTURA
+        esito = {**ESITO_VUOTO, "richiesta": dict(self.scelta)}
+        esito["mancante"] = bool(dettagli.get("mancante", False))
+        if flusso is None:
+            esito["non_si_apre"] = bool(dettagli.get("non_si_apre", bool(self.scelta) and not esito["mancante"]))
+            esito["errore"] = perche or "nessuna scheda audio si è aperta"
+        else:
+            esito["non_si_apre"] = bool(dettagli.get("non_si_apre", False))
+            esito["quale"] = dettagli.get("quale") or ("scelta" if self.scelta else "automatica")
+            esito["errore"] = perche
+        return flusso, esito
+
+    def _comincia(self, flusso, esito):
+        """Da qui il motore suona sul flusso, o lavora muto se flusso è None, dal campione già scritto;
+        esito riceve la scheda, la sua latenza e se è aperta, e diventa esito_dell_apertura."""
+        if flusso is None:
+            self.flusso = None
+            self._interfaccia = self._dispositivo = self._latenza = None
+            self._riferimento = (self._campione, time.perf_counter())
+            self._avvia_muto()
+        else:
+            self.flusso = flusso
+            self.muto = False
+            try:
+                self._latenza = float(flusso.latency)
+            except (AttributeError, TypeError, ValueError):
+                self._latenza = None
+            self._interfaccia, self._dispositivo = _descrivi_flusso(flusso)
+        esito.update(aperta=flusso is not None, dispositivo=self._dispositivo, interfaccia=self._interfaccia, latenza=self._latenza)
+        self.esito_dell_apertura = esito
 
     def _avvia_muto(self):
-        """Da qui il motore lavora muto: un filo chiama il callback al passo del tempo vero, dal
-        campione già scritto, e butta via il suono. Serve all'avvio senza scheda e dopo un flusso perso."""
+        """Da qui il motore lavora muto: un filo, col suo numero di produttore, chiama il callback al
+        passo del tempo vero, dal campione già scritto, e butta via il suono. Serve all'avvio senza
+        scheda, dopo un flusso perso e dopo un cambio di scheda che non ne apre nessuna."""
         self.muto = True
-        self._ferma_muto.clear()
-        self._filo_muto = threading.Thread(target=self._gira_muto, name="Ciechino-motore-muto", daemon=True)
+        produttore = self._nuovo_produttore()
+        self._ferma_muto = ferma = threading.Event()
+        self._filo_muto = threading.Thread(target=self._gira_muto, args=(produttore, ferma), name="Ciechino-motore-muto", daemon=True)
         self._filo_muto.start()
+
+    def _chiudi_a_parte(self, flusso, azioni):
+        """Ferma e chiude un flusso lasciato in un filo a parte, che resta fra le chiusure finché non
+        ha finito bene; restituisce (filo, esito di _chiudi_il_flusso)."""
+        # Le chiusure di prima finite bene non servono più.
+        self._chiusure = [(filo, chiusura) for filo, chiusura in self._chiusure if filo.is_alive() or not (chiusura["fermato"] or chiusura["chiuso"])]
+        chiusura = {"fermato": False, "chiuso": False, "errori": []}
+        filo = threading.Thread(target=_chiudi_il_flusso, args=(flusso, azioni, chiusura), name="Ciechino-chiusura-del-flusso", daemon=True)
+        self._chiusure.append((filo, chiusura))
+        self._filo_della_chiusura = filo
+        filo.start()
+        return filo, chiusura
+
+    def _chiusure_finite(self, attesa=None):
+        """Vero se nessun flusso lasciato può essere ancora dentro PortAudio: ogni filo di chiusura ha
+        finito, aspettandoli tutti al più attesa secondi, ATTESA_DELLA_CHIUSURA se è None, e per
+        ognuno la fermata o la chiusura è riuscita. Le chiusure finite bene escono dall'elenco."""
+        scadenza = time.monotonic() + (ATTESA_DELLA_CHIUSURA if attesa is None else attesa)
+        restano = []
+        for filo, chiusura in self._chiusure:
+            if filo.is_alive() and filo is not threading.current_thread():
+                filo.join(max(0.0, scadenza - time.monotonic()))
+            if filo.is_alive() or not (chiusura["fermato"] or chiusura["chiuso"]):
+                restano.append((filo, chiusura))
+        self._chiusure = restano
+        return not restano
+
+    def cambia_scheda(self, scelta, rileggi=False):
+        """Passa alla scheda scelta, {"dispositivo", "interfaccia"} come da schede.da_salvare, o vuota
+        per l'automatica, a motore avviato, anche a partita in corso o in pausa (D20). La scelta
+        diventa quella del motore anche se poi non si apre, perché resta quella di chi gioca.
+        Il cambio, dal filo principale: nessun produttore è più attivo, così il conto dei campioni si
+        ferma dov'è; il flusso di prima si ferma e si chiude in un filo a parte, aspettato al più
+        ATTESA_DELLA_CHIUSURA secondi, oppure si ferma il filo muto, anche quello partito dopo un
+        flusso perso; con rileggi vero PortAudio si rilegge con schede.rileggi, che fa vedere le cuffie
+        Bluetooth accese dopo l'avvio, soltanto se nessun flusso lasciato, nemmeno quello perso, è più
+        dentro PortAudio, perché la rilettura con un flusso aperto può far cadere il processo; poi si
+        apre la scheda scelta, ritrovata fra le uscite di adesso, o l'automatica, rifatta da capo, se
+        la scelta manca o non si apre, o il dispositivo predefinito; se non si apre niente, il motore
+        lavora muto. Chi produce i campioni riparte dal campione dove il conto si era fermato: il
+        tempo di gioco con le sue ancore, gli eventi programmati, le voci, il volume e i comandi
+        arrivati intanto restano come erano, e una partita in pausa riprende come prima. Il campione
+        udibile resta fermo finché la scheda nuova non suona, e non torna mai indietro. Con la scheda
+        nuova che suona, flusso_perso torna falso e la guardia di controlla riparte da capo.
+        Restituisce l'esito, una copia di esito_dell_apertura: aperta, vero se suona su una scheda;
+        quale, "scelta", "automatica" o "predefinito", None se muto; richiesta, la scelta; mancante,
+        vero se la scelta non è fra le uscite; non_si_apre, vero se c'è ma non si apre; dispositivo,
+        interfaccia e latenza della scheda aperta, None se muto; errore, il perché dei tentativi
+        d'apertura falliti, vuoto se il primo è riuscito; rilettura, l'esito di schede.rileggi, None se
+        non c'è stata; errore_della_rilettura, perché la rilettura chiesta non c'è stata o è fallita,
+        None se è andata. ultimo_errore dice, per il registro, che cosa non è andato nel cambio, la
+        chiusura, la rilettura o l'apertura, o None se niente. Restituisce None, senza toccare niente,
+        se il motore è chiuso; un motore mai avviato tiene la scelta per quando si avvierà, e
+        restituisce None.
+        Per mostrare l'elenco delle schede con quelle arrivate dopo l'avvio, prima si rilegge restando
+        sulla scelta di adesso, con rileggi_le_schede, poi si cambia scheda senza rileggere."""
+        if self.chiuso:
+            return None
+        self.scelta = _scelta_valida(scelta)
+        if not self.avviato:
+            return None
+        problemi = []
+        campione = self._ferma_i_produttori()
+        vecchio, self.flusso = self.flusso, None
+        # Il filo muto, se c'è, se ne va al prossimo giro, perché non è più il produttore attivo; il
+        # segnale lo sveglia se aspetta.
+        self._ferma_muto.set()
+        filo_muto = self._filo_muto
+        if filo_muto is not None and filo_muto.is_alive() and filo_muto is not threading.current_thread():
+            filo_muto.join(ATTESA_DELLA_CHIUSURA)
+        if vecchio is not None:
+            filo, chiusura = self._chiudi_a_parte(vecchio, ("stop", "close"))
+            filo.join(ATTESA_DELLA_CHIUSURA)
+            if filo.is_alive():
+                problemi.append(f"chiusura: la scheda di prima non si è chiusa in {ATTESA_DELLA_CHIUSURA:g} secondi".replace(".", ","))
+            elif chiusura["errori"]:
+                problemi.append("chiusura: " + "; ".join(chiusura["errori"]))
+        rilettura = errore_della_rilettura = None
+        if rileggi:
+            if not self._chiusure_finite():
+                errore_della_rilettura = "una scheda lasciata è forse ancora dentro PortAudio, e rileggerlo adesso potrebbe far cadere Ciechino"
+            else:
+                try:
+                    import schede
+
+                    rilettura = schede.rileggi()
+                except Exception as errore:  # noqa: BLE001 - senza rilettura si sceglie fra le schede di prima
+                    errore_della_rilettura = _testo_dell_errore(errore)
+            if errore_della_rilettura:
+                problemi.append(f"rilettura: {errore_della_rilettura}")
+        # Fino al primo blocco della scheda nuova il riferimento è sull'orologio di prima: il campione
+        # udibile resta qui, dove il conto si è fermato.
+        self._udibile_minimo = float(campione)
+        flusso, esito = self._apri_la_scheda(riprova=True)
+        if esito["errore"]:
+            problemi.append(f"apertura: {esito['errore']}")
+        if flusso is not None:
+            self.flusso_perso = False
+        self._comincia(flusso, esito)
+        esito.update(rilettura=rilettura, errore_della_rilettura=errore_della_rilettura)
+        self.ultimo_errore = "; ".join(problemi) or None
+        return dict(esito)
+
+    def rileggi_le_schede(self):
+        """Rilegge le schede della macchina e torna sulla scelta di adesso, cioè
+        cambia_scheda(self.scelta, rileggi=True), e ne restituisce l'esito. Serve prima di mostrare
+        l'elenco a chi sceglie, perché ci siano anche le cuffie Bluetooth accese dopo l'avvio; e se la
+        scheda scelta mancava ed è tornata, il motore ci rientra. Il suono tace per il tempo del cambio,
+        qualche decimo di secondo."""
+        return self.cambia_scheda(self.scelta, rileggi=True)
 
     def controlla(self):
         """La guardia del flusso, che la finestra chiama dal filo principale a ogni battito.
@@ -599,7 +868,9 @@ class Motore:
         "flusso_perso" e riparte muto dal campione già scritto: le voci, il tempo di gioco e gli
         eventi programmati vanno avanti senza suono, e la partita non resta bloccata. stato()
         risponde allora aperto falso e perso vero. La scheda non si riapre da sola: per riavere il
-        suono si riapre Ciechino."""
+        suono si sceglie di nuovo la scheda (D20), con cambia_scheda, anche la stessa, meglio con
+        rileggi vero, perché delle cuffie riaccese possono avere un indice nuovo; oppure si riapre
+        Ciechino."""
         if self.chiuso or self.muto or self.flusso is None:
             return False
         motivo = self._motivo_della_perdita()
@@ -639,20 +910,22 @@ class Motore:
     def _perdi_il_flusso(self, motivo):
         """Lascia il flusso perso e passa al modo muto dal campione già scritto."""
         flusso = self.flusso
-        # Da qui il callback della scheda, se si rifacesse vivo, scrive silenzio e non tocca niente.
         self.flusso_perso = True
         self.flusso = None
-        campione = self._campione
+        # Da qui il callback della scheda, se si rifacesse vivo, scrive silenzio e non tocca niente.
+        campione = self._ferma_i_produttori()
         scheda = ", ".join(str(parte) for parte in (self._dispositivo, self._interfaccia) if parte)
         testo = f"{motivo}, sulla scheda {scheda}" if scheda else motivo
         self.ultimo_errore = f"flusso perso: {testo}"
         # Il campione udibile riparte da quello scritto, sull'orologio del filo muto: senza, fino al
         # primo blocco del filo muto lo si calcolerebbe dal tempo del DAC della scheda persa.
+        self._udibile_minimo = float(campione)
         self._riferimento = (campione, time.perf_counter())
         self._notifica("flusso_perso", campione, None, testo)
         self._avvia_muto()
-        self._filo_della_chiusura = threading.Thread(target=_lascia_il_flusso, args=(flusso,), name="Ciechino-flusso-perso", daemon=True)
-        self._filo_della_chiusura.start()
+        # Prima abort, che non aspetta di suonare ciò che resta, poi close; un guasto non conta, perché
+        # la scheda non risponde comunque.
+        self._chiudi_a_parte(flusso, ("abort", "close"))
 
     def chiudi(self):
         """Ferma tutto e lascia libera la scheda, aspettando che il callback sia uscito da
@@ -667,9 +940,9 @@ class Motore:
         with contextlib.suppress(Exception):
             atexit.unregister(self.chiudi)
         self._ferma_muto.set()
-        # Il filo muto, e quello che chiude un flusso perso: nessuno dei due deve restare dentro
+        # Il filo muto, e quelli che chiudono un flusso perso o cambiato: nessuno deve restare dentro
         # PortAudio o dentro il callback mentre l'interprete smonta i moduli.
-        for filo in (self._filo_muto, self._filo_della_chiusura):
+        for filo in (self._filo_muto, *(filo for filo, _chiusura in self._chiusure)):
             if filo is not None and filo.is_alive() and filo is not threading.current_thread():
                 filo.join(ATTESA_DELLA_CHIUSURA)
         flusso = self.flusso
@@ -715,16 +988,17 @@ class Motore:
     def campione_udibile(self):
         """Il campione che esce dalle casse adesso, con la parte frazionaria: il primo campione
         dell'ultimo blocco, più il tempo passato da quando quel blocco doveva arrivare al DAC. Sta
-        fra zero e campione_scritto, perché non si può sentire ciò che non è ancora pronto."""
+        fra zero e campione_scritto, perché non si può sentire ciò che non è ancora pronto; dopo un
+        cambio di scheda non scende sotto il campione da cui la scheda nuova è ripartita."""
         riferimento = self._riferimento
         if riferimento is None:
             return 0.0
         campione, dac = riferimento
         adesso = self._orologio()
         if adesso is None:
-            return float(campione)
+            return float(min(max(campione, self._udibile_minimo), self._campione))
         udibile = campione + (adesso - dac) * self.fs
-        return float(min(max(udibile, 0.0), self._campione))
+        return float(min(max(udibile, self._udibile_minimo, 0.0), self._campione))
 
     # Le voci.
 
@@ -862,9 +1136,13 @@ class Motore:
 
     def stato(self):
         """Come sta il motore, per chi lo guarda e per il registro: aperto, vero se suona su un
-        flusso; muto; perso, vero se il flusso si è perso durante il gioco; interfaccia, dispositivo e
-        latenza della scheda, che dopo un flusso perso dicono quella persa; blocco; buchi, il conto
-        dei buchi dall'avvio; voci, quelle che il callback sta suonando; errore, ultimo_errore."""
+        flusso; muto; perso, vero se il flusso si è perso durante il gioco, finché una scheda nuova
+        non suona; interfaccia, dispositivo e latenza della scheda, che dopo un flusso perso dicono
+        quella persa, e dopo un cambio di scheda quella nuova, o None se non se n'è aperta nessuna;
+        scelta, la scelta della scheda (D20), vuota per l'automatica; quale, "scelta", "automatica" o
+        "predefinito", la scheda su cui suona, None se è muto; blocco; buchi, il conto dei buchi
+        dall'avvio; voci, quelle che il callback sta suonando; errore, ultimo_errore."""
+        esito = self.esito_dell_apertura or {}
         return {
             "aperto": self.flusso is not None and not self.chiuso,
             "muto": self.muto,
@@ -872,6 +1150,8 @@ class Motore:
             "interfaccia": self._interfaccia,
             "dispositivo": self._dispositivo,
             "latenza": self._latenza,
+            "scelta": dict(self.scelta),
+            "quale": esito.get("quale") if self.flusso is not None else None,
             "blocco": self.blocco,
             "buchi": self._buchi,
             "voci": len(self._voci),
@@ -898,17 +1178,18 @@ class Motore:
 
     # Il filo dell'audio.
 
-    def _callback_della_scheda(self, outdata, frames, time_info, status):
-        """Il callback che riceve il flusso della scheda: conta il blocco per la guardia di
-        controlla e passa al callback comune, sotto il lucchetto che lo divide dal filo muto. Dopo
-        che controlla ha dato il flusso per perso, un callback che si rifacesse vivo scrive silenzio
-        e non tocca niente: il conto dei campioni e le voci sono ormai del filo muto."""
-        self._blocchi_della_scheda += 1
+    def _callback_della_scheda(self, produttore, outdata, frames, time_info, status):
+        """Il callback che riceve il flusso della scheda, col numero di produttore che il motore gli
+        ha dato all'apertura, legato con functools.partial: sotto il lucchetto che lo divide dal filo
+        muto, se è ancora il produttore attivo conta il blocco per la guardia di controlla e passa al
+        callback comune. Il callback di un flusso lasciato, perso o cambiato, che si rifacesse vivo
+        scrive silenzio e non tocca niente: il conto dei campioni e le voci sono ormai di un altro."""
         with self._lucchetto_del_callback:
-            if self.flusso_perso:
+            if produttore != self._produttore:
                 with contextlib.suppress(Exception):
                     outdata.fill(0)
                 return
+            self._blocchi_della_scheda += 1
             self._callback(outdata, frames, time_info, status)
 
     def _callback(self, outdata, frames, time_info, status):
@@ -1047,21 +1328,24 @@ class Motore:
             tempi = self._tempi_del_blocco(inizio, frames)
         return tempi
 
-    def _gira_muto(self):
+    def _gira_muto(self, produttore, ferma):
         """Il filo del motore muto: chiama il callback al passo del tempo vero, con perf_counter
-        come orologio del DAC, e butta via il suono. Prende il lucchetto del callback, così dopo un
-        flusso perso non gira mai insieme a un callback della scheda rimasto a metà."""
+        come orologio del DAC, e butta via il suono, finché ferma non scatta. Prende il lucchetto del
+        callback, così dopo un flusso perso non gira mai insieme a un callback della scheda rimasto a
+        metà; e se ne va da sé appena non è più il produttore attivo, come dopo un cambio di scheda."""
         passo = self.blocco / self.fs
         uscita = np.zeros((self.blocco, 2), dtype=np.float32)
         stato = _StatoMuto()
         prossimo = time.perf_counter()
-        while not self._ferma_muto.is_set():
+        while not ferma.is_set():
             adesso = time.perf_counter()
             if adesso < prossimo:
-                self._ferma_muto.wait(prossimo - adesso)
+                ferma.wait(prossimo - adesso)
                 continue
             if adesso - prossimo > RITARDO_MASSIMO_MUTO:
                 prossimo = adesso
             with self._lucchetto_del_callback:
+                if produttore != self._produttore:
+                    return
                 self._callback(uscita, self.blocco, _TempiMuti(prossimo), stato)
             prossimo += passo

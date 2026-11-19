@@ -11,6 +11,8 @@ titoli. Perciò, prima che wx crei qualunque finestra, il thread principale pass
 suo, che nessuno vede. Se il passaggio non riesce la suite non parte.
 Nessuna prova apre la scheda audio vera: motore_audio.apri_flusso risponde None, e il motore
 lavora muto; le prove che vogliono guidare il tempo usano il flusso finto di tests/aiuti_audio.py.
+Nessuna prova tocca PortAudio per le schede (D20): l'elenco, la scelta automatica e la rilettura di
+GBUtils sono quelli finti di SchedeFinte, che la fissatura schede_finte dà a chi la chiede.
 Nessuna prova parla: la sintesi di GBsintesi è sostituita da un registratore.
 """
 
@@ -93,6 +95,24 @@ def casse_mute(monkeypatch):
     except Exception:  # noqa: BLE001 - un modulo ancora in scrittura non deve fermare le prove degli altri
         return
     monkeypatch.setattr(motore_audio, "apri_flusso", lambda *argomenti, **opzioni: None)
+
+
+@pytest.fixture(autouse=True)
+def schede_finte(monkeypatch):
+    """Nessuna prova tocca PortAudio per le schede audio (D20): elenco_dispositivi_audio,
+    scegli_dispositivo_audio e rileggi_dispositivi_audio di GBUtils, che la vera scelta automatica
+    apre i dispositivi per provarli e la rilettura chiude e riapre PortAudio, sono quelli di una
+    SchedeFinte di aiuti_audio, che la prova riceve per guardarne le chiamate o cambiarne le uscite."""
+    from aiuti_audio import SchedeFinte
+
+    finte = SchedeFinte()
+    try:
+        import GBUtils
+    except Exception:  # noqa: BLE001 - senza GBUtils non c'è niente da sostituire, e le prove che lo usano falliscono da sé
+        return finte
+    for nome in ("elenco_dispositivi_audio", "scegli_dispositivo_audio", "rileggi_dispositivi_audio"):
+        monkeypatch.setattr(GBUtils, nome, getattr(finte, nome))
+    return finte
 
 
 class Detti(list):

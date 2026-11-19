@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pytest
 import wx
-from aiuti_audio import motore_finto
+from aiuti_audio import ALTOPARLANTI, ASIO, CUFFIE, CUFFIE_FINTE, DIGITALE, FlussoFinto, apri_finto, motore_finto
 
 import aggiornamento
 import classifica
@@ -28,11 +28,12 @@ import costanti
 import impostazioni
 import partita as modulo_partita
 import percorsi
+import schede
 import suoni
 from gui import dialoghi
 from gui import finestra as modulo_finestra
 from gui.finestra import FinestraPrincipale, guadagno_del_volume
-from motore_audio import VoceTono
+from motore_audio import Motore, VoceTono
 
 # Il buffer che prende il posto di ogni preset: corto, e non vuoto, così la voce nasce e il suono si annota.
 CAMPIONI_FINTI = 64
@@ -257,7 +258,7 @@ def test_i_menu_coi_tasti_giusti(finestra):
             tasti[voce.GetItemLabelText()] = rapido.ToString() if rapido is not None else None
     assert tasti == {
         "Nuova partita": "Ctrl+N", "Pausa": "Ctrl+P", "Classifica": "Ctrl+K", "Statistiche": "Ctrl+T", "Esci": "Ctrl+Q",
-        "Volume...": None, "Proiettile...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
+        "Volume...": None, "Scheda audio...": "Ctrl+Shift+X", "Proiettile...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
         "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
         "Entra al PUB, il gruppo di supporto...": None, "Chiedi aiuto al PUB...": None,
     }
@@ -1021,6 +1022,303 @@ def test_la_forma_salvata_arriva_alla_partita_all_apertura(app_wx, sentiti, mess
         _chiudi(finestra)
 
 
+# La scheda audio (D20).
+
+SCELTA_CUFFIE = {"dispositivo": CUFFIE, "interfaccia": "Windows WASAPI"}
+SCELTA_DIGITALE = {"dispositivo": DIGITALE, "interfaccia": "Windows WASAPI"}
+SCELTA_ASIO = {"dispositivo": ASIO, "interfaccia": "ASIO"}
+# Le frasi della vista, con la latenza del flusso finto, 20 millesimi.
+SUL_DIGITALE = "Il suono esce da Realtek Digital Output (Realtek(R) Audio), WASAPI, con una latenza di 20 millesimi di secondo."
+SUGLI_ALTOPARLANTI = "Il suono esce da Altoparlanti (Realtek(R) Audio), WASAPI, con una latenza di 20 millesimi di secondo."
+SULLA_FINTA = "Il suono esce da finta, con una latenza di 20 millesimi di secondo."
+MUTO = "Non trovo una scheda audio che si apra: Ciechino funziona lo stesso, ma senza suono."
+
+
+def apri_con_ripiego(callback, fs, blocco, scelta=None, riprova=False, esito=None):
+    """Come apri_flusso, ma finta: le cuffie mancano, l'ASIO c'è ma non si apre, e allora suonano gli altoparlanti, la
+    scelta automatica; le altre schede scelte si aprono, come col flusso finto di apri_finto."""
+    if scelta and scelta["dispositivo"] in (CUFFIE, ASIO):
+        esito.update(mancante=scelta["dispositivo"] == CUFFIE, non_si_apre=scelta["dispositivo"] == ASIO, quale="automatica",
+                     errore=f"scheda scelta {scelta['dispositivo']}, non si apre")
+        flusso = FlussoFinto(callback, fs, blocco)
+        flusso.device, flusso.interfaccia = ALTOPARLANTI, "Windows WASAPI"
+        flusso.start()
+        return flusso
+    return apri_finto(callback, fs, blocco, scelta=scelta, riprova=riprova)
+
+
+def _scrivi_la_scheda(scelta):
+    with open(percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI), "w", encoding="utf-8") as file:
+        json.dump({"scheda": scelta}, file)
+
+
+def _con_la_scheda(monkeypatch, apri=apri_finto, scelta=None):
+    """La finestra col motore del flusso finto, che apre le schede con apri e nasce con la scelta, attiva come quando si gioca."""
+    f = _crea(motore=Motore(apri=apri, scelta=scelta))
+    monkeypatch.setattr(f, "IsActive", lambda: True)
+    return f
+
+
+class Schede:
+    """Il dialogo delle schede al posto di quello vero: annota ciò che mostra e com'è la partita, poi sceglie la riga
+    della scheda indicata, o l'automatica con {}, e preme OK; con None preme Annulla."""
+
+    def __init__(self, monkeypatch, finestra, *scelte):
+        self.finestra = finestra
+        self.scelte = list(scelte)
+        self.visti = []
+        # Una funzione, perché diventi un metodo del dialogo e riceva il dialogo stesso.
+        monkeypatch.setattr(dialoghi.SceltaScheda, "ShowModal", lambda dialogo: self(dialogo))
+
+    def __call__(self, dialogo):
+        partita, motore = self.finestra.partita, self.finestra.motore
+        etichette = [c.GetLabel() for c in dialogo.pannello.GetChildren() if isinstance(c, wx.StaticText)]
+        self.visti.append({"righe": list(dialogo.righe), "scelta": dialogo.elenco.GetSelection(), "notizie": etichette[1:-1],
+                           "in_pausa": getattr(partita, "in_pausa", None), "muto": motore.muto, "flusso": motore.flusso})
+        scelta = self.scelte.pop(0)
+        if scelta is None:
+            return wx.ID_CANCEL
+        indice = 0 if not scelta else next(n for n, u in enumerate(dialogo.uscite, 1) if schede.da_salvare(u) == scelta)
+        dialogo.elenco.SetSelection(indice)
+        dialogo.conferma()
+        return dialogo.GetReturnCode()
+
+
+def test_il_motore_nasce_con_la_scheda_delle_impostazioni(app_wx, sentiti, messaggi, senza_modali, voce_finta):
+    """La scheda salvata arriva al motore che la finestra fa nascere; qui non si apre, perché il conftest tiene le casse
+    mute, e lo dicono la vista, il suono e la sintesi, senza cancellare la scelta."""
+    _scrivi_la_scheda(SCELTA_CUFFIE)
+    f = _crea()
+    try:
+        assert f.impostazioni["scheda"] == SCELTA_CUFFIE and f.motore.scelta == SCELTA_CUFFIE
+        perche = f"La scheda audio scelta, {CUFFIE}, WASAPI, non si apre."
+        riga = f"{perche} {MUTO}"
+        # Nella vista una frase per riga, il perché e poi il dove; alla sintesi una frase sola.
+        assert f.vista.GetValue().splitlines()[5:7] == [perche, MUTO]
+        f.suoni_d_avvio()
+        assert sentiti == ["avvio", "scheda_non_aperta"] and voce_finta == [riga]
+        assert sentiti.inizi[-1] >= CAMPIONI_FINTI + round(modulo_finestra.PAUSA_DOPO_L_AVVIO * f.motore.fs)
+        assert f.statistiche.dati["conti"]["scheda_non_aperta"] == 1 and f.impostazioni["scheda"] == SCELTA_CUFFIE
+    finally:
+        _chiudi(f)
+    # Senza scelta, nessuna notizia della scheda, né suono né sintesi.
+    _scrivi_la_scheda({})
+    f = _crea()
+    try:
+        assert f.motore.scelta == {} and f.vista.GetValue().splitlines()[5] == MUTO
+        sentiti.clear()
+        voce_finta.clear()
+        f.suoni_d_avvio()
+        assert sentiti == ["avvio"] and voce_finta == [] and f.statistiche.dati["conti"]["scheda_non_aperta"] == 1
+    finally:
+        _chiudi(f)
+
+
+@pytest.mark.parametrize(("scelta", "perche"), [(SCELTA_CUFFIE, "non c'è"), (SCELTA_ASIO, "non si apre")])
+def test_la_scheda_scelta_che_manca_suona_sull_automatica(app_wx, sentiti, messaggi, senza_modali, voce_finta, monkeypatch, scelta, perche):
+    f = _con_la_scheda(monkeypatch, apri_con_ripiego, scelta)
+    try:
+        nome = schede.nome_della_scheda(scelta)
+        prima = f"La scheda audio scelta, {nome}, {perche}: Ciechino suona su quella automatica."
+        riga = f"{prima} {SUGLI_ALTOPARLANTI}"
+        righe = f.vista.GetValue().splitlines()
+        assert righe[righe.index(prima) + 1] == SUGLI_ALTOPARLANTI
+        f.crash_precedente = "C:\\Ciechino\\Ciechino - Crash precedente.log"
+        f.suoni_d_avvio()
+        # Le notizie in fila, ognuna staccata dalla precedente.
+        assert sentiti == ["avvio", "crash_precedente", "scheda_non_aperta"] and voce_finta == [riga]
+        stacco = round(modulo_finestra.PAUSA_DOPO_L_AVVIO * f.motore.fs)
+        assert sentiti.inizi[2] == sentiti.inizi[1] + CAMPIONI_FINTI + stacco
+        assert f.statistiche.dati["conti"]["scheda_non_aperta"] == 1
+    finally:
+        _chiudi(f)
+
+
+def test_ctrl_maiusc_x_resta_ai_menu(finestra):
+    """Il gancio dei tasti prende soltanto lo spazio, F5 e F7 senza modificatori: Ctrl+Maiusc+X va avanti, al tasto rapido del menu."""
+    evento = _tasto(finestra, ord("X"), controllo=True, maiuscolo=True)
+    assert evento.GetSkipped() and finestra.partita.chiamate == []
+    voce = finestra.voci_del_menu[finestra.scegli_la_scheda]
+    assert voce.GetAccel().ToString() == "Ctrl+Shift+X" and voce.GetItemLabelText() == "Scheda audio..."
+
+
+def test_la_scheda_si_sceglie_dopo_la_rilettura(app_wx, sentiti, messaggi, senza_modali, voce_finta, schede_finte, monkeypatch):
+    """Ctrl+Maiusc+X: la partita si ferma, il motore rilegge le schede, così ci sono le cuffie accese dopo l'avvio, poi
+    l'elenco con la scheda in uso. La scheda scelta suona subito, si salva e si conta; la vista e la sintesi dicono dove."""
+    f = _con_la_scheda(monkeypatch)
+    try:
+        f._esegui(f.nuova_partita)
+        schede_finte.arrivate = [CUFFIE_FINTE]
+        dialogo = Schede(monkeypatch, f, SCELTA_DIGITALE)
+        f._esegui(f.scegli_la_scheda)
+        visto = dialogo.visti[0]
+        # La rilettura prima dell'elenco, e la partita ferma, come con ogni dialogo (D14).
+        chiamate = [chiamata[0] for chiamata in schede_finte.chiamate]
+        assert "rileggi" in chiamate and chiamate.index("rileggi") < chiamate.index("elenco")
+        assert visto["in_pausa"] is True
+        assert visto["righe"][0] == "Automatica, la scheda di Windows, in uso: finta" and visto["scelta"] == 0
+        assert f"{CUFFIE}, WASAPI, 3 ms" in visto["righe"] and visto["notizie"] == [SULLA_FINTA]
+        # Le righe in ordine di latenza, come le dà schede.uscite().
+        assert visto["righe"][1:] == [dialoghi.riga_della_scheda(u) for u in schede.uscite()]
+        assert sentiti == ["scheda_audio", "confermato"]
+        assert f.motore.scelta == SCELTA_DIGITALE and f.motore.flusso.scelta == SCELTA_DIGITALE
+        assert f.impostazioni["scheda"] == SCELTA_DIGITALE and _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == SCELTA_DIGITALE
+        assert f.vista.GetValue().endswith("\n" + SUL_DIGITALE) and voce_finta[-1] == SUL_DIGITALE
+        assert f.statistiche.dati["conti"]["scheda_cambiata"] == 1 and f.statistiche.dati["conti"]["scheda_non_aperta"] == 0
+        wx.Yield()
+        assert not f.partita.in_pausa
+        # Di nuovo: la riga della scheda in uso lo dice, ed è già scelta; OK lì non cambia niente.
+        dialogo = Schede(monkeypatch, f, SCELTA_DIGITALE, None, {})
+        f._esegui(f.scegli_la_scheda)
+        visto = dialogo.visti[0]
+        in_uso = [n for n, riga in enumerate(visto["righe"]) if riga.endswith(", in uso")]
+        assert in_uso == [visto["scelta"]] and visto["righe"][visto["scelta"]].startswith("Realtek Digital Output (Realtek(R) Audio), WASAPI, ")
+        assert visto["righe"][0] == "Automatica, la scheda di Windows"
+        assert sentiti[-2:] == ["scheda_audio", "confermato"] and voce_finta[-1] == "La scelta della scheda audio resta quella di prima. " + SUL_DIGITALE
+        # Annulla lascia tutto com'era.
+        f._esegui(f.scegli_la_scheda)
+        assert sentiti[-2:] == ["scheda_audio", "annullato"] and voce_finta[-1] == "La scelta della scheda audio non cambia. " + SUL_DIGITALE
+        assert f.motore.scelta == SCELTA_DIGITALE and _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == SCELTA_DIGITALE
+        # L'automatica.
+        f._esegui(f.scegli_la_scheda)
+        assert sentiti[-2:] == ["scheda_audio", "confermato"] and f.motore.scelta == {}
+        assert voce_finta[-1] == "Ciechino suona sulla scheda automatica, quella di Windows. " + SULLA_FINTA
+        assert _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == {} and f.statistiche.dati["conti"]["scheda_cambiata"] == 2
+        assert dialogo.scelte == []
+    finally:
+        _chiudi(f)
+
+
+def test_la_scheda_scelta_che_non_si_apre_resta_salvata(app_wx, sentiti, messaggi, senza_modali, voce_finta, monkeypatch):
+    f = _con_la_scheda(monkeypatch, apri_con_ripiego)
+    try:
+        dialogo = Schede(monkeypatch, f, SCELTA_ASIO, SCELTA_ASIO)
+        f._esegui(f.scegli_la_scheda)
+        riga = f"La scheda audio scelta, Realtek ASIO, ASIO, non si apre: Ciechino suona su quella automatica. {SUGLI_ALTOPARLANTI}"
+        assert sentiti == ["scheda_audio", "scheda_non_aperta"] and voce_finta[-1] == riga and f.vista.GetValue().endswith("\n" + riga)
+        # La scelta resta, nel motore e sul disco: le cuffie, o la scheda occupata, possono tornare.
+        assert f.motore.scelta == SCELTA_ASIO and _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == SCELTA_ASIO
+        conti = f.statistiche.dati["conti"]
+        assert (conti["scheda_cambiata"], conti["scheda_non_aperta"]) == (1, 1)
+        # Riaprendo l'elenco, la riga in uso è l'automatica; l'ASIO di nuovo, che non suona, si riprova, ma la scelta non cambia.
+        f._esegui(f.scegli_la_scheda)
+        visto = dialogo.visti[1]
+        assert visto["righe"][0] == f"Automatica, la scheda di Windows, in uso: {ALTOPARLANTI}, WASAPI" and visto["scelta"] == 0
+        # Il dialogo dice anche che la scheda scelta, appena riprovata dalla rilettura, non si apre.
+        assert visto["notizie"] == [riga]
+        assert sentiti[-2:] == ["scheda_audio", "scheda_non_aperta"] and voce_finta[-1] == riga
+        assert (conti["scheda_cambiata"], conti["scheda_non_aperta"]) == (1, 2)
+    finally:
+        _chiudi(f)
+
+
+def test_dopo_il_flusso_perso_la_scelta_della_scheda_ridà_il_suono(app_wx, sentiti, messaggi, senza_modali, voce_finta, monkeypatch):
+    f = _con_la_scheda(monkeypatch, scelta=SCELTA_DIGITALE)
+    try:
+        perso = "La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono scegli la scheda con Ctrl+Maiusc+X."
+        f.motore.flusso.active = False
+        f._al_battito()
+        assert f.motore.muto and f.motore.flusso is None and voce_finta[-1] == perso
+        dialogo = Schede(monkeypatch, f, None)
+        f._esegui(f.scegli_la_scheda)
+        # La rilettura ha già ridato il suono: il dialogo si apre col motore sulla scheda scelta, ed è lei la riga in uso.
+        visto = dialogo.visti[0]
+        assert not visto["muto"] and visto["flusso"] is f.motore.flusso and visto["notizie"] == [SUL_DIGITALE]
+        assert visto["righe"][visto["scelta"]].endswith(", in uso")
+        assert voce_finta[-1] == "La scelta della scheda audio non cambia. " + SUL_DIGITALE and f.motore.stato()["aperto"]
+        # Il flusso che si perde di nuovo si dice di nuovo.
+        f.motore.flusso.active = False
+        f._al_battito()
+        assert voce_finta[-1] == perso and voce_finta.count(perso) == 2
+    finally:
+        _chiudi(f)
+
+
+def test_il_flusso_perso_a_elenco_aperto_torna_con_ok_sulla_stessa_riga(app_wx, sentiti, messaggi, senza_modali, voce_finta, monkeypatch):
+    """Il battito gira anche dentro il dialogo: se la guardia del motore perde il flusso mentre l'elenco è aperto, OK sulla
+    riga che era in uso, con la stessa scelta, riapre la scheda invece di lasciare il gioco muto; niente si salva né si conta."""
+    _scrivi_la_scheda(SCELTA_DIGITALE)
+    f = _con_la_scheda(monkeypatch, scelta=SCELTA_DIGITALE)
+    try:
+        perso = "La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono scegli la scheda con Ctrl+Maiusc+X."
+        visti = []
+
+        def sceglie(dialogo):
+            # La scheda si stacca a elenco aperto, e il battito, che wx smista anche qui, lo vede.
+            f.motore.flusso.active = False
+            f._al_battito()
+            selezionata = dialogo.elenco.GetSelection()
+            visti.append((dialogo.righe[selezionata], f.motore.muto))
+            dialogo.conferma()
+            return dialogo.GetReturnCode()
+
+        monkeypatch.setattr(dialoghi.SceltaScheda, "ShowModal", sceglie)
+        f._esegui(f.scegli_la_scheda)
+        riga, muto = visti[0]
+        assert riga.startswith("Realtek Digital Output (Realtek(R) Audio), WASAPI, ") and riga.endswith(", in uso") and muto
+        assert perso in voce_finta
+        stato = f.motore.stato()
+        assert stato["aperto"] and not stato["perso"] and not f.motore.muto and f.motore.scelta == SCELTA_DIGITALE
+        assert sentiti[-2:] == ["scheda_audio", "confermato"] and voce_finta[-1] == SUL_DIGITALE
+        assert f.statistiche.dati["conti"]["scheda_cambiata"] == 0 and _leggi(costanti.FILE_IMPOSTAZIONI)["scheda"] == SCELTA_DIGITALE
+    finally:
+        _chiudi(f)
+
+
+def test_l_elenco_che_non_si_legge_e_la_rilettura_che_non_riesce(app_wx, sentiti, messaggi, senza_modali, schede_finte, monkeypatch):
+    import registro
+
+    righe = []
+    monkeypatch.setattr(registro, "scrivi", righe.append)
+    f = _con_la_scheda(monkeypatch)
+    try:
+        schede_finte.rotta = RuntimeError("PortAudio non si riapre")
+        dialogo = Schede(monkeypatch, f, None, {})
+        f._esegui(f.scegli_la_scheda)
+        visto = dialogo.visti[0]
+        assert visto["notizie"] == [SULLA_FINTA, "Non ho potuto rileggere le schede audio: quelle accese da poco, come delle cuffie Bluetooth, possono mancare."]
+        assert any(riga.startswith("Motore audio, cambio di scheda: rilettura: RuntimeError: PortAudio non si riapre") for riga in righe)
+        schede_finte.rotta = None
+
+        def elenco_rotto():
+            raise OSError("niente PortAudio")
+
+        monkeypatch.setattr(schede, "uscite", elenco_rotto)
+        f._esegui(f.scegli_la_scheda)
+        visto = dialogo.visti[1]
+        assert visto["righe"] == ["Automatica, la scheda di Windows, in uso: finta"]
+        assert visto["notizie"][-1] == "Non riesco a leggere l'elenco delle schede audio: niente PortAudio. Resta la scelta automatica."
+        # OK sull'automatica, che era già in uso e già scelta: niente cambia.
+        assert sentiti[-1] == "confermato" and f.statistiche.dati["conti"]["scheda_cambiata"] == 0
+    finally:
+        _chiudi(f)
+
+
+def test_il_suono_dell_errore_fatale_esce_dalla_scheda_scelta(monkeypatch):
+    import Ciechino
+    import motore_audio
+
+    _scrivi_la_scheda(SCELTA_CUFFIE)
+    nati = []
+
+    class MotoreFinto:
+        muto = True
+
+        def __init__(self, scelta=None):
+            nati.append(scelta)
+
+        def avvia(self):
+            return False
+
+        def chiudi(self):
+            nati.append("chiuso")
+
+    monkeypatch.setattr(motore_audio, "Motore", MotoreFinto)
+    monkeypatch.setattr(suoni.Suoni, "suona", lambda self, evento, *argomenti, **opzioni: None)
+    Ciechino._suona_l_errore()
+    assert nati == [SCELTA_CUFFIE, "chiuso"]
+
+
 # L'aiuto.
 
 def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
@@ -1033,8 +1331,9 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
         for voce, tasto in comandi:
             assert (f"{voce}: {tasto}." if tasto else f"{voce}: dal menu, senza tasto rapido.") in righe, voce
     assert "Manuale: Maiusc+F1." in righe and "Volume: dal menu, senza tasto rapido." in righe
-    # La voce nuova del proiettile (D17) entra nella guida da sola, perché la guida nasce dalla tabella dei menu.
-    assert "Il menu Impostazioni, con 4 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
+    # Le voci nuove del proiettile (D17) e della scheda audio (D20) entrano nella guida da sole, perché la guida nasce dalla tabella dei menu.
+    assert "Il menu Impostazioni, con 5 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
+    assert "Scheda audio: Ctrl+Maiusc+X." in righe
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
     assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
     assert sentiti == ["guida"]
@@ -1166,7 +1465,7 @@ def test_le_notizie_del_motore_vanno_nel_registro_riassunte(finestra, voce_finta
     finestra._al_battito()
     assert len(righe) == 4 and "si è ripetuto ancora 1 volta negli ultimi " in righe[3]
     # Il flusso perso: il registro, la vista e la sintesi lo dicono, una volta.
-    testo = "La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono esci e riapri Ciechino."
+    testo = "La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono scegli la scheda con Ctrl+Maiusc+X."
     coda.extend([Notifica("flusso_perso", 600, None, "flusso perso")] * 2)
     finestra._al_battito()
     assert righe[-1].startswith("Flusso audio perso al campione 600: flusso perso") and righe[-1].endswith(". Ciechino continua senza suono.")

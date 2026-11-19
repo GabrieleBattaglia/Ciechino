@@ -1,6 +1,6 @@
 """
 I dialoghi di Ciechino: il testo da leggere, il nome per la classifica, il volume, la forma del
-proiettile, la lingua, l'invito al caffè e la proposta dell'aggiornamento automatico.
+proiettile, la scheda audio, la lingua, l'invito al caffè e la proposta dell'aggiornamento automatico.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di gui/dialoghi.py di MESS. Ogni dialogo segue lo schema
 di GBwx: stile adattabile, controlli in un pannello che scorre, misura presa dal contenuto con
@@ -29,6 +29,7 @@ from GBwx import STILE_ADATTABILE, adatta_finestra, pannello_scorrevole
 import classifica
 import costanti
 import impostazioni as modulo_impostazioni
+import schede
 import testi
 from lingua import _
 
@@ -119,6 +120,28 @@ def riga_del_proiettile(forma):
         return nome[:1].upper() + nome[1:]
     # Traduttori: una riga dell'elenco delle forme del proiettile, come «Seno, il suono più puro e morbido, quasi un fischio».
     return _("{nome}, {carattere}").format(nome=nome[:1].upper() + nome[1:], carattere=carattere)
+
+
+def riga_dell_automatica(in_uso=False, scheda=""):
+    """
+    La prima riga dell'elenco delle schede audio (D20): la scelta automatica, che segue la scheda di
+    Windows. Quando Ciechino suona lì, la riga lo dice, col nome della scheda, se c'è.
+    """
+    if not in_uso:
+        return _("Automatica, la scheda di Windows")
+    if scheda:
+        # Traduttori: la prima riga dell'elenco delle schede audio, quando Ciechino suona sulla scelta automatica; {scheda} è come «Altoparlanti (Realtek(R) Audio), WASAPI».
+        return _("Automatica, la scheda di Windows, in uso: {scheda}").format(scheda=scheda)
+    return _("Automatica, la scheda di Windows, in uso")
+
+
+def riga_della_scheda(uscita, in_uso=False):
+    """La riga di un'uscita nell'elenco delle schede audio: quella di schede.etichetta, e in coda «in uso» se Ciechino suona lì."""
+    riga = schede.etichetta(uscita)
+    if not in_uso:
+        return riga
+    # Traduttori: la riga della scheda audio su cui suona Ciechino, nell'elenco delle schede; {scheda} è come «Cuffie (WH-1000XM4), WASAPI, 3 ms».
+    return _("{scheda}, in uso").format(scheda=riga)
 
 
 class _Dialogo(wx.Dialog):
@@ -488,6 +511,60 @@ class SceltaProiettile(_Dialogo):
             self.avvisa(_("Scegli una forma dall'elenco."), self.elenco)
             return
         self.scelta = self.forme[indice]
+        self.chiudi(wx.ID_OK)
+
+
+class SceltaScheda(_Dialogo):
+    """
+    La scheda audio di Ciechino (D20), sul modello della scelta della lingua: la spiegazione, con la
+    latenza dichiarata delle righe e la via a orecchio per tornare all'automatica se una scheda
+    esclusiva zittisce NVDA, poi le notizie, frasi che la finestra aggiunge, come quella che dice
+    dove suona Ciechino adesso; poi
+    l'elenco «Scheda audio», con prima la riga dell'automatica, la scheda di Windows, e poi una riga per
+    ogni uscita di uscite, l'elenco di schede.uscite(), detta con schede.etichetta; OK e Annulla, che vale
+    anche per Esc; la grazia dell'apertura, perché l'Invio tenuto giù dalla voce del menu non confermi.
+    in_uso è la riga su cui suona Ciechino, zero per l'automatica, o None se è muto: quella riga lo dice,
+    e per l'automatica con il nome della scheda in automatica. selezionata è la riga scelta
+    all'apertura; None vuol dire quella in uso, o l'automatica se nessuna è in uso.
+    Attributi uscite e righe; dopo OK indice, la riga scelta, e scelta, la scelta da salvare nelle
+    impostazioni, come da schede.da_salvare: il dizionario vuoto per l'automatica. Con Annulla restano
+    None.
+    """
+
+    GRAZIA_ALL_APERTURA = True
+
+    def __init__(self, genitore, uscite, in_uso=None, automatica="", selezionata=None, notizie=(), suona=None):
+        super().__init__(genitore, _("Scheda audio"), suona)
+        # La latenza delle righe è quella che la scheda dichiara; la vista, dopo la scelta, dice quella del flusso aperto,
+        # col blocco del gioco. Le esclusive possono zittire NVDA a ogni avvio: la via del ritorno va detta, e va a orecchio.
+        self.spiegazione(_("Automatica suona sulla scheda di Windows, e la riga della scheda su cui suona Ciechino finisce con in uso. "
+                           "Ogni riga dice la latenza che la scheda dichiara, di solito più bassa di quella che la vista dice dopo la scelta. "
+                           "La scheda scelta vale da subito e resta anche per i prossimi avvii. Se una scheda esclusiva zittisce NVDA, per "
+                           "tornare all'automatica premi Ctrl+Maiusc+X, aspetta il suono della scelta, poi premi Inizio e, dopo un secondo, Invio."))
+        for notizia in notizie:
+            if notizia:
+                self.spiegazione(notizia)
+        self.uscite = list(uscite)
+        self.righe = [riga_dell_automatica(in_uso == 0, automatica), *(riga_della_scheda(uscita, in_uso == n) for n, uscita in enumerate(self.uscite, 1))]
+        self.elenco = self.campo(_("&Scheda audio"), lambda: wx.ListBox(self.pannello, choices=self.righe, style=wx.LB_SINGLE), 1)
+        if selezionata is None:
+            selezionata = in_uso or 0
+        self.elenco.SetSelection(min(max(selezionata, 0), len(self.righe) - 1))
+        ok, _annulla = self.pulsanti((wx.ID_OK, _("&OK")), (wx.ID_CANCEL, _("&Annulla")))
+        ok.Bind(wx.EVT_BUTTON, self.conferma)
+        self.elenco.Bind(wx.EVT_LISTBOX_DCLICK, self.conferma)
+        self.indice = None
+        self.scelta = None
+        self.completa()
+        self.elenco.SetFocus()
+
+    def conferma(self, event=None):
+        indice = self.elenco.GetSelection()
+        if indice == wx.NOT_FOUND:
+            self.avvisa(_("Scegli una scheda dall'elenco."), self.elenco)
+            return
+        self.indice = indice
+        self.scelta = schede.da_salvare(self.uscite[indice - 1] if indice else None)
         self.chiudi(wx.ID_OK)
 
 

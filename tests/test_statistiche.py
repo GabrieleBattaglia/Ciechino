@@ -348,13 +348,18 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     s.conta("partite_col_seno", 8)
     s.conta("partite_col_triangolo", 9)
     s.conta("partite_con_la_sega_morbida", 10)
+    s.conta("scheda_cambiata", 11)
+    s.conta("scheda_non_aperta", 12)
     righe = s.righe()
     for riga in ("Cambi di lingua: 1.", "Mail al PUB preparate: 3.", "Mail d'aiuto al PUB coi registri allegati: 2.", "Partite entrate in classifica: 4.",
                  "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo aperto o un'altra finestra: 6.", "Cambi della forma del proiettile: 7.",
-                 "Partite col proiettile in seno: 8.", "Partite col proiettile in triangolo: 9.", "Partite col proiettile in sega morbida: 10."):
+                 "Partite col proiettile in seno: 8.", "Partite col proiettile in triangolo: 9.", "Partite col proiettile in sega morbida: 10.",
+                 "Cambi della scheda audio: 11.", "Schede audio scelte che non si sono aperte: 12."):
         assert riga in righe
-    # Il cambio del proiettile sta in breve, subito dopo quello della lingua (D17).
+    # Il cambio del proiettile sta in breve, subito dopo quello della lingua (D17), e dopo di lui le due voci della scheda audio (D20).
     assert righe.index("Cambi della forma del proiettile: 7.") == righe.index("Cambi di lingua: 1.") + 1
+    assert righe.index("Cambi della scheda audio: 11.") == righe.index("Cambi della forma del proiettile: 7.") + 1
+    assert righe.index("Schede audio scelte che non si sono aperte: 12.") == righe.index("Cambi della scheda audio: 11.") + 1
     # Nessuno di loro finisce negli altri conti, che restano per le chiavi nuove.
     assert not any("altri conti" in r for r in righe)
     assert [r for r in righe if r.startswith("Sezione ")][-1] == "Sezione 8 di 8, i suoni."
@@ -388,7 +393,7 @@ def test_ogni_chiave_contata_dalla_partita_e_dalla_finestra_ha_un_etichetta():
     radice = Path(statistiche.__file__).resolve().parent
     contate = _chiavi_contate(radice / "partita.py") | _chiavi_contate(radice / "gui" / "finestra.py")
     # La prova deve trovare davvero le chiamate: se non ne trova, il modo di contare è cambiato.
-    assert {"partite_iniziate", "ingressi_in_classifica", "proiettile_cambiato"} <= contate
+    assert {"partite_iniziate", "ingressi_in_classifica", "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta"} <= contate
     assert contate - set(statistiche.CHIAVI_DEI_CONTI) == set()
 
 

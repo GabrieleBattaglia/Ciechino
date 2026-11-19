@@ -243,6 +243,13 @@ SFUMATURA_STOP = 0.005
 # Oltre questo livello la somma delle voci passa da un tetto morbido.
 SOGLIA_DEL_TETTO = 0.9
 VOLUME_PREDEFINITO = 80
+# La scheda audio scelta da chi gioca (D20, 19 novembre 2026): nelle impostazioni si salvano queste due chiavi, il nome
+# del dispositivo e il nome intero della sua interfaccia, come «Windows WASAPI», mai l'indice, che cambia da un avvio
+# all'altro; il dizionario vuoto è la scelta automatica.
+CHIAVI_DELLA_SCHEDA = ("dispositivo", "interfaccia")
+# Le cuffie Bluetooth col microfono compaiono due volte, come cuffie e come vivavoce, che Windows apre per le telefonate
+# e che suona come un telefono: il vivavoce si riconosce da una di queste parole nel nome, in minuscolo.
+NOMI_DEL_VIVAVOCE = ("hands-free", "handsfree", "vivavoce")
 # Il battito della finestra, che fa avanzare la partita, in millesimi.
 BATTITO_MS = 10
 
