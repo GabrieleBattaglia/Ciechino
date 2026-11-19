@@ -1,0 +1,25 @@
+# Byte-compiled e pacchetti
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.zip
+# L'installatore di Inno Setup, che setup_maker.py scrive accanto a Ciechino.zip
+Ciechino-Setup-*.exe
+# Il file temporaneo della scrittura sicura dei dati
+*.tmp
+.pytest_cache/
+.ruff_cache/
+# I dati di chi gioca, accanto al programma: classifica, statistiche, impostazioni e la lingua
+# scelta. Con la barra davanti, perché valgono solo nella radice.
+/Ciechino - Classifica.json
+/Ciechino - Classifica.json.bak
+/Ciechino - Statistiche.json
+/Ciechino - Statistiche.json.bak
+/Ciechino - Impostazioni.json
+/Ciechino - Impostazioni.json.bak
+/selected_language.json
+# I registri delle sessioni, accanto al programma.
+Ciechino - *.log
+Ciechino - *.log.1
+auto_updater_error.log

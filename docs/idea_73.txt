@@ -1,0 +1,42 @@
+73. AirBoom (nome provvisorio)
+Puoi propormi nomi migliori se ne pensi alcuni, vanno bene sia in italiano che in inglese ma anche in altre lingue, meglio se divertenti, pensavo a ciechino: un gioco di parole fra cieco e cecchino.
+Questo sarà il mio nuovo gioco accessibile. Avrà un suo repostory dentro mine, sarà open source.
+Avrà una gui sullo stile di showdown e si giocherà con tastiera e suoni.
+Sarà compilato in modalità onedir con pyinstaller e impacchettato con l'intsaller predefinito come gli altri.
+Per rispettare il DRY, usa tutti gli strumenti utili nella collezione GBUtils, scrivendo nuovo codice solo dove necessario.
+La finestra principale avrà 2 aree di testo: la principale riporta la partita in corso, data, versione, nome programma, autore e altre info utili.
+Sotto una finestra sempre larga come tutto lo schermo ma meno alta, riporta le informazioni utili di contesto, sarà cioè una barra di stato.
+Avrà la barra dei menù con i comandi principali, nel menù aiuto, le 3 voci... pub e donazione, come gli altri progetti.
+Il gioco terrà una classifica top 100 che riporterà:
+posizione, nome, punteggio, età del record espresso in giorni.
+L'ordinamento sarà per punteggio.
+Fai un largo uso di costanti in un modulo apposito perchè, con l'esperienza dovremmo poter calibrare molte componenti matematiche della meccanica di gioco per un fine tuning che solo l'esperienza diretta potrà guidare.
+Il gioco si svolge in soggettiva, dal punto di vista del giocatore.
+Questi è dotato di un arma con cui dovrà sparare a dei bersagli volanti.
+Come si imposta il colpo.
+Si stabiliscono 3 parametri: direzione, alzo e potenza. Quindi il proiettile parte.
+Per ciascun parametro, la procedura è la seguente:
+3 brevi beep a frequenza crescente e a 33 ms di distacco l'uno dall'altro. Dopo il terzo beep, 33 ms di silenzio, poi parte un suono a portamento della duarata di 3 secondi. Il portamento sarà da sinistra a destra per la direzione; in hz dal basso all'alto per l'alzo e dal volume (da un minimo prossimo a 0) al massimo, per la potenza.
+Questi scivolamenti possono essere interrotti dalla pressione dello spazio. Al termine della terza scivolata, avremo i tre parametri scelti dall'utente.
+E' fondamentale che le scivolate consentano la scelta di tutti i valori della scala con la massima granularità possibile.
+Per i suoni che indicano le barre di potenza che scelgono i parametri puoi decidere se usare Acusticator in GBUtils o copiarne la tecnologia e scrivere un tool interno che faccia la stessa cosa con la precisione richiesta e soprattutto che sia interrompibile alla pressione di spazio, che determina con precisione il valore scelto.
+Al fine di rendere più facile per l'umano la comprensione del livello che via via viene raggiunto dalla scivolata, un secondo suono accompagnerà ogni scivolata. Questo suono sarà costituto da dei piccolissimi beep che si alzeranno di frequenza e saranno 10, uno ogni 30 ms cerca, 300/10, dureranno pochi ms e suoneranno ogni 10% circa dell'intera scivolata.
+Nota: la pausa dopo il raggiungimento del valore massimo, serve a compensare il normale tempo di reazione umana che deve poter selezionare anche il valore minimo ma non avrebbe il tempo per farlo se la barra successiva partisse immediatamente dopo quella che l'ha preceduta.
+Ottenuti i parametri bisogna calcolare una parabola che parte dal cannone, al centro dello schermo in basso e finisce lontano in uno spazio cubo davanti al giocatore.
+Il proiettile volerà e sarà rappresentato da un suono che avrà anch'esso 3 parametri a rappresentarne il movimento: la stereofonia per la direzione, il pitch per l'altezza dal suolo e il volume per la distanza dal punto di sparo.
+Il momento dello sparo del proiettile, dell'eventuale bersaglio colpito e dell'arrivo a terra del proiettile, quando non colpisce nulla, avranno anch'essi un suono, tipicamente rappresentato da un effetto costituito da rumore.
+Prima di ogni tiro, nello spazio cubo davanti al giocatore verrà posizionato un bersaglio sonoro con i 3 parametri descritti per il priettile che lo localizzano nello spazio. Il bersaglio avrà differenti pattern sonori (forme d'odna), diverse dimensioni (più grande=più facile da colpire), potrà essere statico o mobile e potrà essere da solo o con altri bersagli a seconda del livello di gioco.
+Quando il proiettile arriva a terra senza aver colpito un bersaglio, il tiro è fallito. Altrimenti verranno guadagnati punti in base alla difficoltà rappresentata dal tipo di bersaglio.
+I parametri del tiro devono poter coprire tutto lo spazio cubo ove vengono posizonati i bersagli.
+Dopo ogni tiro, viene riportato in finestra sia l'esito, che comunque ha un proprio evento sonoro, che i parametri del colpo e la traettoria seguitoa: quanto il colpo sia arrivato in alto, lontano e distante dal centro.
+La difficoltà cresce dopo ogni 10 successi.
+Ogni livello decrementa le dimensioni del bersaglio fino a richiedere un livello di estrema precisione. A livelli più alti i bersagli saranno in movimento nello spazio 3d; oltre a diventare più piccoli diverranno anche più veloci e ancora più su, ce ne saranno più di 1 presenti in volo.
+Ci saranno anche bersagli bonus che varranno 5 volte più degli altri che attraverseranno lo spazio target da un lato all'altro per poi uscire.
+Durante le operazioni di calibrazione del colpo, i bersagli e il tempo si fermano.
+Il gioco finisce quando 10 colpi sono stati sparati senza un successo.
+Dopo ogni livello vengono assegnati ulteriori 10 colpi che si sommano a quelli risparmiati. Il bersaglio speciale, oltre ai punti, ne dà altri 5.
+Durante il gioco calibreremo questa bilancia per ottenere una buona durabilità in gioco.
+Il nome viene chiesto solo se si entra in classifica.
+Istruzioni procedurali.
+E' necessario fare dei test con i suoni, sopratuttto per la calibrazione del colpo. Preparami dei bachi di prova con votazione e commenti, come al solito.
+I modello sonori dei bersagli saranno costituiti da pattern di movimento (piccolo) della loro frequenza. Tipicamente sanno degli LFO s sega, a sega inversa, sinusoidali, random, quadra eccetera... il movomento sarà di pochi hz e il centro di questi range rappresenta l'altezza del bersaglio nello spazio a cui si sommano i delta che ne definiscono la grandezza.

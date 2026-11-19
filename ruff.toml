@@ -1,0 +1,37 @@
+# Configurazione ruff di Ciechino, il tiro a segno a orecchio.
+# Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+# Nata il 19 novembre 2026 sul modello di quella di MESS. Le regole spente qui sotto portano il
+# motivo scritto accanto: ogni segnalazione che resta è perciò un difetto vero, da correggere e non
+# da nascondere. Il rientro è di quattro spazi, e W191 resta acceso.
+line-length = 200
+
+[lint]
+select = ["E", "F", "W", "B", "SIM", "UP", "I", "C4", "RET", "BLE", "S", "RUF", "DTZ"]
+builtins = ["_"]
+ignore = [
+    # Righe lunghe: i messaggi del gioco stanno su una riga sola, spesso con la format di seguito,
+    # e spezzarli renderebbe più difficile ritrovarli.
+    "E501",
+    # Lo stile di Gabriele ammette l'istruzione breve dopo i due punti, sulla stessa riga.
+    "E701",
+    "E741",
+    # random senza garanzie crittografiche è esattamente ciò che serve: qui si posizionano i
+    # bersagli. È un gioco, non un generatore di chiavi.
+    "S311",
+    # Gli if annidati restano dove separano condizioni di natura diversa.
+    "SIM102",
+    # L'operatore ternario al posto di un if else: un if esplicito si legge in modo lineare, che è
+    # ciò che serve a chi ascolta il codice.
+    "SIM108",
+    # Le date della classifica e delle statistiche sono locali per scelta: l'età di un record si
+    # conta in giorni del calendario di chi gioca.
+    "DTZ005",
+    "DTZ007",
+]
+
+[lint.per-file-ignores]
+# Nei test l'assert è lo strumento stesso della verifica.
+"tests/*" = ["S101", "DTZ001"]
+# I banchi d'ascolto leggono la tastiera della console e scrivono i loro esiti: niente di diverso
+# dai test.
+"strumenti/*" = ["S101"]

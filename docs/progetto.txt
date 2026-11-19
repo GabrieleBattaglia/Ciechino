@@ -1,0 +1,133 @@
+Ciechino, il tiro a segno a orecchio: il progetto.
+Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+Nasce il 19 novembre 2026 dal punto 73 di idee.txt, che sta intero in docs/idea_73.txt. Questo documento raccoglie le decisioni di Gabriele, l'architettura e il contratto fra i moduli: chi scrive un modulo rispetta le firme scritte qui, e chi cambia una firma aggiorna anche questo documento.
+
+Le decisioni di Gabriele.
+D1. Il nome è Ciechino, gioco di parole fra cieco e cecchino. Repository pubblico GabrieleBattaglia/Ciechino, licenza GPL 3, creato subito (19 novembre 2026).
+D2. I colpi sono una riserva: si parte con 10; ogni tiro a vuoto ne toglie uno, i centri non costano nulla; 10 centri chiudono il livello e danno altri 10 colpi, che si sommano a quelli risparmiati; il bersaglio bonus ne dà 5; a riserva vuota la partita finisce.
+D3. Una scivolata che arriva al massimo senza che si prema spazio vale il massimo; dopo la pausa parte la scivolata del parametro seguente.
+D4. Durante le tre scivolate bersagli e tempo sono fermi, ma i bersagli restano udibili, immobili e più piano.
+D5. Il bersaglio mancato resta dov'è: lo statico fermo, il mobile continua il suo giro; ne compare uno nuovo solo al posto di uno colpito.
+D6. Dopo un tiro a vuoto il resoconto dice di quanto e dove si è mancato il bersaglio più vicino, ma solo nei livelli bassi: fino a AIUTO_MANCATO_FINO_AL_LIVELLO, da decidere giocando.
+D7. Tutte le distanze sono in metri: il cubo dei bersagli è uno spazio realistico misurabile in metri, e ogni indicazione e misura del gioco usa il sistema metrico. Gli angoli si dicono in gradi, la potenza in metri al secondo e in percentuale della scala.
+D8. Un centro vale fino al doppio per la precisione: pieno nel centro il doppio, di striscio il punteggio base.
+D9. Lingua: come MeTeOra. Ciechino è in italiano, ma ogni testo per l'utente passa da lingua.py (_ , ngettext, plurale), con babel.cfg e il modello locales/messages.pot, così i collaboratori possono tradurlo.
+D10. I preset nuovi dei suoni vanno in Acu_Collection.json di GBUtils col prefisso ciechino_ e la firma usato_da, autorizzati da Gabriele il 19 novembre 2026, con la versione di GBUtils alzata e un commit a parte nel suo repository.
+D11. La classifica top 100 si mostra in testo semplice, una voce per riga, in una finestra di testo in sola lettura; va bene anche la vista principale, quando la si chiede o dopo un ingresso in classifica. Riporta posizione, nome, punteggio ed età del record in giorni; si ordina per punteggio; il nome si chiede solo a chi entra.
+D12. Il motore audio è di Ciechino (scelta lasciata a me da Gabriele nel punto 73): un flusso sounddevice a callback tutto suo, per sapere al campione che cosa esce dagli altoparlanti quando si preme spazio, per suonare voci con parametri che cambiano nel tempo e per mettere ogni suono al campione giusto. Da GBUtils si prendono la scelta dell'uscita, scegli_dispositivo_audio, e i preset della collezione, sintetizzati con Acusticator.preset e Acusticator.sintetizza; il mixer condiviso non si apre, così c'è un flusso solo e un solo orologio.
+
+Le regole del parco che valgono qui.
+Ogni modulo comincia con una docstring che dice cos'è, la riga "Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode)." e "Nasce il 2026-11-19 con la 0.1.0". Rientro di quattro spazi. Commenti e docstring in italiano, con gli accenti veri. Gli strumenti di GBUtils si importano, dentro le funzioni quando sono pesanti, e non si copiano; GBUtils non si modifica, tranne la collezione dei suoni di D10. Ogni testo per l'utente passa da lingua._ e non contiene separatori grafici come righe di trattini o di uguali; i numeri si scrivono all'italiana, la virgola per i decimali, il punto per le migliaia, le percentuali col simbolo, 64%. Le finestre wx sono accessibili a NVDA: ogni controllo ha un'etichetta creata subito prima di lui, le finestre interne si aprono massimizzate, Esc chiude quelle che hanno Chiudi, niente misure fisse in pixel (adatta_finestra di GBwx). Ogni azione ha il suo suono, e due eventi non condividono mai lo stesso preset. Le statistiche contano ogni caratteristica nuova. ruff check e pytest devono passare puliti.
+
+Lo spazio.
+Gli assi: x verso destra, y verso l'alto, z in avanti; il giocatore sta nell'origine e il cannone in (0, ALTEZZA_CANNONE, 0). Il cubo dei bersagli ha lato CUBO_LATO, 50 metri, e comincia a CUBO_DISTANZA, 30 metri: x da meno 25 a 25, y da 0 a 50, z da 30 a 80 (CUBO_X, CUBO_Y, CUBO_Z). Il centro di un bersaglio di raggio r sta dentro il cubo con tutto il bersaglio, e almeno ad ALTEZZA_MINIMA_BERSAGLIO da terra.
+Il tiro ha tre valori da 0 a 1, scelti con le scivolate. La direzione dà l'azimut, (2v meno 1) per AZIMUT_MASSIMO, 45 gradi, positivo a destra; l'alzo dà l'angolo sull'orizzonte, da ALZO_MINIMO a ALZO_MASSIMO, 0 e 85 gradi; la potenza dà la velocità alla bocca, VELOCITA_MINIMA più v alla ESPONENTE_POTENZA per (VELOCITA_MASSIMA meno VELOCITA_MINIMA), da 10 a 45 metri al secondo. La traiettoria è una parabola con gravità GRAVITA e senza attrito dell'aria, nel tempo di gioco. Ogni punto dove può stare un centro di bersaglio deve essere raggiungibile con tutti e tre i valori fra MARGINE_DI_COPERTURA e 1 meno MARGINE_DI_COPERTURA: lo verifica una prova automatica.
+Il suono dello spazio, uguale per proiettile, bersagli ed effetti: la panoramica è l'azimut del punto, atan2(x, z) in gradi diviso AZIMUT_DEL_PAN, fra meno 1 e 1, a potenza costante; la frequenza è FREQUENZA_AL_SUOLO per 2 alla y diviso METRI_PER_OTTAVA, con y fra 0 e ALTEZZA_TETTO_DEL_SUONO; il guadagno in decibel è GUADAGNO_DB_VICINO meno DB_PER_METRO per la distanza tridimensionale dal cannone, mai sotto GUADAGNO_DB_MINIMO.
+
+Il tempo.
+Il motore audio tiene due orologi. Il primo è il campione: ogni voce comincia e finisce a un campione preciso del flusso, contato da quando il flusso è nato. Il secondo è il tempo di gioco, in secondi, che scorre con i campioni a VELOCITA_DEL_TEMPO e si ferma durante la mira e la pausa: bersagli e proiettile hanno la posizione in funzione del tempo di gioco, quindi fermando il tempo si fermano tutti insieme, e il volo resta coerente con ciò che si sente. L'LFO dei bersagli invece segue il tempo dell'audio, così un bersaglio fermo continua a vibrare.
+Il campione udibile è quello che esce dagli altoparlanti adesso: lo calcola il motore dall'ultimo outputBufferDacTime del callback e da stream.time, che sono lo stesso orologio. È la base del valore scelto con lo spazio.
+
+La mira.
+Nella fase d'ascolto lo spazio avvia la mira: il tempo di gioco si ferma, i bersagli scendono di ATTENUAZIONE_IN_MIRA_DB con una rampa, e per ciascun parametro, nell'ordine di PARAMETRI, si suona un buffer preparato da sintesi.scivolata: PAUSA_FRA_BARRE di silenzio (che non sta nel buffer: il buffer comincia a pausa finita), tre bip di BIP_DURATA a BIP_FREQUENZE del parametro, separati da BIP_DISTACCO di silenzio, poi BIP_SILENZIO_FINALE, poi la scivolata di SCIVOLATA_DURATA con le TACCHE. La direzione è un suono di forma SCIVOLATA_FORMA a DIREZIONE_FREQUENZA che va da tutto a sinistra a tutto a destra; l'alzo sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] su scala esponenziale, al centro; la potenza è a POTENZA_FREQUENZA, al centro, e cresce linearmente in decibel da POTENZA_DB_MINIMO a 0 (relativi a SCIVOLATA_DB). Le tacche sono TACCHE bip di TACCA_DURATA, con frequenze da TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1] su scala esponenziale, la k-esima (k da 1 a 10) che finisce a k decimi della scivolata, quindi la decima che chiude la scala.
+Lo spazio premuto durante la mira vale secondo il campione udibile, meno COMPENSAZIONE_DEL_TASTO: nella pausa non conta; nei bip e nel silenzio che li segue sceglie il minimo, 0; nella scivolata sceglie la frazione percorsa, continua, senza gradini; dopo la fine, ma prima che il battito se ne accorga, sceglie il massimo. Senza spazio, quando il campione udibile supera la fine della scivolata di MARGINE_DOPO_LA_SCIVOLATA, il valore è il massimo (D3). Ogni valore preso fa suonare valore_preso, e la scivolata in corso si ferma con SFUMATURA_STOP. La funzione che fa questo conto è mira.valore_scelto, la stessa per il gioco e per il banco della mira.
+Dopo il terzo valore parte il colpo: suono dello sparo, voce del proiettile, bersagli al volume pieno, tempo che riprende a scorrere dallo stesso campione.
+
+Il volo.
+Al momento dello sparo il volo è deterministico: volo.calcola_volo prende la traiettoria, i bersagli vivi e il tempo di gioco della partenza, e cerca a passi di PASSO_DEL_VOLO il primo istante in cui il proiettile tocca un bersaglio, cioè la distanza fra i centri scende a raggio più RAGGIO_PROIETTILE, con un'interpolazione fra i due passi; altrimenti il volo finisce a terra, y uguale a 0. La precisione di un centro è 1 meno la distanza minima fra i centri nel tratto in cui il proiettile resta dentro il bersaglio, divisa per raggio più RAGGIO_PROIETTILE, fra 0 e 1. Per un tiro a vuoto si cerca il bersaglio passato più vicino e la scomposizione dello scarto nel punto più vicino: radiale, cioè lungo se positivo e corto se negativo, lungo la direzione orizzontale del bersaglio; laterale, a destra se positivo; verticale, sopra se positivo.
+Il motore riceve la voce del proiettile e un evento programmato al tempo di gioco della fine: nell'evento, dentro il filo dell'audio e al campione esatto, la voce del proiettile finisce, parte l'effetto già pronto (colpito o a_terra, collocato nello spazio) e, se è un centro, finisce la voce del bersaglio. Il resoconto arriva quando il campione udibile ha passato la fine del volo, così si legge dopo aver sentito l'impatto.
+
+I bersagli.
+Ogni bersaglio ha forma dell'LFO (FORME_LFO), raggio, posizione di partenza, velocità, il tempo di gioco in cui è nato, la frequenza dell'LFO (fra FREQUENZA_LFO[0] e [1]), una fase e un seme. Fermo, sta dov'è nato; mobile, va in linea retta e rimbalza sulle pareti della zona dove può stare il suo centro, con una funzione a triangolo per ogni asse, calcolabile in qualunque istante senza simulare i rimbalzi; il bonus entra da un lato del cubo, lo attraversa lungo x in durata_del_bonus(livello) secondi e poi esce, e da quel momento non è più vivo.
+Il suono di un bersaglio: portante BERSAGLIO_FORMA, frequenza del centro per 2 alla (lfo per mezza escursione in ottave), dove la mezza escursione è raggio per FATTORE_ESCURSIONE diviso METRI_PER_OTTAVA: così l'oscillazione copre le altezze del bersaglio, da y meno r a y più r. Panoramica e guadagno dalla posizione, più BERSAGLIO_DB. Le forme dell'LFO: seno; sega, che sale e ricade; sega_inversa, che scende e risale; triangolo; quadra, con i fronti smussati di qualche millesimo contro i click; casuale, un valore nuovo a ogni ciclo, tenuto fermo; deriva, valori a caso a ogni ciclo raccordati col coseno. Casuale e deriva sono deterministici, dati seme e numero del ciclo.
+I livelli: raggio_del_livello(n) è il massimo fra RAGGIO_MINIMO e RAGGIO_INIZIALE per RIDUZIONE_DEL_RAGGIO alla n meno 1; velocita_del_livello(n) è 0 prima di LIVELLO_DEI_MOBILI, poi VELOCITA_INIZIALE_BERSAGLI più AUMENTO_DI_VELOCITA per (n meno LIVELLO_DEI_MOBILI), al massimo VELOCITA_MASSIMA_BERSAGLI; quanti_bersagli(n) è 1 più quanti dei LIVELLI_CON_UN_BERSAGLIO_IN_PIU sono minori o uguali a n; durata_del_bonus(n) è DURATA_BONUS_INIZIALE meno RIDUZIONE_DURATA_BONUS per (n meno LIVELLO_DEI_BONUS), mai sotto DURATA_BONUS_MINIMA. Il bonus ha raggio raggio_del_livello(n) per RAGGIO_BONUS_FATTORE. A ogni nuova fase d'ascolto, dal LIVELLO_DEI_BONUS e senza un bonus in volo, ne compare uno con PROBABILITA_BONUS.
+
+Punti, riserva, livelli.
+Un centro vale PUNTI_BASE per (RAGGIO_DI_RIFERIMENTO diviso raggio) alla ESPONENTE_DEL_RAGGIO, per (1 più velocità del bersaglio diviso VELOCITA_DI_RIFERIMENTO), per (1 più PREMIO_PRECISIONE per precisione), per MOLTIPLICATORE_BONUS se è un bonus, arrotondato all'intero. Un centro su un bonus dà anche COLPI_BONUS colpi. Un tiro a vuoto toglie un colpo; a zero la partita finisce. CENTRI_PER_LIVELLO centri chiudono il livello: livello più uno, COLPI_PER_LIVELLO colpi in più, bersagli tutti nuovi del livello nuovo.
+
+I moduli e il contratto.
+version.py, costanti.py, percorsi.py, lingua.py: già scritti, la base di tutti.
+
+fisica.py, senza wx e senza audio, tutto vettorizzabile con numpy (le funzioni accettano scalari o array).
+  parametri_del_tiro(direzione, alzo, potenza) restituisce (azimut_gradi, alzo_gradi, velocita).
+  valori_del_tiro(azimut_gradi, alzo_gradi, velocita) è l'inversa, e restituisce i tre valori da 0 a 1.
+  class Traiettoria(azimut_gradi, alzo_gradi, velocita, origine=None): origine predefinita (0, ALTEZZA_CANNONE, 0). Attributi azimut, alzo, velocita, origine (array di 3), iniziale (vettore velocità, array di 3). posizione(t) con t scalare o array restituisce un array (3,) o (N, 3). tempo_a_terra() il primo t positivo con y nulla. apice() restituisce (t, altezza). punto_a_terra().
+  pan_di(x, z), frequenza_di(y), guadagno_db_di(distanza), guadagno_di(distanza) lineare, distanza_dal_cannone(posizioni), suono_di(posizioni) che per un array (N, 3) restituisce (frequenze, pan, guadagni lineari).
+  scomponi(delta, punto_del_bersaglio) restituisce (radiale, laterale, verticale) dello scarto delta = proiettile meno bersaglio.
+  soluzione(punto) restituisce i tre valori da 0 a 1 di un tiro che passa per il punto con tutti i valori dentro i margini di copertura, oppure None: serve alla prova della copertura e ai banchi.
+
+bersagli.py, senza wx e senza audio.
+  @dataclass class Bersaglio: numero, forma, raggio, partenza (array 3), velocita (array 3), nato (tempo di gioco), bonus, frequenza_lfo, fase_lfo, seme. Proprietà mobile e velocita_scalare. posizione(t) per t di gioco scalare o array. vivo(t) vero o array di booleani. tempo_di_uscita: per il bonus il tempo di gioco dell'uscita, per gli altri None. lfo(t_audio) array fra meno 1 e 1. mezza_escursione_ottave(). parametri_sonori(tempi_di_gioco, tempi_audio) restituisce (frequenze, pan, guadagni lineari) per la voce del motore, BERSAGLIO_DB compreso.
+  raggio_del_livello(n), velocita_del_livello(n), quanti_bersagli(n), durata_del_bonus(n).
+  genera(livello, rng, numero, tempo) un bersaglio normale del livello, posizione a caso uniforme nella zona permessa, direzione del moto a caso sulla sfera se mobile, forma a caso fra FORME_LFO. genera_bonus(livello, rng, numero, tempo).
+  rng è un random.Random.
+
+volo.py, senza wx e senza audio.
+  @dataclass class Volo: traiettoria, partenza (tempo di gioco dello sparo), durata (secondi di volo fino all'impatto o a terra), colpito (Bersaglio o None), punto_finale (array 3), precisione (0-1, o None), distanza_al_centro (distanza minima fra i centri nel centro, o None), vicino (il bersaglio passato più vicino in un tiro a vuoto, o None), distanza_dal_vicino, scarto (radiale, laterale, verticale) o None, altezza_massima (fino alla fine del volo), gittata (distanza orizzontale del punto finale dal cannone), laterale_finale (x del punto finale).
+  calcola_volo(traiettoria, bersagli, partenza) restituisce il Volo; considera solo i bersagli vivi istante per istante.
+  parametri_del_proiettile(volo) restituisce la funzione parametri(tempi_di_gioco, tempi_audio) per la voce del proiettile: posizione al tempo di volo (tempo di gioco meno partenza, fra 0 e durata), suono_di, più PROIETTILE_DB.
+
+sintesi.py, solo numpy.
+  FORME_PORTANTI = ("seno", "triangolo", "sega_morbida", "organo"): sintesi additiva con poche armoniche, ognuna tolta dove supererebbe 18.000 hertz, così niente aliasing; triangolo armoniche dispari a 1/n², sega_morbida tutte a 1/n con una caduta, organo fondamentale con seconda e terza deboli.
+  class Oscillatore(forma): rendi(frequenze) restituisce un blocco mono dalle frequenze di ogni campione, con la fase che prosegue da un blocco all'altro.
+  lfo(forma, tempi, frequenza, fase=0.0, seme=0) array fra meno 1 e 1, forme di FORME_LFO.
+  panoramica(mono, pan) restituisce (N, 2) float32, pan scalare o array, a potenza costante come Acusticator.
+  db_in_lineare(db), lineare_in_db(x).
+  bip(frequenza, durata, db, forma="seno") con rampe di un millesimo contro i click.
+  @dataclass class Scivolata: parametro, buffer (N, 2) float32, inizio_scivolata (campione del buffer dove comincia la scala), campioni_scivolata.
+  scivolata(parametro, forma=None, frequenze=None, db_minimo=None, curva=None, tacche=True, tacca_db=None, bip_durata=None) costruisce il buffer della mira descritto sopra, con i valori di costanti.py dove l'argomento è None; curva vale "esponenziale" o "lineare" per l'alzo (in hertz) e "decibel" o "ampiezza" per la potenza: le varianti servono ai banchi.
+
+mira.py, la funzione che si condivide fra gioco e banco.
+  valore_scelto(campione_udibile, inizio_buffer, scivolata, compensazione=None) restituisce (valore, esito): esito "pausa" con valore None prima di inizio_buffer, "minimo" con 0.0 nei bip e nel silenzio, "scelto" con la frazione nella scala, "massimo" con 1.0 dopo la fine. compensazione predefinita COMPENSAZIONE_DEL_TASTO, in secondi.
+
+motore_audio.py.
+  apri_flusso(callback, fs, blocco) apre e avvia un sounddevice.OutputStream a callback, stereo float32, blocksize blocco, latency AUDIO_LATENZA, sul dispositivo di scegli_dispositivo_audio(modo="callback") di GBUtils, con WasapiSettings(auto_convert=True) se l'interfaccia è WASAPI, e ripiega sul dispositivo predefinito se non si apre; restituisce il flusso o None. Le prove la sostituiscono.
+  class Voce: inizio (campione), fine (campione o None), guadagno lineare con rampa, finita. rendi(campione, n, tempi_di_gioco, tempi_audio) restituisce un blocco (n, 2) float32 o None, già con inizio e fine al campione dentro il blocco.
+  class VoceBuffer(Voce)(buffer, inizio, guadagno=1.0): un suono già pronto.
+  class VoceTono(Voce)(parametri, forma, inizio, guadagno=1.0): parametri(tempi_di_gioco, tempi_audio) restituisce (frequenze, pan, guadagni lineari) di ogni campione; la voce li suona con un Oscillatore e la panoramica.
+  class Motore(fs=FS, blocco=AUDIO_BLOCCO, apri=None): apri predefinito motore_audio.apri_flusso, cercato al momento di avvia così le prove lo sostituiscono.
+    avvia() vero se suona davvero; senza flusso il motore lavora muto, con un filo che chiama il callback al passo del tempo vero e scarta il suono, così la partita funziona uguale.
+    chiudi(), anche alla fine del processo con atexit.
+    campione_scritto, il prossimo campione che il callback preparerà.
+    prossimo_campione(blocchi=2) un campione futuro sicuro da cui far partire una voce, campione_scritto più tanti blocchi.
+    campione_udibile() il campione che esce adesso, float.
+    suona(buffer, inizio=None, guadagno=1.0) crea e aggiunge una VoceBuffer e la restituisce; inizio None vuol dire prossimo_campione().
+    aggiungi(voce), ferma(voce, campione=None, sfumatura=SFUMATURA_STOP), guadagno_voce(voce, valore, rampa=RAMPA_DEL_GUADAGNO).
+    tempo_di_gioco(campione=None) il tempo di gioco a quel campione, predefinito il campione udibile; ferma_tempo(campione=None) e fai_scorrere_tempo(campione=None), predefinito prossimo_campione(); tempo_scorre.
+    programma(tempo_di_gioco, funzione): quando nel preparare un blocco il tempo di gioco raggiunge quel valore, il callback chiama funzione(campione_esatto) nel filo dell'audio, e i comandi che la funzione manda al motore valgono già in quel blocco. La funzione deve essere rapida: niente sintesi, solo voci già pronte.
+    volume, da 0 a 1, con una rampa; silenzia(vero o falso) per la pausa.
+    notifiche() svuota e restituisce le notifiche del filo dell'audio: voci finite, eventi scattati, buchi.
+    stato() un dizionario con aperto, muto, interfaccia, dispositivo, latenza, blocco, buchi, voci.
+  Il filo principale non tocca mai le strutture del callback: manda comandi in una coda (deque), che il callback svuota all'inizio di ogni blocco e applica al campione indicato. La somma passa da un tetto morbido sopra SOGLIA_DEL_TETTO. I buchi segnalati da status.output_underflow si contano.
+
+suoni.py.
+  EVENTI dizionario evento -> preset; GRUPPI lista di (titolo, {evento: preset}) per l'elenco dei suoni; AZIONI dizionario evento -> descrizione a parole, tradotta.
+  class Suoni(motore): suona(evento, posizione=None, guadagno_db=0.0, inizio=None) restituisce la voce o None; pronto(evento, posizione=None, guadagno_db=0.0) restituisce il buffer già collocato nello spazio, da passare più tardi a motore.suona dentro un evento programmato. Un evento con posizione si fa mono e si colloca con fisica.suono_di (panoramica e guadagno, non la frequenza).
+  _rendi_preset(nome) sintetizza un preset della collezione con Acusticator.preset e Acusticator.sintetizza a FS, una volta sola, poi dalla memoria; le prove lo sostituiscono.
+  Gli eventi della 0.1.0: per il gioco nuova_partita, mira_avviata, valore_preso, sparo, colpito, colpito_bonus, a_terra, livello_su, bonus_appare, bonus_uscito, ultimo_colpo, partita_finita, in_classifica, fuori_classifica, pausa, ripresa, non_ora; per la finestra avvio, uscita, classifica, statistiche, guida, manuale, novita, informazioni, caffe (il preset donazione), pub, volume, impostazioni, vai_alla_vista, vai_alla_barra, primo_piano, errore.
+  strumenti/crea_preset.py aggiunge i preset nuovi con Acusticator.aggiorna e li firma con Acusticator.firma(nomi, "ciechino"), donazione compreso; si può puntare su una copia della collezione per provarlo. strumenti/elenco_suoni.py scrive suoni_di_ciechino.txt, una riga per azione col suo preset.
+
+classifica.py, statistiche.py, impostazioni.py, testi.py: nessuno stampa, nessuno solleva per un file rovinato.
+  classifica: carica(percorso=None) restituisce (voci, avviso o None), con ripiego sul .bak e un file illeggibile rinominato e mai sovrascritto; salva(voci, percorso=None) vero o falso, via .tmp, .bak e os.replace; posizione(voci, punteggio) la posizione da 1 che avrebbe una voce nuova, a parità dietro le più vecchie, o None oltre POSTI_IN_CLASSIFICA; inserisci(voci, voce) restituisce (voci nuove, posizione); righe(voci, oggi=None, nuova=None) restituisce l'intestazione e una riga per voce, "1. Gabry, 12.340 punti, 3 giorni fa."; pulisci_nome(testo). Una voce è {"nome", "punteggio", "data" (ISO, ora locale), "livello", "tiri", "centri", "durata_s"}; il file {"formato": FORMATO_CLASSIFICA, "voci": [...]}.
+  statistiche: class Statistiche con carica(percorso=None) che restituisce (statistiche, avviso), salva(), conta(chiave, quanti=1), suono(evento) che conta gli eventi sonori, tiro(valori, esito) dopo ogni tiro, mira(parametro, valore, esito_della_scivolata), partita_finita(riepilogo), righe() il testo della finestra delle statistiche, a sezioni, una voce per riga.
+  impostazioni: PREDEFINITE {"volume": VOLUME_PREDEFINITO, "sintesi": True, "uscita": "automatica", "ultimo_nome": ""}; carica(percorso=None), salva(dati, percorso=None), valide(dati).
+  testi: numero(x, decimali=1), intero(n), percento(frazione, decimali=0), metri(x), gradi(x), conta(n, singolare, plurale), data_lunga(data), eta_in_giorni(giorni), durata(secondi), informazioni(), novita(testo_del_changelog).
+
+partita.py e resoconti.py, senza wx.
+  @dataclass class Messaggio: tipo ("info", "resoconto", "livello", "bonus", "fine", "avviso"), testo (per la vista, anche più righe), annuncio (breve, per la sintesi, o ""), dati (dizionario).
+  class Partita(motore, suoni, statistiche=None, rng=None, orologio=None):
+    fase: "pronta", "ascolto", "mira", "volo", "finita"; barra (0, 1, 2 o None); sottofase ("pausa", "conto", "scivolata" o None); in_pausa.
+    livello, punti, riserva, centri_del_livello, tiri, centri, bersagli, valori, ultimo_volo.
+    in_corso(), nuova(), spazio(), battito(), pausa(), abbandona(): ognuna restituisce una lista di Messaggio.
+    righe_della_barra() le righe della barra di stato. riepilogo() {"punteggio", "livello", "tiri", "centri", "durata_s"}.
+  Il messaggio di tipo "fine" porta in dati il riepilogo: la finestra ci aggiunge la classifica.
+  resoconti.py compone i testi dei tiri, dei livelli, dei bonus e della fine, con testi.py.
+
+gui/finestra.py, gui/dialoghi.py, Ciechino.py, sul modello di MESS.
+  La finestra principale ha due aree in sola lettura, la vista della partita, che si allunga col resoconto di ogni tiro e comincia con nome, versione, data, autori e le informazioni utili, e sotto la barra di stato, larga quanto la finestra e alta poche righe. Menu Partita (Nuova partita Ctrl+N, Pausa Ctrl+P, Classifica Ctrl+K, Statistiche Ctrl+T, Esci Ctrl+Q), Impostazioni (Volume, Leggi i resoconti con la sintesi, Lingua), Aiuto (Guida ai comandi F1, Manuale Maiusc+F1, Novità F2, Informazioni F3, Offrimi un caffè, Entra al PUB, Chiedi aiuto al PUB). F5 la vista, F7 la barra. Lo spazio si prende alla pressione, in EVT_CHAR_HOOK, e non va avanti: niente eco del carattere. Un wx.Timer di BATTITO_MS chiama battito. Ogni messaggio va in coda alla vista, col cursore sul suo inizio, e il suo annuncio alla sintesi se l'impostazione lo vuole.
+  A partita finita: se il punteggio entra in classifica, suono in_classifica e finestra del nome (proposto l'ultimo usato), poi la classifica in coda alla vista col cursore sulla voce nuova; altrimenti fuori_classifica.
+  Istanza unica, registro degli errori, aggiornamento automatico all'avvio dal compilato, finestre interne massimizzate, Esc che chiude: come MESS.
+
+I banchi d'ascolto, in strumenti, per Gabriele: banco_mira.py (le varianti delle scivolate alla cieca col voto da 1 a 5, e la prova di precisione con un riferimento da raggiungere), banco_bersagli.py (le forme dell'LFO, le grandezze e le portanti), banco_volo.py (il proiettile in volo, i guadagni per metro e gli effetti). Usano collaudo_comune di GBUtils, il menu r, c, Invio, il gruppo di controllo e la rivelazione finale, scrivono gli esiti accanto a sé e si provano con le finte, mai lanciandoli dalla shell.
+
+Il pacchetto: Ciechino.spec onedir sul modello di MESS.spec, con manuale.html, CHANGELOG.md, Acu_Collection.json e i cataloghi compilati; zip_maker.py, setup_maker.py, Ciechino.iss con un AppId nuovo.
