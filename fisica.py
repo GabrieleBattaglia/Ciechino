@@ -92,7 +92,7 @@ def valori_del_tiro(azimut_gradi, alzo_gradi, velocita):
 class Traiettoria:
     """La parabola del proiettile, esatta: gravità costante e niente aria, in funzione del tempo di
     volo contato dallo sparo. Si calcola in qualunque istante senza simulare nulla, così il volo, la
-    voce del proiettile e i resoconti vedono la stessa curva."""
+    voce del proiettile e i resoconti vedono la stessa curva, posizione e inclinazione comprese."""
 
     def __init__(self, azimut_gradi, alzo_gradi, velocita, origine=None):
         self.azimut = float(azimut_gradi)
@@ -113,6 +113,14 @@ class Traiettoria:
         """La posizione al tempo di volo t: un array (3,) per t scalare, (N, 3) per t array di N."""
         tempi = _array(t)[..., None]
         return self.origine + self.iniziale * tempi + 0.5 * self._accelerazione * tempi * tempi
+
+    def inclinazione(self, t):
+        """L'inclinazione del proiettile al tempo di volo t: l'angolo della sua velocità
+        sull'orizzontale, in gradi, positivo in salita, zero nell'apice e negativo in discesa (D21).
+        Uno scalare per t scalare, un array per t array."""
+        orizzontale = math.hypot(float(self.iniziale[0]), float(self.iniziale[2]))
+        verticale = float(self.iniziale[1]) - GRAVITA * _array(t)
+        return scalare_o_array(np.degrees(np.arctan2(verticale, orizzontale)))
 
     def tempo_a_terra(self):
         """Il primo tempo positivo in cui y torna a zero, dalla formula chiusa della parabola: la

@@ -2,7 +2,8 @@
 Le prove di partita.py: l'inizio con le voci dei bersagli, la mira al campione udibile, lo sparo e
 l'impatto al campione esatto, i tiri a vuoto fino alla fine, il livello, i bonus e i loro punti (D13),
 gli avvisi in fila dopo l'impatto, la pausa chiesta e quella automatica, anche nella mira (D14),
-l'abbandono, i primati, la barra di stato e le statistiche.
+l'abbandono, i primati, la barra di stato, le statistiche, e il sommario in testa al resoconto vero,
+al grado della palestra del livello del tiro (D21).
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 Nessuna prova apre la scheda audio né sintetizza un preset vero: il motore gira sul flusso finto di
@@ -20,6 +21,7 @@ import pytest
 from aiuti_audio import motore_finto
 
 import partita as modulo_partita
+import resoconti
 import suoni
 import testi
 from bersagli import Bersaglio, durata_del_bonus, genera, genera_bonus, portanti_senza, quanti_bersagli, raggio_del_livello, velocita_del_livello
@@ -44,6 +46,8 @@ from costanti import (
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     SFUMATURA_STOP,
+    SOMMARIO_NUMERI_FINO_AL_LIVELLO,
+    SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     VELOCITA_DEL_TEMPO,
     VELOCITA_DI_RIFERIMENTO,
 )
@@ -265,7 +269,12 @@ def test_mira_completa_sul_centro_del_bersaglio(banco):
     assert bersaglio not in partita.bersagli and bersaglio not in partita._voci
     assert len(partita.bersagli) == quanti_bersagli(1) and partita.bersagli[0] in partita._voci
     resoconto = messaggi[0]
-    assert resoconto.tipo == "resoconto" and resoconto.annuncio == f"Colpito, {attesi} punti."
+    # D21: al livello 1 il sommario coi numeri apre il resoconto e l'annuncio; il centro è pieno, quindi
+    # gli scarti dal centro si arrotondano a zero.
+    sommario = resoconti.riga_del_sommario(volo, "numeri")
+    assert sommario.startswith("Laterale 0,0 metri, verticale 0,0, profondità 0,0, inclinazione ")
+    assert resoconto.testo.split("\n")[0] == sommario and resoconto.testo.split("\n")[1].startswith("Tiro 1, livello 1: colpito un bersaglio, ")
+    assert resoconto.tipo == "resoconto" and resoconto.annuncio == f"{sommario} Colpito, {attesi} punti."
     assert resoconto.dati["colpito"] and resoconto.dati["punti"] == attesi and resoconto.dati["totale"] == attesi
     assert banco.contati == ["nuova_partita", "mira_avviata", "valore_preso", "valore_preso", "valore_preso", "sparo", "colpito"]
 
@@ -387,15 +396,17 @@ def test_tiri_a_vuoto_fino_alla_fine(banco):
         messaggi = tiro_a_vuoto(banco, partita)
         assert partita.tiri == numero and partita.riserva == COLPI_INIZIALI - numero
         assert messaggi[0].tipo == "resoconto" and not messaggi[0].dati["colpito"]
+        sommario = resoconti.riga_del_sommario(partita.ultimo_volo, "numeri")
+        assert sommario and messaggi[0].testo.split("\n")[0] == sommario and messaggi[0].annuncio.startswith(f"{sommario} A vuoto, ")
         if partita.riserva > 1:
             assert [m.tipo for m in messaggi] == ["resoconto"]
-            assert messaggi[0].annuncio.startswith(f"A vuoto, riserva {partita.riserva}, ")
+            assert messaggi[0].annuncio.startswith(f"{sommario} A vuoto, riserva {partita.riserva}, ")
         elif partita.riserva == 1:
             assert [m.tipo for m in messaggi] == ["resoconto", "avviso"]
             assert messaggi[1].annuncio == "Ultimo colpo."
     assert partita.fase == "finita" and not partita.in_corso()
     assert [m.tipo for m in messaggi] == ["resoconto", "fine"]
-    assert messaggi[0].annuncio == "A vuoto, riserva vuota."
+    assert messaggi[0].annuncio == f"{sommario} A vuoto, riserva vuota."
     riepilogo = {"punteggio": 0, "livello": 1, "tiri": COLPI_INIZIALI, "centri": 0, "durata_s": 60.0}
     assert messaggi[1].dati == riepilogo == partita.riepilogo()
     assert messaggi[1].annuncio == "Partita finita, 0 punti."
@@ -488,13 +499,76 @@ def test_il_bonus_colpito_da_i_colpi_e_annulla_l_uscita(banco, bonus_sicuro, mon
     assert partita.punti == attesi == punti_del_centro(bonus, volo.precisione, livello=LIVELLO_DEI_BONUS)
     assert partita.bonus is None and bonus not in partita.bersagli
     assert len(partita.bersagli) == quanti_bersagli(LIVELLO_DEI_BONUS)
-    assert messaggi[0].annuncio == f"Colpito il bonus, {testi.intero(attesi)} punti."
+    # Il tiro avviene al livello dei bonus, che è ancora della palestra coi numeri (D21).
+    assert messaggi[0].annuncio == f"{resoconti.riga_del_sommario(volo, resoconti.grado_della_palestra(LIVELLO_DEI_BONUS))} Colpito il bonus, {testi.intero(attesi)} punti."
     assert messaggi[0].dati["bonus"]
     assert "colpito_bonus" in banco.contati and "bonus_uscito" not in banco.contati
     # L'uscita annullata non scatta mai, nemmeno quando il suo tempo passa.
     while banco.motore.tempo_di_gioco() <= evento.tempo + 0.5:
         banco.flusso.avanza(10)
     assert not evento.scattato
+
+
+def test_il_sommario_in_testa_al_resoconto_ai_tre_gradi(banco, monkeypatch):
+    """D21: il resoconto vero comincia col sommario del passaggio del volo, al grado della palestra del
+    livello del tiro: i numeri nei primi livelli, poi le sole parole, poi niente; e apre l'annuncio."""
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    partita = banco.partita()
+    partita.nuova()
+    numeri, parole = SOMMARIO_NUMERI_FINO_AL_LIVELLO, SOMMARIO_PAROLE_FINO_AL_LIVELLO
+    for livello, grado in ((1, "numeri"), (numeri, "numeri"), (numeri + 1, "parole"), (parole, "parole"), (parole + 1, "niente")):
+        partita.livello = livello
+        messaggi = tiro_a_vuoto(banco, partita)
+        volo = partita.ultimo_volo
+        assert volo.vicino is not None and volo.passaggio is not None and volo.scarto == volo.passaggio.scarto
+        righe = messaggi[0].testo.split("\n")
+        esito = f"Tiro {partita.tiri}, livello {livello}: a vuoto; nella riserva restano {partita.riserva} colpi."
+        sommario = resoconti.riga_del_sommario(volo, grado)
+        assert resoconti.grado_della_palestra(livello) == grado
+        if grado == "niente":
+            assert sommario == "" and righe[0] == esito
+            assert messaggi[0].annuncio.startswith(f"A vuoto, riserva {partita.riserva}")
+            continue
+        assert righe[:2] == [sommario, esito]
+        assert messaggi[0].annuncio.startswith(f"{sommario} A vuoto, riserva {partita.riserva}")
+        if grado == "numeri":
+            assert sommario.startswith("Laterale ") and ", inclinazione " in sommario and sommario.endswith(" gradi.")
+        else:
+            frase = ", ".join(resoconti.parole_del_passaggio(volo.passaggio))
+            assert sommario == f"{frase[:1].upper()}{frase[1:]}."
+
+
+def test_il_sommario_del_bonus_segue_il_livello_del_tiro(banco, bonus_sicuro, monkeypatch):
+    """D21: per il bonus il grado del sommario è quello del livello in cui si spara, mentre i punti
+    restano quelli del livello in cui il bonus è nato (D13). La prova alza il livello a bonus in volo,
+    a mano, per separare i due livelli."""
+    partita = banco.partita()
+    partita.nuova()
+    partita.livello = LIVELLO_DEI_BONUS
+    tiro_a_vuoto(banco, partita)
+    bonus = partita.bonus
+    assert bonus is not None
+    banco.flusso.avanza_secondi(durata_del_bonus(LIVELLO_DEI_BONUS) / 2)
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    nato = resoconti.grado_della_palestra(LIVELLO_DEI_BONUS)
+    livello_del_tiro = next((n for n in range(LIVELLO_DEI_BONUS + 1, LIVELLO_DEI_BONUS + 30) if resoconti.grado_della_palestra(n) != nato), LIVELLO_DEI_BONUS + 1)
+    grado = resoconti.grado_della_palestra(livello_del_tiro)
+    partita.livello = livello_del_tiro
+    partita.spazio()
+    partenza = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
+    mira_e_spara(banco, partita, mira_sul_bonus(bonus, partenza))
+    volo = partita.ultimo_volo
+    assert volo.colpito is bonus and volo.passaggio is not None
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert partita.punti == punti_del_centro(bonus, volo.precisione, livello=LIVELLO_DEI_BONUS)
+    righe = messaggi[0].testo.split("\n")
+    esito = f"Tiro {partita.tiri}, livello {livello_del_tiro}: colpito il bonus, "
+    sommario = resoconti.riga_del_sommario(volo, grado)
+    if sommario:
+        assert righe[0] == sommario and righe[1].startswith(esito) and messaggi[0].annuncio.startswith(f"{sommario} Colpito il bonus, ")
+        assert sommario != resoconti.riga_del_sommario(volo, nato)
+    else:
+        assert righe[0].startswith(esito) and messaggi[0].annuncio.startswith("Colpito il bonus, ")
 
 
 def test_pausa_e_ripresa_nell_ascolto(banco):

@@ -415,8 +415,11 @@ def _centro(tavolo, numero, totale):
     resoconto = nuovi[0]
     assert resoconto.tipo == "resoconto" and resoconto.dati["tiro"] == numero and resoconto.dati["colpito"]
     assert resoconto.dati["punti"] == punti and resoconto.dati["totale"] == totale == partita.punti
-    assert resoconto.testo.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
-    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti."
+    # Al livello 1 il resoconto comincia col sommario dei numeri (D21), anche nell'annuncio.
+    sommario, esito = resoconto.testo.splitlines()[:2]
+    assert sommario.startswith("Laterale ") and sommario.endswith(" gradi.")
+    assert esito.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
+    assert resoconto.annuncio == f"{sommario} Colpito, {testi.intero(punti)} punti."
     tavolo.cursore_sul_nuovo()
     return totale, nuovi
 
@@ -502,7 +505,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             assert AIUTO_MANCATO_FINO_AL_LIVELLO >= 2 and "Il bersaglio più vicino è stato mancato di " in resoconto.testo
             if partita.riserva > 1:
                 assert [m.tipo for m in nuovi] == ["resoconto"] and partita.fase == "ascolto"
-                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}, ")
+                # Al livello 2 il sommario coi numeri apre ancora l'annuncio (D21).
+                assert resoconto.annuncio.startswith("Laterale ") and f" gradi. A vuoto, riserva {partita.riserva}, " in resoconto.annuncio
             elif partita.riserva == 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "avviso"] and nuovi[1].annuncio == "Ultimo colpo."
             if partita.riserva:
@@ -512,7 +516,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
 
         # La fine: il resoconto, la fine col riepilogo, il nome e la classifica in coda alla vista.
         assert partita.fase == "finita" and not partita.in_corso()
-        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio == "A vuoto, riserva vuota."
+        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.endswith(" gradi. A vuoto, riserva vuota.")
         tiri = CENTRI_PER_LIVELLO + riserva
         durata = round(fine - inizio - in_pausa, 1)
         riepilogo = {"punteggio": totale, "livello": 2, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "durata_s": durata}
@@ -559,7 +563,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica.
         assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
-        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ")) == CENTRI_PER_LIVELLO
+        assert sum(1 for detto in voce_finta if " gradi. Colpito, " in detto) == CENTRI_PER_LIVELLO
 
         # Le statistiche, sul disco, coi numeri della partita.
         statistiche = _leggi(costanti.FILE_STATISTICHE)

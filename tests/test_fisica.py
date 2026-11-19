@@ -117,6 +117,28 @@ def test_tempo_a_terra_apice_punto_a_terra():
     assert np.allclose(a_terra[[0, 2]], traiettoria.posizione(tempo)[[0, 2]])
 
 
+def test_inclinazione_della_traiettoria():
+    """D21: l'angolo della velocità sull'orizzontale, positivo in salita: alla bocca è l'alzo, nell'apice
+    zero, poi negativo, e l'azimut non conta. Uno scalare per t scalare, un array per un array."""
+    traiettoria = fisica.Traiettoria(-20.0, 50.0, 30.0)
+    t_apice, _altezza = traiettoria.apice()
+    assert traiettoria.inclinazione(0.0) == pytest.approx(50.0)
+    assert traiettoria.inclinazione(t_apice) == pytest.approx(0.0, abs=1e-9)
+    assert isinstance(traiettoria.inclinazione(1.0), float)
+    tempi = np.array((0.5, t_apice, t_apice + 0.5, 2 * t_apice))
+    angoli = traiettoria.inclinazione(tempi)
+    assert isinstance(angoli, np.ndarray) and angoli.shape == (4,)
+    assert angoli[0] > 0.0 and angoli[2] < 0.0
+    # Simmetria della parabola: a pari distanza dall'apice, pari inclinazione col segno opposto.
+    assert angoli[0] == pytest.approx(-traiettoria.inclinazione(2 * t_apice - 0.5))
+    assert angoli[3] == pytest.approx(-50.0)
+    # Dalla derivata della posizione, a differenze finite.
+    passo = 1e-6
+    velocita = (traiettoria.posizione(1.3 + passo) - traiettoria.posizione(1.3 - passo)) / (2 * passo)
+    assert traiettoria.inclinazione(1.3) == pytest.approx(math.degrees(math.atan2(velocita[1], math.hypot(velocita[0], velocita[2]))), abs=1e-6)
+    assert fisica.Traiettoria(10.0, 30.0, 20.0).inclinazione(0.0) == pytest.approx(fisica.Traiettoria(-35.0, 30.0, 20.0).inclinazione(0.0))
+
+
 def test_tiro_orizzontale_e_rasoterra():
     piatto = fisica.Traiettoria(0.0, 0.0, 20.0)
     assert piatto.apice() == (0.0, ALTEZZA_CANNONE)

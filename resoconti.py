@@ -11,6 +11,8 @@ coprirebbe il loro suono. Ogni misura è in metri, gradi e secondi (D7), coi num
 testi.py; ogni parola passa da lingua.py, e nessun testo contiene separatori grafici.
 Le misure si arrotondano prima di scriverle: così 1,04 metri diventa «1 metro» e non «1,0 metri», e
 uno scarto di tre centimetri a destra si dice «al centro» invece di «0,0 metri a destra».
+Il resoconto di un tiro comincia col sommario di D21, che nei primi livelli dà i numeri con un
+decimale e il segno, sempre allo stesso posto e nello stesso ordine, poi soltanto le parole, poi tace.
 """
 
 import math
@@ -18,7 +20,18 @@ from dataclasses import dataclass, field
 
 import testi
 from bersagli import durata_del_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
-from costanti import AIUTO_MANCATO_FINO_AL_LIVELLO, CENTRI_PER_LIVELLO, COLPI_BONUS, MOLTIPLICATORE_BONUS
+from costanti import (
+    AIUTO_MANCATO_FINO_AL_LIVELLO,
+    CENTRI_PER_LIVELLO,
+    COLPI_BONUS,
+    MOLTIPLICATORE_BONUS,
+    SOMMARIO_NUMERI_FINO_AL_LIVELLO,
+    SOMMARIO_PAROLE_FINO_AL_LIVELLO,
+    SOMMARIO_SOGLIA_INCLINAZIONE,
+    SOMMARIO_SOGLIA_LATERALE,
+    SOMMARIO_SOGLIA_PROFONDITA,
+    SOMMARIO_SOGLIA_VERTICALE,
+)
 from fisica import CANNONE
 from lingua import _, plurale
 from statistiche import NOMI_DEI_PARAMETRI, NOMI_DELLE_FORME
@@ -33,6 +46,10 @@ NOMI_DELLE_SOTTOFASI = {
     # Traduttori: da qui, le parti di una barra della mira, nella barra di stato: «Mira: alzo, bip».
     "pausa": _("pausa"), "conto": _("bip"), "scivolata": _("scivolata"),
 }
+
+# I gradi della palestra di D21, dal più aiutato al meno: il sommario coi numeri, il sommario a sole
+# parole, nessun sommario.
+GRADI_DELLA_PALESTRA = ("numeri", "parole", "niente")
 
 
 @dataclass
@@ -142,6 +159,15 @@ def scarti(scarto):
     return parti
 
 
+def con_segno(x, decimali=1):
+    """Un numero col segno davanti e sempre coi suoi decimali, all'italiana: +13,2; -2,4; +1,0; e 0,0,
+    senza segno, quando si arrotonda a zero. Il meno è il trattino, che NVDA legge meno e il braille
+    mostra in una cella sola, come il più."""
+    valore = _arrotondato(x, decimali)
+    testo = testi.numero(valore, decimali)
+    return f"+{testo}" if valore > 0 else testo
+
+
 def scarto_principale(scarto):
     """La parte più grande dello scarto, a parole, come «corto di 3,4 metri»; vuoto se non c'è."""
     if scarto is None:
@@ -189,6 +215,93 @@ def bersagli_del_livello(livello):
     chi = plurale(quanti, "{n} bersaglio fermo", "{n} bersagli fermi", come=testi.intero(quanti))
     # Traduttori: bersagli è come «1 bersaglio fermo», raggio come «5 metri».
     return _("{bersagli}, raggio {raggio}").format(bersagli=chi, raggio=raggio)
+
+
+# Il sommario di un tiro (D21).
+
+def grado_della_palestra(livello):
+    """Il grado del sommario per un tiro sparato a quel livello (D21): «numeri» fino a
+    SOMMARIO_NUMERI_FINO_AL_LIVELLO, «parole» fino a SOMMARIO_PAROLE_FINO_AL_LIVELLO, poi «niente».
+    I primi livelli sono la palestra di Gabriele: l'aiuto si semplifica, poi sparisce."""
+    if livello <= SOMMARIO_NUMERI_FINO_AL_LIVELLO:
+        return "numeri"
+    if livello <= SOMMARIO_PAROLE_FINO_AL_LIVELLO:
+        return "parole"
+    return "niente"
+
+
+def _parola(valore, soglia, positiva, negativa, giusta):
+    """La parola di un asse del sommario: positiva da soglia in su, negativa da meno soglia in giù,
+    giusta in mezzo. Con la soglia a zero lo zero esatto resta giusto."""
+    if valore > 0 and valore >= soglia:
+        return positiva
+    if valore < 0 and valore <= -soglia:
+        return negativa
+    return giusta
+
+
+def parole_del_passaggio(passaggio):
+    """Le quattro parole del sommario a parole, nell'ordine laterale, verticale, profondità e
+    inclinazione: «a destra», «a sinistra» o «in linea»; «sopra», «sotto» o «all'altezza giusta»;
+    «lungo», «corto» o «alla distanza giusta»; «in salita», «in discesa» o «in cima». Le soglie
+    sotto le quali un asse va bene stanno in costanti.py (D21).
+    pybabel attacca un commento per i traduttori soltanto al primo testo della riga che lo segue: per
+    questo ogni parola ha la sua riga e il suo commento."""
+    return [
+        _parola(passaggio.laterale, SOMMARIO_SOGLIA_LATERALE,
+                # Traduttori: da qui, le dodici parole del sommario di un tiro (D21), che dicono dove il proiettile è passato rispetto al centro del bersaglio, e come andava in quel punto. Di lato: passato a destra del bersaglio.
+                _("a destra"),
+                # Traduttori: sommario di un tiro, di lato: passato a sinistra del bersaglio.
+                _("a sinistra"),
+                # Traduttori: sommario di un tiro, di lato: né a destra né a sinistra del bersaglio.
+                _("in linea")),
+        _parola(passaggio.verticale, SOMMARIO_SOGLIA_VERTICALE,
+                # Traduttori: sommario di un tiro, in altezza: passato più in alto del centro del bersaglio.
+                _("sopra"),
+                # Traduttori: sommario di un tiro, in altezza: passato più in basso del centro del bersaglio.
+                _("sotto"),
+                # Traduttori: sommario di un tiro, in altezza: né sopra né sotto il bersaglio.
+                _("all'altezza giusta")),
+        _parola(passaggio.profondita, SOMMARIO_SOGLIA_PROFONDITA,
+                # Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato oltre il bersaglio visto dal cannone, non la preposizione.
+                _("lungo"),
+                # Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato prima del bersaglio visto dal cannone.
+                _("corto"),
+                # Traduttori: sommario di un tiro, in profondità: né lungo né corto.
+                _("alla distanza giusta")),
+        _parola(passaggio.inclinazione, SOMMARIO_SOGLIA_INCLINAZIONE,
+                # Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile saliva.
+                _("in salita"),
+                # Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile scendeva.
+                _("in discesa"),
+                # Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile era nel tratto quasi piano vicino alla cima della sua curva.
+                _("in cima")),
+    ]
+
+
+def riga_del_sommario(volo, grado="numeri"):
+    """Il sommario del tiro (D21), la prima riga del resoconto: dove il proiettile è passato rispetto al
+    centro del bersaglio, quello colpito o quello passato più vicino, nel passaggio più vicino al
+    centro, di lato, in altezza e in profondità, poi la sua inclinazione in quel punto. Al grado
+    «numeri», con un decimale e il segno: «Laterale +13,2 metri, verticale -2,4, profondità +1,0,
+    inclinazione -31,4 gradi.»; al grado «parole»: «A destra, sotto, lungo, in discesa.»; al grado
+    «niente», o se nessun bersaglio vivo c'era, vuoto. Un grado fuori da GRADI_DELLA_PALESTRA solleva
+    ValueError."""
+    if grado not in GRADI_DELLA_PALESTRA:
+        raise ValueError(f"grado della palestra sconosciuto: {grado!r}; i gradi sono {', '.join(GRADI_DELLA_PALESTRA)}")
+    passaggio = volo.passaggio
+    if passaggio is None or grado == "niente":
+        return ""
+    if grado == "numeri":
+        # Traduttori: il sommario di un tiro nei primi livelli (D21); laterale, verticale e profondita sono gli scarti dal centro del bersaglio in metri, inclinazione l'angolo del proiettile in gradi, tutti già scritti col segno, come «+13,2», «-2,4» o «0,0». Il laterale è positivo a destra, il verticale sopra, la profondità se il tiro è lungo, l'inclinazione in salita.
+        return _("Laterale {laterale} metri, verticale {verticale}, profondità {profondita}, inclinazione {inclinazione} gradi.").format(
+            laterale=con_segno(passaggio.laterale), verticale=con_segno(passaggio.verticale), profondita=con_segno(passaggio.profondita),
+            inclinazione=con_segno(passaggio.inclinazione))
+    laterale, verticale, profondita, inclinazione = parole_del_passaggio(passaggio)
+    # Traduttori: il sommario a parole di un tiro nei livelli di mezzo (D21), come «A destra, sotto, lungo, in discesa.»; la prima lettera si fa maiuscola da sé.
+    frase = _("{laterale}, {verticale}, {profondita}, {inclinazione}.").format(laterale=laterale, verticale=verticale, profondita=profondita,
+                                                                             inclinazione=inclinazione)
+    return frase[:1].upper() + frase[1:]
 
 
 # Il resoconto di un tiro.
@@ -260,20 +373,29 @@ def riga_del_mancato(volo):
                                                                                                                               scarti=testi.elenco(parti))
 
 
-def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva=0, colpi_bonus=None, aiuto=None):
-    """Il messaggio «resoconto» dopo un tiro: la riga dell'esito, la mira, la traiettoria, e dopo un
-    centro dove stava il bersaglio, dopo un tiro a vuoto di quanto si è mancato il più vicino.
+def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva=0, colpi_bonus=None, aiuto=None, palestra=None):
+    """Il messaggio «resoconto» dopo un tiro: il sommario (D21), la riga dell'esito, la mira, la
+    traiettoria, e dopo un centro dove stava il bersaglio, dopo un tiro a vuoto di quanto si è
+    mancato il più vicino.
     numero è il numero del tiro, livello quello in cui è stato sparato; valori i tre valori da 0 a 1
     della mira; punti quelli del colpo, totale il punteggio dopo il colpo, riserva i colpi rimasti;
     colpi_bonus i colpi dati dal bonus, COLPI_BONUS se è None. aiuto dice se spiegare il tiro a vuoto,
     e se è None vale fino al livello AIUTO_MANCATO_FINO_AL_LIVELLO (D6); serve anche all'annuncio,
-    che allora aggiunge lo scarto principale."""
+    che allora aggiunge lo scarto principale. palestra è il grado del sommario, uno di
+    GRADI_DELLA_PALESTRA, e se è None lo dà il livello del tiro con grado_della_palestra; il sommario,
+    quando c'è, è la prima riga del testo e apre anche l'annuncio, così arriva per primo alla voce e
+    al braille."""
     if aiuto is None:
         aiuto = livello <= AIUTO_MANCATO_FINO_AL_LIVELLO
+    if palestra is None:
+        palestra = grado_della_palestra(livello)
     if colpi_bonus is None:
         colpi_bonus = COLPI_BONUS
     colpito = volo.colpito
+    sommario_del_tiro = riga_del_sommario(volo, palestra)
     righe = [_riga_dell_esito(numero, livello, volo, punti, totale, riserva, colpi_bonus), riga_della_mira(volo.traiettoria, valori), riga_della_traiettoria(volo)]
+    if sommario_del_tiro:
+        righe.insert(0, sommario_del_tiro)
     if colpito is not None:
         righe.append(riga_del_bersaglio(colpito.posizione(volo.fine)))
         if colpito.bonus:
@@ -295,6 +417,9 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
         else:
             # Traduttori: l'annuncio breve di un tiro a vuoto; riserva è un numero.
             annuncio = _("A vuoto, riserva {riserva}.").format(riserva=testi.intero(riserva))
+    if sommario_del_tiro:
+        # Traduttori: l'annuncio di un tiro col sommario in testa (D21); sommario è come «A destra, sotto, lungo, in discesa.», annuncio come «A vuoto, riserva 8.».
+        annuncio = _("{sommario} {annuncio}").format(sommario=sommario_del_tiro, annuncio=annuncio)
     dati = {"tiro": numero, "livello": livello, "colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "punti": punti,
             "totale": totale, "riserva": riserva, "precisione": volo.precisione}
     return Messaggio("resoconto", "\n".join(righe), annuncio, dati)
