@@ -1,7 +1,7 @@
 """
-Le prove di motore_audio.py: voci al campione, fermate sfumate, tempo di gioco, eventi programmati,
-campione udibile, tetto, notifiche e modo muto, col flusso finto di aiuti_audio e senza mai aprire
-la scheda audio.
+Le prove di motore_audio.py: voci al campione, attacco e fermate sfumate, tempo di gioco, eventi
+programmati e annullati, campione udibile, tetto, notifiche per il registro, modo muto e guardia del
+flusso perso, col flusso finto di aiuti_audio e senza mai aprire la scheda audio.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 """
@@ -16,13 +16,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from aiuti_audio import LATENZA_FINTA, apri_finto, motore_finto
+from aiuti_audio import LATENZA_FINTA, FlussoFinto, apri_finto, motore_finto
 
 import motore_audio
 from costanti import AUDIO_BLOCCO, AUDIO_LATENZA, FS, RAMPA_DEL_GUADAGNO, SFUMATURA_STOP, SOGLIA_DEL_TETTO, VELOCITA_DEL_TEMPO
-from motore_audio import Motore, Voce, VoceBuffer, VoceTono
+from motore_audio import FLUSSO_FERMO_DOPO, Motore, Voce, VoceBuffer, VoceTono
+from sintesi import Oscillatore, panoramica
 
 BLOCCO = AUDIO_BLOCCO
+# Quanto aspettano al più, in tempo vero, le prove che guardano il filo muto.
+ATTESA_DEL_FILO = 2.0
 
 
 @pytest.fixture
@@ -140,6 +143,42 @@ def test_voce_tono_e_due_orologi(finto):
         VoceTono(parametri, "piffero", 0)
 
 
+def test_voce_tono_comincia_con_l_attacco(finto):
+    """Una VoceTono sale da zero in SFUMATURA_STOP, senza il click di un inviluppo che va dal silenzio
+    al pieno in un campione; il resto del suono è quello dell'oscillatore."""
+    motore, flusso = finto
+    voce = VoceTono(lambda tempi_di_gioco, tempi_audio: (1000.0, 0.0, 0.5), "seno", 700)
+    assert voce.attacco == SFUMATURA_STOP
+    motore.aggiungi(voce)
+    uscita = flusso.avanza(4)[:, 0]
+    assert np.all(uscita[:700] == 0.0)
+    campioni_d_attacco = round(SFUMATURA_STOP * FS)
+    suono = panoramica(Oscillatore("seno", FS).rendi(np.full(len(uscita) - 700, 1000.0)) * 0.5, 0.0)[:, 0]
+    rampa = np.clip(np.arange(len(suono)) / campioni_d_attacco, 0.0, 1.0)
+    np.testing.assert_allclose(uscita[700:], suono * rampa, rtol=0, atol=1e-6)
+    # L'inviluppo dell'attacco cresce da zero: nessun campione supera la sua rampa.
+    picco = 0.5 * math.sqrt(0.5)
+    assert np.all(np.abs(uscita[700:700 + campioni_d_attacco]) <= picco * np.arange(campioni_d_attacco) / campioni_d_attacco + 1e-6)
+    assert np.max(np.abs(uscita[700 + campioni_d_attacco:])) == pytest.approx(picco, rel=1e-2)
+
+
+def test_attacco_di_una_voce_in_ritardo_e_buffer_intatto(finto):
+    """Una voce arrivata tardi comincia dal primo campione del blocco, e l'attacco con lei; un
+    buffer già pronto non ha attacco e suona intatto al campione."""
+    motore, flusso = finto
+    flusso.avanza(2)
+    voce = motore.aggiungi(VoceTono(lambda tempi_di_gioco, tempi_audio: (1000.0, 0.0, 0.5), "seno", 10))
+    uscita = flusso.avanza(1)[:, 0]
+    assert voce.inizio == 2 * BLOCCO and uscita[0] == 0.0
+    campioni_d_attacco = round(SFUMATURA_STOP * FS)
+    assert np.max(np.abs(uscita[:campioni_d_attacco // 4])) < 0.25 * 0.5 * math.sqrt(0.5) + 1e-6
+    assert VoceBuffer(_costante(0.5, 10), 0).attacco == 0.0
+    motore.ferma(voce, sfumatura=0.0)
+    motore.suona(_costante(0.5, 100), inizio=motore.campione_scritto)
+    uscita = flusso.avanza(1)
+    assert np.all(uscita[:100] == 0.5) and np.all(uscita[100:] == 0.0)
+
+
 def test_tempo_di_gioco_fermato_e_ripreso_esatto(finto):
     motore, flusso = finto
     assert motore.tempo_scorre
@@ -236,6 +275,27 @@ def test_evento_annullato_e_tempo_fermo(finto):
     assert not annullato.scattato
 
 
+def test_evento_annullato_dopo_i_comandi_del_blocco_non_scatta(finto, monkeypatch):
+    """Il filo principale prende il GIL dentro il callback, dopo i comandi d'inizio blocco, e annulla
+    l'evento che sta per scattare: il comando arriverebbe al blocco seguente, ma l'evento non scatta."""
+    motore, flusso = finto
+    chiamate = []
+    evento = motore.programma(0.0, chiamate.append)
+    originale = motore._tempi_del_blocco
+
+    def tempi_col_filo_principale_in_mezzo(campione, n):
+        tempi = originale(campione, n)
+        if evento in motore._eventi and not evento.annullato:
+            motore.annulla(evento)
+        return tempi
+
+    monkeypatch.setattr(motore, "_tempi_del_blocco", tempi_col_filo_principale_in_mezzo)
+    flusso.avanza(3)
+    assert evento.annullato and not evento.scattato and evento.campione is None
+    assert chiamate == []
+    assert not [n for n in motore.notifiche() if n.tipo in ("evento", "errore")]
+
+
 def test_campione_udibile_col_flusso_finto(finto):
     motore, flusso = finto
     assert motore.campione_udibile() == 0.0
@@ -297,9 +357,12 @@ def test_notifiche_dei_buchi(finto):
     motore, flusso = finto
     flusso.avanza(1, buco=True)
     flusso.avanza(1)
+    flusso.avanza(1, buco=True)
     notizie = motore.notifiche()
-    assert [(n.tipo, n.campione) for n in notizie] == [("buco", 0)]
-    assert motore.stato()["buchi"] == 1
+    # Ogni buco porta il conto dall'avvio, lo stesso dello stato.
+    assert [(n.tipo, n.campione, n.volte) for n in notizie] == [("buco", 0, 1), ("buco", 2 * BLOCCO, 2)]
+    assert motore.stato()["buchi"] == 2
+    assert notizie[1].riga() == f"Buco nell'audio al campione {2 * BLOCCO}: la scheda è rimasta senza campioni, 2 volte dall'avvio."
     assert motore.notifiche() == []
 
 
@@ -350,6 +413,59 @@ def test_comando_sbagliato_non_ferma_il_callback(finto):
     assert np.all(uscita[:100] == 0.5)
     errori = [n for n in motore.notifiche() if n.tipo == "errore"]
     assert len(errori) == 1 and errori[0].oggetto == "non sono una voce"
+    assert errori[0].origine == "comando ferma" and errori[0].testo.startswith("AttributeError: ")
+    assert errori[0].riga().startswith("Errore nel filo dell'audio al campione 0 (comando ferma, str): AttributeError: ")
+
+
+# Le notifiche degli errori, con ciò che serve al registro.
+
+def test_errore_di_una_voce_porta_origine_volte_e_pila(finto):
+    """Un guasto nei parametri di una voce: la prima notifica porta la pila, le seguenti il conto."""
+    motore, flusso = finto
+
+    def parametri_rotti(tempi_di_gioco, tempi_audio):
+        raise ValueError("parametri rotti")
+
+    voci = []
+    for numero in range(3):
+        voci.append(motore.aggiungi(VoceTono(parametri_rotti, "seno", numero * BLOCCO)))
+        flusso.avanza(1)
+    errori = [n for n in motore.notifiche() if n.tipo == "errore"]
+    assert [n.oggetto for n in errori] == voci and all(voce.finita for voce in voci)
+    assert [(n.origine, n.testo, n.volte) for n in errori] == [("voce", "ValueError: parametri rotti", volte) for volte in (1, 2, 3)]
+    assert errori[0].pila is not None and errori[1].pila is None and errori[2].pila is None
+    prima = errori[0].riga()
+    assert prima.startswith("Errore nel filo dell'audio al campione 0 (voce, VoceTono di ")
+    assert "parametri_rotti, dal campione 0): ValueError: parametri rotti\nPila delle chiamate:\n" in prima
+    # Le righe del sorgente si leggono quando la riga si scrive, nel filo principale.
+    assert 'raise ValueError("parametri rotti")' in prima and "_produci" in prima
+    assert errori[2].riga().endswith("ValueError: parametri rotti, 3 volte dall'avvio")
+    assert "Pila" not in errori[2].riga()
+
+
+def test_errore_di_un_evento_e_del_blocco_intero(finto, monkeypatch):
+    motore, flusso = finto
+
+    def evento_guasto(campione):
+        raise RuntimeError("evento guasto")
+
+    motore.programma(0.0, evento_guasto)
+    flusso.avanza(1)
+    errori = [n for n in motore.notifiche() if n.tipo == "errore"]
+    assert len(errori) == 1 and errori[0].origine == "evento" and errori[0].volte == 1
+    assert "evento_guasto al tempo di gioco 0.000): RuntimeError: evento guasto" in errori[0].riga()
+
+    def esegui_rotto(inizio):
+        raise RuntimeError("blocco rotto")
+
+    # Un guasto fuori dalle voci: il blocco intero esce muto, e si ripete a ogni blocco.
+    monkeypatch.setattr(motore, "_esegui_comandi", esegui_rotto)
+    motore.suona(_costante(0.5, 10_000), inizio=motore.campione_scritto)
+    assert np.all(flusso.avanza(3) == 0.0)
+    blocchi = [n for n in motore.notifiche() if n.tipo == "errore"]
+    assert [(n.origine, n.volte, n.pila is not None, n.oggetto) for n in blocchi] == [("blocco", 1, True, None), ("blocco", 2, False, None), ("blocco", 3, False, None)]
+    assert blocchi[0].riga().startswith(f"Errore nel filo dell'audio al campione {BLOCCO} (blocco): RuntimeError: blocco rotto\nPila delle chiamate:\n")
+    assert motore.campione_scritto == 4 * BLOCCO
 
 
 def test_ferma_tutte(finto):
@@ -414,9 +530,151 @@ def test_apri_che_solleva_va_muto():
     motore = Motore(apri=rotto)
     try:
         assert motore.avvia() is False
-        assert motore.muto and "niente scheda" in motore.ultimo_errore
+        assert motore.muto and motore.ultimo_errore.endswith("apertura: OSError: niente scheda")
+        assert motore.stato()["errore"] == motore.ultimo_errore
     finally:
         motore.chiudi()
+
+
+def test_avvio_muto_dice_perche(monkeypatch):
+    """Il perché che apri_flusso lascia nel modulo finisce in ultimo_errore, per il registro; senza
+    un perché, come con l'apertura finta del conftest, lo dice una frase generica."""
+    monkeypatch.setattr(motore_audio, "ULTIMO_ERRORE_DI_APERTURA", "")
+    motore = Motore()
+    try:
+        assert motore.avvia() is False
+        assert motore.ultimo_errore.endswith("apertura: nessuna scheda audio si è aperta")
+    finally:
+        motore.chiudi()
+
+    def apri(callback, fs, blocco):
+        motore_audio.ULTIMO_ERRORE_DI_APERTURA = "dispositivo predefinito, OSError: occupato"
+
+    monkeypatch.setattr(motore_audio, "apri_flusso", apri)
+    motore = Motore()
+    try:
+        assert motore.avvia() is False
+        assert motore.ultimo_errore.endswith("apertura: dispositivo predefinito, OSError: occupato")
+    finally:
+        motore.chiudi()
+
+
+# La guardia del flusso perso.
+
+def _aspetta(condizione):
+    """Aspetta in tempo vero, al più ATTESA_DEL_FILO, che la condizione diventi vera."""
+    scadenza = time.perf_counter() + ATTESA_DEL_FILO
+    while not condizione() and time.perf_counter() < scadenza:
+        time.sleep(0.005)
+    return condizione()
+
+
+def test_flusso_non_piu_attivo_passa_al_muto():
+    """La cuffia si stacca e PortAudio dà il flusso per non più attivo: al primo controllo il motore
+    lo lascia e va avanti muto dal campione scritto, con le voci, il tempo di gioco e gli eventi."""
+    motore, flusso = motore_finto()
+    try:
+        voce = motore.suona(_costante(0.5, 10 * FS), inizio=0)
+        flusso.avanza(10)
+        assert motore.controlla() is False and not motore.muto
+        flusso.active = False
+        assert motore.controlla() is True
+        assert motore.muto and motore.flusso_perso and motore.flusso is None
+        stato = motore.stato()
+        assert not stato["aperto"] and stato["muto"] and stato["perso"] and stato["interfaccia"] == "finta"
+        assert motore.ultimo_errore == "flusso perso: PortAudio dice che il flusso non è più attivo, sulla scheda finta"
+        perse = [n for n in motore.notifiche() if n.tipo == "flusso_perso"]
+        assert len(perse) == 1 and perse[0].campione == 10 * BLOCCO
+        assert perse[0].riga() == f"Flusso audio perso al campione {10 * BLOCCO}: PortAudio dice che il flusso non è più attivo, sulla scheda finta. Ciechino continua senza suono."
+        # Il flusso perso si chiude in un filo a parte.
+        motore._filo_della_chiusura.join(ATTESA_DEL_FILO)
+        assert flusso.chiuso
+        # Il filo muto riparte dal campione scritto: il campione udibile si muove e gli eventi scattano.
+        evento = motore.programma(motore.tempo_di_gioco(motore.campione_scritto) + 0.02, lambda campione: None)
+        assert _aspetta(lambda: motore.campione_udibile() > 10 * BLOCCO and evento.scattato)
+        assert evento.campione > 10 * BLOCCO and not voce.finita
+        # Un callback del flusso perso che si rifacesse vivo scrive silenzio e non tocca niente.
+        assert np.all(flusso.avanza(2) == 0.0)
+        assert motore.controlla() is False
+        assert not [n for n in motore.notifiche() if n.tipo in ("errore", "flusso_perso")]
+    finally:
+        motore.chiudi()
+    assert not motore._filo_muto.is_alive()
+
+
+def test_callback_che_tace_passa_al_muto(finto):
+    """Il callback smette di arrivare mentre l'orologio del flusso va avanti, fra un controllo e
+    l'altro: oltre FLUSSO_FERMO_DOPO il flusso è perso, e il campione udibile riparte."""
+    motore, flusso = finto
+    flusso.avanza(10)
+    fermo = motore.campione_udibile()
+    passo = 0.6 * FLUSSO_FERMO_DOPO
+    assert motore.controlla() is False
+    flusso.time += passo
+    assert motore.controlla() is False
+    # Senza la guardia il campione udibile resterebbe qui per sempre.
+    assert motore.campione_udibile() == motore.campione_scritto >= fermo
+    flusso.time += passo
+    assert motore.controlla() is True
+    silenzio = f"{2 * passo:.2f}".replace(".", ",")
+    assert motore.muto and motore.ultimo_errore == f"flusso perso: il callback non arriva da {silenzio} secondi, sulla scheda finta"
+    assert [n.tipo for n in motore.notifiche()] == ["flusso_perso"]
+    assert _aspetta(lambda: motore.campione_udibile() > 10 * BLOCCO)
+
+
+def test_callback_vivo_e_risveglio_non_perdono_il_flusso(finto):
+    """Un flusso che chiede i suoi blocchi non si perde mai; un controllo che arriva dopo un lungo
+    sonno del filo principale, per un sistema sospeso, non giudica, e dà al callback altro tempo."""
+    motore, flusso = finto
+    for _blocco in range(round(4 * FLUSSO_FERMO_DOPO * FS / BLOCCO)):
+        flusso.avanza(1)
+        assert motore.controlla() is False
+    passo = 0.6 * FLUSSO_FERMO_DOPO
+    flusso.time += 10 * FLUSSO_FERMO_DOPO
+    assert motore.controlla() is False
+    flusso.time += passo
+    assert motore.controlla() is False
+    # Il callback torna, e il conto del silenzio riparte da lì.
+    flusso.avanza(1)
+    flusso.time += passo
+    assert motore.controlla() is False
+    flusso.time += passo
+    assert motore.controlla() is False
+    # Un orologio che torna indietro non è un silenzio.
+    flusso.time -= 4 * passo
+    assert motore.controlla() is False
+    assert not motore.muto and motore.flusso is flusso
+    flusso.time += passo
+    assert motore.controlla() is False
+    flusso.time += passo
+    assert motore.controlla() is True
+
+
+class _FlussoSenzaStato(FlussoFinto):
+    """Un flusso il cui stato non si legge, come un flusso guasto di PortAudio."""
+
+    @property
+    def active(self):
+        raise RuntimeError("Error checking stream state")
+
+
+def test_stato_che_non_si_legge_e_motore_muto_o_chiuso():
+    motore = Motore(apri=lambda callback, fs, blocco: _FlussoSenzaStato(callback, fs, blocco))
+    try:
+        assert motore.avvia() is True
+        assert motore.controlla() is True
+        assert motore.ultimo_errore == "flusso perso: lo stato del flusso non si legge, RuntimeError: Error checking stream state, sulla scheda finta"
+    finally:
+        motore.chiudi()
+    # Un motore muto dall'avvio, uno chiuso e uno mai avviato non hanno un flusso da perdere.
+    muto = Motore()
+    try:
+        muto.avvia()
+        assert muto.controlla() is False and not muto.flusso_perso
+    finally:
+        muto.chiudi()
+    assert muto.controlla() is False
+    assert Motore().controlla() is False
 
 
 def test_apri_cercato_al_momento_di_avvia(monkeypatch):
@@ -474,13 +732,13 @@ def _apri_flusso_vera():
     return copia.apri_flusso
 
 
-@pytest.mark.parametrize(("scelta", "fallisce", "atteso"), [
-    ((7, "Windows WASAPI"), lambda o: False, (7, True)),
-    ((3, "Windows DirectSound"), lambda o: False, (3, False)),
-    ((7, "Windows WASAPI"), lambda o: o["device"] == 7, (None, False)),
-    (RuntimeError("niente scelta"), lambda o: False, (None, False)),
+@pytest.mark.parametrize(("scelta", "fallisce", "atteso", "perche"), [
+    ((7, "Windows WASAPI"), lambda o: False, (7, True), ""),
+    ((3, "Windows DirectSound"), lambda o: False, (3, False), ""),
+    ((7, "Windows WASAPI"), lambda o: o["device"] == 7, (None, False), "dispositivo 7 di Windows WASAPI, RuntimeError: il dispositivo non si apre"),
+    (RuntimeError("niente scelta"), lambda o: False, (None, False), "scelta del dispositivo, RuntimeError: niente scelta"),
 ])
-def test_apri_flusso_sceglie_e_ripiega(monkeypatch, scelta, fallisce, atteso):
+def test_apri_flusso_sceglie_e_ripiega(monkeypatch, scelta, fallisce, atteso, perche):
     import GBUtils
 
     finto = _sounddevice_finto(fallisce)
@@ -506,6 +764,8 @@ def test_apri_flusso_sceglie_e_ripiega(monkeypatch, scelta, fallisce, atteso):
     assert opzioni["callback"] is callback
     assert opzioni["samplerate"] == FS and opzioni["blocksize"] == BLOCCO
     assert opzioni["channels"] == 2 and opzioni["dtype"] == "float32" and opzioni["latency"] == AUDIO_LATENZA
+    # Il perché dei tentativi falliti resta nel modulo, per il registro; vuoto se il primo è riuscito.
+    assert apri_flusso.__globals__["ULTIMO_ERRORE_DI_APERTURA"] == perche
 
 
 def test_apri_flusso_senza_niente(monkeypatch):
@@ -513,7 +773,10 @@ def test_apri_flusso_senza_niente(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice_finto(lambda o: True))
     monkeypatch.setattr(GBUtils, "scegli_dispositivo_audio", lambda **opzioni: (7, "Windows WASAPI"))
-    assert _apri_flusso_vera()(object(), FS, BLOCCO) is None
+    apri_flusso = _apri_flusso_vera()
+    assert apri_flusso(object(), FS, BLOCCO) is None
+    assert apri_flusso.__globals__["ULTIMO_ERRORE_DI_APERTURA"] == ("dispositivo 7 di Windows WASAPI, RuntimeError: il dispositivo non si apre; "
+                                                                    "dispositivo predefinito, RuntimeError: il dispositivo non si apre")
 
 
 def test_comandi_da_un_altro_filo(finto):

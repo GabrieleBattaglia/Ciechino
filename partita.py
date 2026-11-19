@@ -1,22 +1,32 @@
 """
 La partita di Ciechino: la macchina delle fasi, dall'ascolto alla mira, dal volo al resoconto, con la
-riserva dei colpi, i livelli, i bonus e i conti delle statistiche.
+riserva dei colpi, i livelli, i bonus, la pausa e i conti delle statistiche.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
-Niente wx: la finestra chiama spazio, pausa, nuova e abbandona ai tasti, battito a ogni giro del suo
-timer, e mette in coda alla vista i Messaggio che riceve. Il tempo di gioco lo tiene il motore audio,
-e la partita non ha orologi paralleli: ferma e fa scorrere il tempo del motore, e legge il campione
-udibile per sapere che cosa si sente in quel momento. L'orologio che riceve serve soltanto alla
-durata vera della partita, per la classifica e le statistiche, e non conta le pause.
+Niente wx: la finestra chiama spazio, pausa, pausa_automatica, nuova e abbandona ai tasti e agli eventi
+delle finestre, battito a ogni giro del suo timer, e mette in coda alla vista i Messaggio che riceve.
+Il tempo di gioco lo tiene il motore audio, e la partita non ha orologi paralleli: ferma e fa scorrere
+il tempo del motore, e legge il campione udibile per sapere che cosa si sente in quel momento.
+L'orologio che riceve serve soltanto alla durata vera della partita, per la classifica e le
+statistiche, e non conta le pause.
 I fili: tutto qui gira nel filo principale, tranne le funzioni passate a motore.programma, che il
 callback chiama nel filo dell'audio al campione esatto. Quelle mandano soltanto comandi al motore,
 con buffer preparati prima, e non toccano lo stato della partita: la partita si accorge di ciò che è
 successo al battito, dall'evento scattato e dal campione udibile, così il resoconto arriva quando
 l'impatto si è davvero sentito.
-Gli avvisi della partita che nascono nello stesso battito, come il livello nuovo e il bonus che appare,
-suonano in fila: partiti allo stesso campione si fonderebbero in un suono solo, e nessuno dei due si
+Gli avvisi della partita, come il livello nuovo, il bonus che appare, l'ultimo colpo e la fine,
+suonano in fila, dopo l'effetto dell'impatto che li ha causati e uno dopo l'altro: partiti allo
+stesso campione, o sopra il rumore dell'impatto, si fonderebbero in un suono solo, e nessuno si
 riconoscerebbe. La finestra mette in fila anche l'esito della classifica, dopo la fine, con
 dopo_gli_avvisi.
+La pausa (D14, decisione di Gabriele del 19 novembre 2026) ferma tutto e fa tacere tutto: nell'ascolto
+e nel volo il tempo di gioco si ferma e le voci di gioco vanno a guadagno zero; nella mira si ferma la
+scivolata in corso, che alla ripresa ricomincia da capo col suo secondo di silenzio, e i valori già
+presi restano. La chiede chi gioca con Ctrl+P, col suo suono e il suo messaggio, oppure la mette la
+finestra, in silenzio, quando si apre un dialogo o lei perde l'attivazione: questa seconda, e solo
+questa, la toglie la finestra al ritorno. Ciò che succede mentre la partita è ferma, come un tiro il
+cui impatto era già partito quando la pausa è arrivata, si dice subito nella vista, ma gli avvisi e
+il bonus nuovo aspettano la ripresa.
 """
 
 import random
@@ -25,7 +35,7 @@ import time
 import fisica
 import mira
 import resoconti
-from bersagli import genera, genera_bonus, quanti_bersagli
+from bersagli import genera, genera_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
     ATTENUAZIONE_IN_MIRA_DB,
     BERSAGLIO_FORMA,
@@ -43,6 +53,7 @@ from costanti import (
     PROIETTILE_FORMA,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
+    STACCO_FRA_GLI_AVVISI,
     VELOCITA_DI_RIFERIMENTO,
 )
 from motore_audio import VoceTono
@@ -57,24 +68,37 @@ FASI = ("pronta", "ascolto", "mira", "volo", "finita")
 SOTTOFASI = ("pausa", "conto", "scivolata")
 # Le fasi in cui una partita è in corso: la finestra le usa per chiedere se abbandonarla.
 IN_CORSO = ("ascolto", "mira", "volo")
-# Il silenzio fra due avvisi in fila, in secondi: quanto basta perché l'orecchio li senta due. Da tarare
-# ascoltando, come i suoni stessi.
-STACCO_FRA_GLI_AVVISI = 0.15
+# I suoni con cui la finestra dice, dopo la fine, se il punteggio entra in classifica: li mette in fila
+# a dopo_gli_avvisi, e la partita nuova chiesta subito dopo li lascia suonare.
+ESITI_DELLA_CLASSIFICA = ("in_classifica", "fuori_classifica")
 
 
-def punti_del_centro(bersaglio, precisione):
+def punti_del_centro(bersaglio, precisione, livello=None):
     """I punti di un centro, con la formula di docs/progetto.txt: PUNTI_BASE, per il rapporto fra
     RAGGIO_DI_RIFERIMENTO e il raggio alla ESPONENTE_DEL_RAGGIO, per 1 più la velocità del bersaglio
-    divisa per VELOCITA_DI_RIFERIMENTO, per 1 più PREMIO_PRECISIONE per la precisione, per
-    MOLTIPLICATORE_BONUS se è un bonus, arrotondato all'intero. La velocità è quella scalare, così
-    anche il bonus, che attraversa il cubo, vale per quanto corre."""
+    divisa per VELOCITA_DI_RIFERIMENTO, per 1 più PREMIO_PRECISIONE per la precisione, arrotondato
+    all'intero. La velocità è quella scalare, così un mobile vale per quanto corre.
+    Un bonus vale esattamente MOLTIPLICATORE_BONUS volte i punti di un bersaglio normale del livello in
+    cui è nato, col raggio e la velocità di quel livello e lo stesso premio di precisione (D13,
+    decisione di Gabriele del 19 novembre 2026): il raggio ridotto e la corsa della traversata non
+    contano, così «vale 5 volte» è vero a ogni livello. Per un bonus livello è quindi obbligatorio;
+    per gli altri bersagli non serve."""
     precisione = 0.0 if precisione is None else min(1.0, max(0.0, float(precisione)))
-    valore = PUNTI_BASE * (RAGGIO_DI_RIFERIMENTO / bersaglio.raggio) ** ESPONENTE_DEL_RAGGIO
-    valore *= 1.0 + bersaglio.velocita_scalare / VELOCITA_DI_RIFERIMENTO
-    valore *= 1.0 + PREMIO_PRECISIONE * precisione
     if bersaglio.bonus:
-        valore *= MOLTIPLICATORE_BONUS
-    return round(valore)
+        if livello is None:
+            raise ValueError("i punti di un bonus dipendono dal livello in cui è nato: manca livello")
+        raggio, velocita = raggio_del_livello(livello), velocita_del_livello(livello)
+    else:
+        raggio, velocita = bersaglio.raggio, bersaglio.velocita_scalare
+    valore = PUNTI_BASE * (RAGGIO_DI_RIFERIMENTO / raggio) ** ESPONENTE_DEL_RAGGIO
+    valore *= 1.0 + velocita / VELOCITA_DI_RIFERIMENTO
+    valore *= 1.0 + PREMIO_PRECISIONE * precisione
+    punti = round(valore)
+    if bersaglio.bonus:
+        # I punti del normale si arrotondano prima di moltiplicarli: così il bonus vale proprio
+        # MOLTIPLICATORE_BONUS volte quelli che il normale avrebbe dato, al punto.
+        punti = round(punti * MOLTIPLICATORE_BONUS)
+    return punti
 
 
 def _sentito(evento, udibile):
@@ -92,8 +116,9 @@ class Partita:
     punti, riserva, centri_del_livello, tiri, centri, bersagli (il bonus compreso), valori,
     ultimo_volo; e in più serie, bonus, il bersaglio bonus in volo o None, scivolate, i buffer delle
     tre barre, e inizio_barra, il campione del motore dove comincia il buffer della barra in corso.
-    Oltre ai metodi del contratto c'è dopo_gli_avvisi, che dice alla finestra da quale campione far
-    partire l'esito della classifica, in fila dopo il suono della fine."""
+    Oltre ai metodi del contratto ci sono pausa_automatica, la pausa silenziosa che mette e toglie la
+    finestra (D14), e dopo_gli_avvisi, che dice alla finestra da quale campione far partire l'esito
+    della classifica, in fila dopo il suono della fine."""
 
     def __init__(self, motore, suoni, statistiche=None, rng=None, orologio=None):
         self.motore = motore
@@ -127,13 +152,23 @@ class Partita:
         self._voce_barra = None
         self._voce_proiettile = None
         self._evento_impatto = None
+        # L'effetto dell'impatto in volo e la sua lunghezza in campioni: si conta quando si sente, e gli
+        # avvisi che il tiro causa partono dopo di lui.
+        self._effetto_impatto = None
+        self._lunghezza_impatto = 0
         self._evento_bonus = None
+        # Il livello in cui è nato il bonus in volo: i suoi punti sono quelli di un normale di quel livello (D13).
+        self._livello_del_bonus = None
         self._numero = 0
         # Il primato della serie torna a ogni centro che allunga la serie oltre il vecchio: si dice una
         # volta sola per serie, e un tiro a vuoto riapre l'annuncio.
         self._serie_detta = False
         # Il campione da cui può partire il prossimo avviso in fila: la fine dell'ultimo, più lo stacco.
         self._fine_degli_avvisi = 0
+        # La pausa: se l'ha messa la finestra, e ciò che aspetta la ripresa, gli avvisi e il bonus.
+        self._pausa_automatica = False
+        self._avvisi_rimandati = []
+        self._bonus_rimandato = False
         self._inizio = None
         self._pause = 0.0
         self._pausa_dal = None
@@ -165,7 +200,10 @@ class Partita:
     def nuova(self):
         """Comincia una partita nuova, abbandonando prima quella in corso: livello 1, riserva
         COLPI_INIZIALI, i bersagli del primo livello che nascono al prossimo campione sicuro, col
-        tempo di gioco che scorre da lì."""
+        tempo di gioco che scorre da lì. Il suono della partita nuova aspetta in fila gli avvisi
+        della partita di prima, e dopo la fine anche l'esito della classifica che la finestra vi ha
+        messo, perché lo spazio dato d'abitudine subito dopo l'ultimo tiro non li copra."""
+        finita = self.fase == "finita"
         messaggi = self.abbandona() if self.in_corso() else []
         self._ferma_voci()
         self.livello = 1
@@ -174,17 +212,19 @@ class Partita:
         self.valori = []
         self.ultimo_volo = None
         self.barra = self.sottofase = self.inizio_barra = None
-        self.in_pausa = False
+        self._azzera_la_pausa()
         self._serie_detta = False
         self._numero = 0
         self._inizio = self.orologio()
         self._pause = 0.0
-        self._pausa_dal = None
         self._durata = None
         k = self.motore.prossimo_campione()
         self._nuovi_bersagli(k)
         self.motore.fai_scorrere_tempo(k)
-        self.suoni.suona("nuova_partita")
+        dopo_l_esito = None
+        if finita and self._fine_degli_avvisi > k:
+            dopo_l_esito = self._fine_degli_avvisi + self._lunghezza_degli_esiti() + self._stacco()
+        self._avviso("nuova_partita", dopo_l_esito)
         self._conta("partite_iniziate")
         self.fase = "ascolto"
         messaggi.append(resoconti.inizio_partita(self.livello, self.riserva))
@@ -215,31 +255,44 @@ class Partita:
         return []
 
     def pausa(self):
-        """Ctrl+P: nell'ascolto e nel volo ferma il tempo di gioco al prossimo campione e zittisce le
-        voci di gioco, o fa riprendere l'uno e le altre. Il motore resta aperto, così i suoni della
-        pausa e della ripresa si sentono. Nella mira il tempo è già fermo, e lo dice."""
-        if self.fase == "mira":
-            return [resoconti.pausa_nella_mira()]
+        """Ctrl+P, la pausa chiesta da chi gioca (D14): con la partita in corso la ferma e la fa tacere,
+        col suono della pausa, e la conta in «pause»; in pausa, anche in quella automatica, la fa
+        riprendere col suono della ripresa, perché la barra di stato dice «Ctrl+P per riprendere» in
+        tutte e due. Il motore resta aperto, così i suoni della pausa e della ripresa si sentono.
+        Senza partita non c'è niente da fermare, e lo dice il suono del non ora, come lo spazio fuori
+        tempo: con la lettura dei resoconti spenta è l'unico segno che il tasto è arrivato."""
         if self.fase not in IN_CORSO:
+            self.suoni.suona("non_ora")
             return [resoconti.nessuna_partita()]
-        k = self.motore.prossimo_campione()
         if not self.in_pausa:
-            self.motore.ferma_tempo(k)
-            for voce in self._voci_di_gioco():
-                self.motore.guadagno_voce(voce, 0.0)
-            self.in_pausa = True
-            self._pausa_dal = self.orologio()
+            nella_mira = self.fase == "mira"
+            self._sospendi()
             self.suoni.suona("pausa")
-            return [resoconti.in_pausa()]
-        self.motore.fai_scorrere_tempo(k)
-        for voce in self._voci_di_gioco():
-            self.motore.guadagno_voce(voce, 1.0)
-        self.in_pausa = False
-        if self._pausa_dal is not None:
-            self._pause += max(0.0, self.orologio() - self._pausa_dal)
-        self._pausa_dal = None
-        self.suoni.suona("ripresa")
-        return [resoconti.ripresa()]
+            self._conta("pause")
+            return [resoconti.in_pausa(nella_mira=nella_mira)]
+        # Gli avvisi rimandati dalla pausa vengono in fila dopo il suono della ripresa, non sopra.
+        self._accoda(self.suoni.suona("ripresa"))
+        return [resoconti.ripresa(), *self._riprendi()]
+
+    def pausa_automatica(self, attiva):
+        """La pausa che mette e toglie la finestra (D14): attiva vera quando si apre un dialogo modale o
+        la finestra perde l'attivazione, falsa quando il dialogo si chiude e la finestra è di nuovo
+        attiva. Con vero, se la partita è in corso e non è già in pausa, la ferma come Ctrl+P, si
+        ricorda che la pausa è automatica e la conta in «pause_automatiche». Con falso la fa
+        riprendere, ma soltanto se la pausa è automatica: quella chiesta con Ctrl+P resta finché non
+        la si toglie con Ctrl+P. Tutte e due in silenzio, senza suoni né messaggi della pausa, perché
+        chi gioca non l'ha chiesta e la finestra ha già il suo dialogo da dire; la barra di stato dice
+        comunque la fase. Restituisce una lista di Messaggio, di solito vuota: alla ripresa può
+        portare il bonus nato a partita ferma."""
+        if attiva:
+            if self.fase in IN_CORSO and not self.in_pausa:
+                self._sospendi()
+                self._pausa_automatica = True
+                self._conta("pause_automatiche")
+            return []
+        if self.in_pausa and self._pausa_automatica:
+            return self._riprendi()
+        return []
 
     def abbandona(self):
         """Lascia la partita in corso: ferma le voci di gioco, la conta come abbandonata e torna a
@@ -250,6 +303,64 @@ class Partita:
         self.fase = "pronta"
         return messaggi
 
+    # La pausa.
+
+    def _sospendi(self):
+        """Ferma la partita in corso e la fa tacere, per la pausa chiesta e per quella automatica.
+        Nell'ascolto e nel volo il tempo di gioco si ferma al prossimo campione sicuro; nella mira, dove
+        è già fermo, si ferma la scivolata in corso, che alla ripresa ricomincia da capo, perché un
+        valore preso a metà di una barra interrotta non sarebbe una scelta. Le voci di gioco vanno a
+        guadagno zero, con la rampa del motore contro i click."""
+        if self.fase == "mira":
+            if self._voce_barra is not None:
+                self.motore.ferma(self._voce_barra)
+            self._voce_barra = None
+        else:
+            self.motore.ferma_tempo(self.motore.prossimo_campione())
+        for voce in self._voci_di_gioco():
+            self.motore.guadagno_voce(voce, 0.0)
+        self.in_pausa = True
+        self._pausa_automatica = False
+        self._pausa_dal = self.orologio()
+
+    def _riprendi(self):
+        """La ripresa, dopo l'una o l'altra pausa: nell'ascolto e nel volo il tempo riprende dal
+        prossimo campione sicuro e le voci tornano a guadagno pieno; nella mira i bersagli tornano
+        attenuati e la barra in corso riparte da capo, col suo secondo di silenzio e i suoi bip, con i
+        valori già presi. Poi suonano in fila gli avvisi rimandati, e nasce il bonus che la pausa ha
+        fatto aspettare: i suoi messaggi sono quelli che restituisce."""
+        k = self.motore.prossimo_campione()
+        if self.fase == "mira":
+            guadagno = db_in_lineare(ATTENUAZIONE_IN_MIRA_DB)
+        else:
+            guadagno = 1.0
+            self.motore.fai_scorrere_tempo(k)
+        for voce in self._voci_di_gioco():
+            self.motore.guadagno_voce(voce, guadagno)
+        self.in_pausa = False
+        self._pausa_automatica = False
+        if self._pausa_dal is not None:
+            self._pause += max(0.0, self.orologio() - self._pausa_dal)
+        self._pausa_dal = None
+        if self.fase == "mira":
+            self._avvia_barra(self.barra, k)
+            return []
+        rimandati, self._avvisi_rimandati = self._avvisi_rimandati, []
+        for evento in rimandati:
+            self._avviso(evento)
+        if self._bonus_rimandato:
+            self._bonus_rimandato = False
+            return self._forse_un_bonus()
+        return []
+
+    def _azzera_la_pausa(self):
+        """Nessuna pausa e niente in attesa della ripresa: per la partita nuova e per quella che finisce."""
+        self.in_pausa = False
+        self._pausa_automatica = False
+        self._pausa_dal = None
+        self._avvisi_rimandati = []
+        self._bonus_rimandato = False
+
     # I bersagli.
 
     def _nuovo_numero(self):
@@ -257,9 +368,11 @@ class Partita:
         return self._numero
 
     def _nasce(self, bersaglio, k):
-        """Un bersaglio entra in volo, con la sua voce dal campione k, e si conta."""
+        """Un bersaglio entra in volo, con la sua voce dal campione k, e si conta. A partita ferma nasce
+        muto, come gli altri, e la ripresa gli dà la voce con loro: succede quando un impatto partito
+        prima della pausa si risolve durante la pausa."""
         self.bersagli.append(bersaglio)
-        voce = VoceTono(bersaglio.parametri_sonori, BERSAGLIO_FORMA, inizio=k)
+        voce = VoceTono(bersaglio.parametri_sonori, BERSAGLIO_FORMA, inizio=k, guadagno=0.0 if self.in_pausa else 1.0)
         self._voci[bersaglio] = voce
         self.motore.aggiungi(voce)
         if self.statistiche is not None:
@@ -283,6 +396,7 @@ class Partita:
         self._voci.pop(bersaglio, None)
         if bersaglio is self.bonus:
             self.bonus = None
+            self._livello_del_bonus = None
 
     def _ferma_bersagli(self):
         """Ferma subito le voci di tutti i bersagli, annulla l'uscita del bonus e svuota l'elenco."""
@@ -291,20 +405,26 @@ class Partita:
         self._voci = {}
         self.bersagli = []
         self.bonus = None
+        self._livello_del_bonus = None
         if self._evento_bonus is not None:
             self.motore.annulla(self._evento_bonus)
             self._evento_bonus = None
 
     def _ferma_voci(self):
-        """Ferma tutte le voci di gioco, bersagli, proiettile e scivolata, e gli eventi programmati."""
+        """Ferma tutte le voci di gioco, bersagli, proiettile e scivolata, e gli eventi programmati.
+        L'effetto di un impatto già partito si conta, perché si è sentito anche se il tiro non si
+        risolverà più; quello annullato prima di partire non si conta."""
         self._ferma_bersagli()
         for voce in (self._voce_proiettile, self._voce_barra):
             if voce is not None:
                 self.motore.ferma(voce)
         self._voce_proiettile = self._voce_barra = None
         if self._evento_impatto is not None:
+            if self._evento_impatto.scattato:
+                self._conta_suono(self._effetto_impatto)
             self.motore.annulla(self._evento_impatto)
             self._evento_impatto = None
+        self._effetto_impatto = None
 
     def _voci_di_gioco(self):
         """Le voci che la pausa zittisce: i bersagli e il proiettile in volo."""
@@ -313,12 +433,13 @@ class Partita:
             voci.append(self._voce_proiettile)
         return voci
 
-    # Il bonus.
+    # I suoni e i conti.
 
     def _pronto_senza_conto(self, evento, posizione):
         """Il buffer di un effetto preparato senza contarlo: Suoni conta un effetto quando è pronto,
-        ma l'uscita del bonus non si sente se il bonus viene colpito prima, e allora il conto
-        sarebbe falso. Lo si conta quando il battito sa che è suonato."""
+        ma l'uscita del bonus non si sente se il bonus viene colpito prima, e l'impatto non si sente
+        se la partita si abbandona col proiettile in volo, e allora il conto sarebbe falso. Lo si
+        conta quando il battito sa che è suonato."""
         conta, self.suoni.conta = self.suoni.conta, None
         try:
             return self.suoni.pronto(evento, posizione=posizione)
@@ -328,7 +449,7 @@ class Partita:
     def _conta_suono(self, evento):
         """Conta un suono che il motore ha già fatto, con la stessa funzione che usa Suoni."""
         conta = self.suoni.conta
-        if conta is not None:
+        if conta is not None and evento is not None:
             conta(evento)
 
     def _conta(self, chiave, quanti=1):
@@ -336,15 +457,37 @@ class Partita:
         if self.statistiche is not None:
             self.statistiche.conta(chiave, quanti)
 
-    def _avviso(self, evento):
-        """Un avviso della partita, il livello nuovo, il bonus apparso, l'ultimo colpo o la fine: suona dal
-        prossimo campione sicuro, oppure, se l'avviso di prima si sente ancora, in fila dopo di lui,
-        staccato di STACCO_FRA_GLI_AVVISI."""
-        inizio = max(self.motore.prossimo_campione(), self._fine_degli_avvisi)
-        voce = self.suoni.suona(evento, inizio=inizio)
+    def _stacco(self):
+        """STACCO_FRA_GLI_AVVISI in campioni."""
+        return round(STACCO_FRA_GLI_AVVISI * self.motore.fs)
+
+    def _accoda(self, voce):
+        """Mette in fila una voce partita: il prossimo avviso aspetta la sua fine, più lo stacco."""
         if voce is not None:
-            self._fine_degli_avvisi = voce.inizio + len(voce.buffer) + round(STACCO_FRA_GLI_AVVISI * self.motore.fs)
+            self._fine_degli_avvisi = max(self._fine_degli_avvisi, voce.inizio + len(voce.buffer) + self._stacco())
+
+    def _avviso(self, evento, inizio=None):
+        """Un avviso della partita, il livello nuovo, il bonus apparso, l'ultimo colpo, la fine o la
+        partita nuova: suona dal prossimo campione sicuro, oppure, se l'avviso di prima o l'effetto
+        dell'impatto si sentono ancora, in fila dopo di loro, staccato di STACCO_FRA_GLI_AVVISI; mai
+        prima di inizio, se c'è. A partita ferma non suona: aspetta la ripresa (D14)."""
+        if self.in_pausa:
+            self._avvisi_rimandati.append(evento)
+            return None
+        inizio = max(self.motore.prossimo_campione(), self._fine_degli_avvisi, inizio or 0)
+        voce = self.suoni.suona(evento, inizio=inizio)
+        self._accoda(voce)
         return voce
+
+    def _lunghezza_degli_esiti(self):
+        """I campioni del più lungo fra gli esiti della classifica: la partita non sa quale dei due la
+        finestra ha messo in fila, quindi lascia il posto al più lungo."""
+        lunghezze = [0]
+        for evento in ESITI_DELLA_CLASSIFICA:
+            buffer = self._pronto_senza_conto(evento, None)
+            if buffer is not None:
+                lunghezze.append(len(buffer))
+        return max(lunghezze)
 
     def dopo_gli_avvisi(self):
         """Il campione da cui può partire un suono che deve seguire gli avvisi della partita, come l'esito
@@ -353,6 +496,8 @@ class Partita:
         if self._fine_degli_avvisi > self.motore.prossimo_campione():
             return self._fine_degli_avvisi
         return None
+
+    # Il bonus.
 
     def _forse_un_bonus(self):
         """A ogni nuova fase d'ascolto, dal LIVELLO_DEI_BONUS e senza un bonus in volo, nasce un bonus
@@ -367,6 +512,7 @@ class Partita:
         bonus = genera_bonus(self.livello, self.rng, self._nuovo_numero(), self.motore.tempo_di_gioco(k))
         self._nasce(bonus, k)
         self.bonus = bonus
+        self._livello_del_bonus = self.livello
         self._avviso("bonus_appare")
         uscita = bonus.tempo_di_uscita
         buffer = self._pronto_senza_conto("bonus_uscito", bonus.posizione(uscita))
@@ -440,7 +586,9 @@ class Partita:
 
     def _battito_della_mira(self):
         """Aggiorna la parte della barra che si sente, e prende il massimo della scivolata che nessuno
-        ha fermato (D3)."""
+        ha fermato (D3). A partita ferma la barra è ferma, e non scade."""
+        if self.in_pausa:
+            return []
         udibile = self.motore.campione_udibile()
         barra = self._scivolata()
         posto = udibile - self.inizio_barra
@@ -477,7 +625,8 @@ class Partita:
         dello sparo, lo sparo dal cannone e la voce del proiettile dal campione k, i bersagli di nuovo a
         guadagno pieno e il tempo che riprende da k. L'effetto dell'impatto si prepara adesso, perché
         nel filo dell'audio non c'è tempo per farlo; l'evento della fine del volo, al campione esatto,
-        ferma il proiettile e il bersaglio colpito e fa partire l'effetto.
+        ferma il proiettile e il bersaglio colpito e fa partire l'effetto. L'effetto si conta quando si
+        sente, non adesso: se la partita si abbandona col proiettile in volo non suona mai.
         Il conto del volo e la preparazione dell'effetto vengono prima di scegliere k: durano qualche
         millesimo, e un k scelto prima potrebbe essere già passato quando i comandi arrivano al
         motore. Nella mira il tempo di gioco è fermo, quindi la partenza è la stessa a qualunque
@@ -493,7 +642,7 @@ class Partita:
             effetto = "colpito_bonus"
         else:
             effetto = "colpito"
-        buffer = self.suoni.pronto(effetto, posizione=volo.punto_finale)
+        buffer = self._pronto_senza_conto(effetto, volo.punto_finale)
         k = self.motore.prossimo_campione()
         proiettile = VoceTono(parametri_del_proiettile(volo), PROIETTILE_FORMA, inizio=k)
         self.suoni.suona("sparo", posizione=fisica.CANNONE, inizio=k)
@@ -517,6 +666,8 @@ class Partita:
                 motore.suona(buffer, inizio=campione)
 
         self._evento_impatto = motore.programma(volo.fine, impatto)
+        self._effetto_impatto = effetto
+        self._lunghezza_impatto = len(buffer) if buffer is not None else 0
         self._voce_proiettile = proiettile
         self.ultimo_volo = volo
         self.tiri += 1
@@ -526,24 +677,40 @@ class Partita:
 
     def _battito_del_volo(self):
         """Il tiro si risolve quando l'impatto si è sentito: l'evento è scattato e il campione udibile
-        lo ha passato, oppure il tempo di gioco al campione udibile ha passato la fine del volo."""
+        lo ha passato, oppure il tempo di gioco al campione udibile ha passato la fine del volo. A
+        partita ferma il tempo non arriva alla fine del volo, ma un impatto scattato prima della pausa
+        si risolve lo stesso: si è sentito, e il resoconto lo dice."""
         udibile = self.motore.campione_udibile()
         if _sentito(self._evento_impatto, udibile) or self.motore.tempo_di_gioco(udibile) >= self.ultimo_volo.fine:
             return self._risolvi()
         return []
 
+    def _livello_di(self, bersaglio):
+        """Il livello che fa i punti del bersaglio colpito: per il bonus quello in cui è nato (D13)."""
+        if bersaglio.bonus and bersaglio is self.bonus and self._livello_del_bonus is not None:
+            return self._livello_del_bonus
+        return self.livello
+
     def _risolvi(self):
         """L'esito del tiro: punti, riserva, serie, livello, il resoconto e i messaggi che seguono, poi
-        la nuova fase d'ascolto, o la fine della partita."""
+        la nuova fase d'ascolto, o la fine della partita. Gli avvisi che il tiro causa partono in fila
+        dopo l'effetto dell'impatto, che sta ancora suonando."""
         volo = self.ultimo_volo
         colpito = volo.colpito
-        self._evento_impatto = None
+        evento, effetto = self._evento_impatto, self._effetto_impatto
+        self._evento_impatto = self._effetto_impatto = None
         self._voce_proiettile = None
+        if evento is not None and evento.scattato and evento.campione is not None:
+            self._conta_suono(effetto)
+            fine_dell_effetto = evento.campione + self._lunghezza_impatto
+        else:
+            fine_dell_effetto = self.motore.prossimo_campione() + self._lunghezza_impatto
+        self._fine_degli_avvisi = max(self._fine_degli_avvisi, fine_dell_effetto + self._stacco())
         livello_del_tiro = self.livello
         punti = 0
         colpi_bonus = 0
         if colpito is not None:
-            punti = punti_del_centro(colpito, volo.precisione)
+            punti = punti_del_centro(colpito, volo.precisione, livello=self._livello_di(colpito))
             self.punti += punti
             self.centri += 1
             self.serie += 1
@@ -560,6 +727,9 @@ class Partita:
         messaggi = [resoconti.resoconto_del_tiro(self.tiri, livello_del_tiro, volo, self.valori, punti=punti, totale=self.punti, riserva=self.riserva,
                                                  colpi_bonus=colpi_bonus)]
         battuti = self._statistiche_del_tiro(volo, punti)
+        # Il bonus uscito durante il volo si dice e si conta prima che il livello nuovo o la fine
+        # svuotino il cielo: la sua uscita si è già sentita, e senza il messaggio sparirebbe dai conti.
+        messaggi.extend(self._controlla_il_bonus())
         if colpito is not None and self.centri_del_livello >= CENTRI_PER_LIVELLO:
             messaggi.extend(self._sali_di_livello())
         elif colpito is not None and not colpito.bonus:
@@ -572,12 +742,15 @@ class Partita:
             messaggi.extend(self._chiudi("riserva_vuota"))
             self.fase = "finita"
             return messaggi
-        messaggi.extend(self._controlla_il_bonus())
         if colpito is None and self.riserva == 1:
             self._avviso("ultimo_colpo")
             messaggi.append(resoconti.ultimo_colpo())
         self.fase = "ascolto"
-        messaggi.extend(self._forse_un_bonus())
+        if self.in_pausa:
+            # Un bonus che nascesse adesso entrerebbe a partita ferma: nasce alla ripresa (D14).
+            self._bonus_rimandato = True
+        else:
+            messaggi.extend(self._forse_un_bonus())
         return messaggi
 
     def _statistiche_del_tiro(self, volo, punti):
@@ -596,13 +769,30 @@ class Partita:
         esito = {"colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "forma": colpito.forma if colpito is not None else None,
                  "mobile": bool(colpito is not None and colpito.mobile), "precisione": volo.precisione, "punti": punti, "distanza_dal_vicino": distanza,
                  "serie": self.serie}
-        battuti = self.statistiche.tiro(list(self.valori), esito)
+        prima = self._primati_attuali()
+        battuti = self._primati_che_cambiano(self.statistiche.tiro(list(self.valori), esito), prima)
         if "serie" in battuti:
             if self._serie_detta:
                 battuti.remove("serie")
             else:
                 self._serie_detta = True
         return battuti
+
+    def _primati_attuali(self):
+        """Il valore di ogni primato delle statistiche, adesso."""
+        if self.statistiche is None:
+            return {}
+        primati = self.statistiche.dati.get("primati", {})
+        return {chiave: dato["valore"] for chiave, dato in primati.items() if isinstance(dato, dict) and "valore" in dato}
+
+    def _primati_che_cambiano(self, battuti, prima):
+        """I primati battuti che si dicono: soltanto quelli il cui valore scritto cambia. Le statistiche
+        tengono il valore esatto, ma il messaggio lo scrive arrotondato, la precisione al punto
+        percentuale e le distanze al centimetro: un miglioramento che non si vede a parole non è un
+        nuovo primato da festeggiare, e «100%» si conquista una volta sola."""
+        dopo = self._valori_dei_primati(battuti)
+        return [chiave for chiave in battuti
+                if chiave not in prima or chiave not in dopo or resoconti.primato_scritto(chiave, prima[chiave]) != resoconti.primato_scritto(chiave, dopo[chiave])]
 
     def _valori_dei_primati(self, chiavi):
         if self.statistiche is None:
@@ -636,15 +826,19 @@ class Partita:
     def _chiudi(self, motivo):
         """Chiude la partita, finita a riserva vuota o abbandonata: voci ferme, durata fissata, conto
         e salvataggio delle statistiche, e il messaggio col riepilogo e i primati battuti."""
+        if motivo == "abbandonata" and self._evento_impatto is not None:
+            # Il tiro in volo non si è risolto, e le statistiche contano i tiri alla risoluzione: esce
+            # anche dal riepilogo, così la partita e le statistiche dicono lo stesso numero di tiri.
+            self.tiri = max(0, self.tiri - 1)
         self._ferma_voci()
         self._durata = self._durata_adesso()
-        self._pausa_dal = None
-        self.in_pausa = False
+        self._azzera_la_pausa()
         self.barra = self.sottofase = None
         riepilogo = self.riepilogo()
         battuti = []
         if self.statistiche is not None:
-            battuti = self.statistiche.partita_finita({**riepilogo, "motivo": motivo})
+            prima = self._primati_attuali()
+            battuti = self._primati_che_cambiano(self.statistiche.partita_finita({**riepilogo, "motivo": motivo}), prima)
             # Le statistiche non si salvano da sole: la fine di una partita è il momento in cui
             # perderle costerebbe di più.
             self.statistiche.salva()

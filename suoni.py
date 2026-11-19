@@ -128,11 +128,11 @@ EVENTI = {evento: preset for _titolo, gruppo in GRUPPI for evento, preset in gru
 # mette dopo il titolo del gruppo e le dà lui la maiuscola. Una prova controlla che ogni evento abbia
 # la sua.
 AZIONI = {
-    "nuova_partita": _("comincia una partita nuova, con Ctrl+N o con Nuova partita del menu Partita"),
+    "nuova_partita": _("comincia una partita nuova, con lo spazio quando nessuna partita è in corso, con Ctrl+N o con Nuova partita del menu Partita"),
     "ultimo_colpo": _("nella riserva resta l'ultimo colpo"),
     "partita_finita": _("la riserva è vuota e la partita finisce"),
-    "in_classifica": _("a partita finita il punteggio entra nella classifica dei migliori, prima della finestra del nome"),
-    "fuori_classifica": _("a partita finita il punteggio non entra nella classifica dei migliori"),
+    "in_classifica": _("a partita finita il punteggio entra nella classifica dei migliori: suona dopo la fine, e quando tace si apre la finestra del nome"),
+    "fuori_classifica": _("a partita finita il punteggio non entra nella classifica dei migliori: suona dopo la fine"),
     "mira_avviata": _("lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del gioco si ferma e i bersagli si sentono più piano"),
     "valore_preso": _("la mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio o alla fine della scivolata"),
     "sparo": _("dopo il terzo valore della mira parte il colpo dal cannone"),
@@ -142,9 +142,11 @@ AZIONI = {
     "livello_su": _("i centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi"),
     "bonus_appare": _("compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce"),
     "bonus_uscito": _("il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito"),
-    "pausa": _("la partita va in pausa, con Ctrl+P o con Pausa del menu Partita"),
-    "ripresa": _("la partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita"),
-    "non_ora": _("lo spazio premuto quando non può fare niente, per esempio col proiettile in volo o a partita finita"),
+    # La pausa automatica, quella di un dialogo aperto o di un'altra finestra, non ha suoni (D14): le
+    # due azioni lo dicono, perché chi ritocca i suoni non li cerchi lì.
+    "pausa": _("la partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira; la pausa automatica non suona"),
+    "ripresa": _("la partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita; la ripresa automatica non suona"),
+    "non_ora": _("lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso"),
     "avvio": _("il programma si apre"),
     "uscita": _("l'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra"),
     "riavvio": _("Ciechino si chiude per riaprirsi subito, dopo il sì alla domanda che segue la scelta di una lingua nuova"),
@@ -169,7 +171,7 @@ AZIONI = {
     "caffe_paypal": _("Dona con PayPal, nell'invito al caffè: si apre PayPal nel browser"),
     "pub": _("Entra al PUB, dal menu Aiuto"),
     "pub_aiuto": _("Chiedi aiuto al PUB, dal menu Aiuto"),
-    "domanda": _("una domanda col sì e col no, come l'uscita con una partita in corso"),
+    "domanda": _("una domanda col sì e col no, come Ctrl+N o l'uscita con una partita in corso"),
     "confermato": _("un dialogo confermato con OK, come il nome in classifica o il volume, o una mail del PUB pronta"),
     "annullato": _("un dialogo chiuso con Annulla o con Esc, o il no a una domanda"),
     "campo_da_correggere": _("OK in un dialogo con un campo da correggere, come un nome vuoto in classifica"),
@@ -217,8 +219,11 @@ class Suoni:
     motore è il Motore che li suona; conta, se c'è, è una funzione chiamata col nome dell'evento a
     ogni suono, e la partita la collega a Statistiche.suono. È un attributo pubblico, perché la
     partita riceve i suoni già fatti: suoni.conta = statistiche.suono la collega anche dopo.
-    Si conta ogni evento che ha un suono: quelli di suona quando la voce parte, quelli di pronto
-    quando il buffer è pronto, perché un effetto preparato è un effetto che il motore farà partire.
+    Si conta ogni evento che suona: quelli di suona quando la voce parte, quelli di pronto, di solito,
+    quando il buffer è pronto. Un effetto preparato però può non suonare mai: l'impatto di un
+    proiettile in una partita abbandonata in volo, l'uscita di un bonus colpito prima di uscire. Chi
+    prepara un effetto così lo chiede a pronto con conta_subito falso, e lo conta con suonato quando
+    sa che il motore lo ha fatto partire, perché le statistiche contano i suoni sentiti.
     Un evento sconosciuto, o un preset che manca o non si sintetizza, non fa niente e non si conta:
     il gioco resta muto lì invece di fermarsi, e stderr, cioè il registro degli errori nel
     compilato, lo dice una volta sola, per non riempirlo a ogni battito.
@@ -340,15 +345,26 @@ class Suoni:
         self._conta(evento)
         return voce
 
-    def pronto(self, evento, posizione=None, guadagno_db=0.0):
+    def pronto(self, evento, posizione=None, guadagno_db=0.0, conta_subito=True):
         """Il buffer dell'evento già collocato nello spazio e col suo guadagno, (N, 2) float32, da
         passare più tardi a motore.suona dentro un evento programmato; None se l'evento è
         sconosciuto, un buffer vuoto se il suo preset non ha suono. Senza posizione e a zero decibel
-        è il buffer della memoria, in sola lettura."""
+        è il buffer della memoria, in sola lettura.
+        L'evento si conta subito; con conta_subito falso no, e chi l'ha preparato lo conta con
+        suonato quando il motore l'ha fatto partire davvero: è il caso degli effetti che un
+        annullamento può lasciare muti."""
         buffer = self._buffer(evento, posizione, guadagno_db)
-        if buffer is not None and len(buffer):
+        if conta_subito and buffer is not None and len(buffer):
             self._conta(evento)
         return buffer
+
+    def suonato(self, evento):
+        """Conta un evento che il motore ha fatto partire più tardi, dentro un evento programmato, da
+        un buffer preparato con pronto e conta_subito falso. Un evento sconosciuto, o senza suono, non
+        si conta, come in suona e in pronto."""
+        preset = self._preset(evento)
+        if preset is not None and len(self._stereo_di(preset)):
+            self._conta(evento)
 
     def precarica(self, eventi=None):
         """Sintetizza subito i preset degli eventi, tutti se eventi è None, così il primo sparo della

@@ -80,5 +80,32 @@ def test_file_rovinato_non_solleva(cartella_di_prova):
     assert "non contiene le impostazioni" in impostazioni.ultimo_avviso
 
 
+def test_ripiego_sulla_copia_avvisa_una_volta(cartella_di_prova):
+    assert impostazioni.salva({"volume": 40})
+    assert impostazioni.salva({"volume": 41})
+    file = cartella_di_prova / costanti.FILE_IMPOSTAZIONI
+    file.write_text("{{{", encoding="utf-8")
+    assert impostazioni.carica()["volume"] == 40
+    assert "copia di riserva" in impostazioni.ultimo_avviso
+    # Il file torna al suo posto dalla copia, e il caricamento seguente non ha niente da dire.
+    assert json.loads(file.read_text(encoding="utf-8"))["volume"] == 40
+    assert (cartella_di_prova / (costanti.FILE_IMPOSTAZIONI + ".bak")).exists()
+    assert impostazioni.carica()["volume"] == 40
+    assert impostazioni.ultimo_avviso is None
+
+
+def test_intero_enorme_non_solleva(cartella_di_prova):
+    enorme = 10 ** 400
+    assert impostazioni.valide({"volume": enorme})["volume"] == costanti.VOLUME_PREDEFINITO
+    assert impostazioni.valide({"volume": -enorme})["volume"] == costanti.VOLUME_PREDEFINITO
+    # Un numero grande ma dentro il confine dei file vale ancora il massimo, come il 120 scritto a mano.
+    assert impostazioni.valide({"volume": 1e15})["volume"] == impostazioni.VOLUME_MASSIMO
+    file = cartella_di_prova / costanti.FILE_IMPOSTAZIONI
+    file.write_text(json.dumps({"volume": enorme, "sintesi": False}), encoding="utf-8")
+    dati = impostazioni.carica()
+    assert dati["volume"] == costanti.VOLUME_PREDEFINITO and dati["sintesi"] is False
+    assert impostazioni.ultimo_avviso is None
+
+
 def test_salva_su_cartella_che_non_ce(tmp_path):
     assert not impostazioni.salva({"volume": 1}, str(tmp_path / "manca" / "impostazioni.json"))

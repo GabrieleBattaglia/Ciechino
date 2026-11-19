@@ -11,6 +11,10 @@ lascia il suo resoconto completo. Poi la finestra e, a finestra comparsa, solo d
 compilato, il controllo dell'aggiornamento. Un errore che ferma Ciechino si scrive nel registro e si dice
 in un messaggio, col suono dell'errore. All'uscita pulita l'ascolto si ferma e il registro si chiude,
 così il file del crash se ne va.
+Una copia lanciata mentre questa si sta già chiudendo, durante il congedo, non troverebbe nessuno da
+portare in primo piano, e se ne andrebbe senza aprire niente. Perciò la finestra dice a main quando
+comincia a chiudersi, e la richiesta che arriva da lì in poi si rimanda: all'uscita pulita main lancia,
+con istanza.riapri, la copia nuova, che aspetta l'uscita di questa e poi si apre.
 """
 
 import contextlib
@@ -33,11 +37,25 @@ ESITI = {
 ATTESA_DEL_SUONO_D_ERRORE = 2.0
 
 
+class Finestre(list):
+    """
+    La finestra di Ciechino, quando c'è, per il filo dell'ascolto dell'istanza unica, con i due segnali
+    che quel filo e main si scambiano: in_chiusura, che la finestra accende quando comincia a chiudersi
+    davvero, e rimandata, che si accende se un'altra copia ha chiesto di aprirsi proprio da allora.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.in_chiusura = threading.Event()
+        self.rimandata = threading.Event()
+
+
 def avvia_finestra(crash_precedente=None, finestre=None):
     """
     Apre la finestra fino all'uscita, e restituisce uno degli ESITI. crash_precedente è il resoconto del
     crash della volta prima, che la vista dice all'apertura; finestre, se data, riceve la finestra appena
-    nasce, per l'ascolto dell'istanza unica.
+    nasce, per l'ascolto dell'istanza unica, e se è una Finestre la finestra le accende in_chiusura
+    quando comincia a chiudersi.
     """
     import wx
 
@@ -49,6 +67,9 @@ def avvia_finestra(crash_precedente=None, finestre=None):
     finestra = modulo_finestra.FinestraPrincipale(crash_precedente=crash_precedente)
     if finestre is not None:
         finestre.append(finestra)
+        in_chiusura = getattr(finestre, "in_chiusura", None)
+        if in_chiusura is not None:
+            finestra.al_congedo = in_chiusura.set
     _rete_per_gli_errori(finestra)
     # Massimizzata, come vuole Gabriele per tutte le finestre: dentro_area_utile, nel costruttore, ha già
     # dato la misura a cui torna se la si ripristina.
@@ -96,12 +117,48 @@ def _rete_per_gli_errori(finestra):
     threading.excepthook = negli_altri_fili
 
 
+def _da_rimandare(finestre):
+    """Se la finestra ha già cominciato a chiudersi: allora la richiesta della copia nuova si rimanda all'uscita, e si annota."""
+    in_chiusura = getattr(finestre, "in_chiusura", None)
+    if in_chiusura is None or not in_chiusura.is_set():
+        return False
+    finestre.rimandata.set()
+    return True
+
+
 def _in_primo_piano(finestre):
-    """Nel filo dell'ascolto: un'altra copia di Ciechino chiede di aprirsi, e la finestra, se c'è già, torna in primo piano nel suo filo."""
+    """
+    Nel filo dell'ascolto: un'altra copia di Ciechino chiede di aprirsi, e la finestra, se c'è già, torna
+    in primo piano nel suo filo; se si sta chiudendo, la richiesta si rimanda all'uscita. Il filo non
+    tocca la finestra: legge soltanto il segnale.
+    """
     import wx
 
+    if _da_rimandare(finestre):
+        return
     if finestre:
-        wx.CallAfter(finestre[0].porta_in_primo_piano)
+        wx.CallAfter(_porta_in_primo_piano, finestre)
+
+
+def _porta_in_primo_piano(finestre):
+    """Nel filo della finestra: la finestra torna in primo piano, se nel frattempo non ha cominciato a chiudersi, o non è già distrutta."""
+    if _da_rimandare(finestre):
+        return
+    with contextlib.suppress(RuntimeError):
+        finestre[0].porta_in_primo_piano()
+
+
+def _apri_la_copia_rimandata():
+    """All'uscita pulita, la copia chiesta durante la chiusura: parte adesso, aspetta che questa sia uscita, e si apre."""
+    import istanza
+    import registro
+
+    try:
+        istanza.riapri()
+    except OSError as errore:
+        registro.scrivi(f"La copia di Ciechino chiesta durante la chiusura non è partita: {errore}.")
+    else:
+        registro.scrivi("Una copia di Ciechino ha chiesto di aprirsi durante la chiusura: si apre appena questa è uscita.")
 
 
 def _suona_l_errore():
@@ -163,7 +220,7 @@ def main(argomenti=None):
     # Prima di tutto, anche del registro: un Ciechino già aperto viene in primo piano, e questa copia non tocca niente.
     if istanza.manda():
         return 0
-    finestre = []
+    finestre = Finestre()
     ascolto = istanza.Ascolto(lambda: _in_primo_piano(finestre))
     # La pipe è già presa: un'altra copia è partita nello stesso istante, e ascolta lei.
     if not ascolto.attiva and istanza.manda():
@@ -174,8 +231,13 @@ def main(argomenti=None):
     crash_precedente = registro.avvia()
     registro.scrivi(f"Ciechino {VERSIONE} si avvia.")
     try:
-        codice, riga = ESITI[avvia_finestra(crash_precedente, finestre)]
+        esito = avvia_finestra(crash_precedente, finestre)
+        codice, riga = ESITI[esito]
         registro.scrivi(riga)
+        # Solo dopo un'uscita pulita: chi si riapre per la lingua ha già la sua copia, e chi si aggiorna
+        # lascia il posto allo script di sostituzione.
+        if esito == APERTA and finestre.rimandata.is_set():
+            _apri_la_copia_rimandata()
     except Exception:  # noqa: BLE001 - ultima rete del programma: lo scrive, lo dice e chiude
         _errore_fatale(*sys.exc_info())
         codice = 1

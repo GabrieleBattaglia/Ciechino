@@ -2,7 +2,7 @@
 
 Un gioco di tiro accessibile, pensato da un giocatore cieco per chi non vede, e per chi vuole provare a mirare con le orecchie. Il nome è un gioco di parole fra cieco e cecchino.
 
-Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte tanto. I cento punteggi migliori restano in classifica.
+Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte un bersaglio normale del suo livello. I cento punteggi migliori restano in classifica.
 
 ## Scaricare e installare
 
@@ -19,7 +19,7 @@ All'avvio Ciechino controlla se c'è una versione nuova e propone di installarla
 
 La finestra ha la vista della partita, dove arriva il resoconto di ogni tiro, e sotto la barra di stato, con il livello, i punti e i colpi; F5 porta alla vista, F7 alla barra.
 
-1. La barra spaziatrice, o Ctrl+N, comincia la partita.
+1. La barra spaziatrice, o Ctrl+N, comincia la partita, e a partita finita la barra spaziatrice ne comincia un'altra.
 2. Ascolti il bersaglio, finché hai capito dove sta.
 3. La barra spaziatrice avvia la mira: il tempo si ferma, e i bersagli restano dove sono, più piano.
 4. Tre scivolate, direzione, alzo e potenza: ognuna comincia dopo un secondo di silenzio con tre bip, poi scivola per tre secondi con dieci tacche, e la barra spaziatrice la ferma sul valore che vuoi. Lo spazio nei bip sceglie il minimo, nessuno spazio il massimo.
@@ -28,6 +28,8 @@ La finestra ha la vista della partita, dove arriva il resoconto di ogni tiro, e 
 
 Un tiro a vuoto costa un colpo, un centro non costa niente e vale fino al doppio per la precisione. Dieci centri chiudono il livello e danno altri dieci colpi; a riserva vuota la partita finisce.
 
+Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere. La partita si ferma da sola, in silenzio, anche quando si apre un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
+
 ## Aiuto
 
 - Il manuale, con Maiusc+F1, spiega ogni menu, ogni tasto, lo spazio in metri, i suoni dei bersagli, i punti e i livelli.
@@ -35,7 +37,7 @@ Un tiro a vuoto costa un colpo, un centro non costa niente e vale fino al doppio
 - Nel menu Aiuto, Entra al PUB prepara la mail per iscriversi alla lista di supporto degli utenti, e Chiedi aiuto al PUB quella con la domanda e le informazioni sul computer, con i registri degli errori se vuoi.
 - I problemi si segnalano anche come issue su GitHub: https://github.com/GabrieleBattaglia/Ciechino/issues
 
-Un errore imprevisto si annota in Ciechino - Errori.log, accanto al programma: è il file da allegare quando chiedi aiuto.
+Un errore imprevisto, anche del motore audio, si annota in Ciechino - Errori.log, accanto al programma: è il file da allegare quando chiedi aiuto.
 
 ## Accessibilità
 
@@ -79,7 +81,7 @@ Una traduzione è il file locales/CODICE/LC_MESSAGES/messages.po, dove CODICE è
 
 ## Dati
 
-Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la sintesi, l'uscita audio e l'ultimo nome usato in classifica. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, e selected_language.json, la lingua scelta.
+Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la lettura dei resoconti, l'uscita della sintesi e l'ultimo nome usato in classifica. L'uscita della sintesi non è la scheda audio, che Ciechino sceglie da solo: dice chi legge i resoconti, automatica, oppure nvda, jaws o sapi5, la voce di Windows, e si cambia soltanto scrivendola nel file, a Ciechino chiuso. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, Ciechino - Registri per il PUB.txt, quando lo prepari, e selected_language.json, la lingua scelta. Chi gioca dai sorgenti li trova nella cartella del repository: sono dati personali di chi gioca, e .gitignore li tiene tutti fuori da git, con le loro copie .bak, .tmp e .illeggibile, come in MeTeOra (decisione D15).
 
 I suoni degli eventi vengono dalla collezione comune Acu_Collection.json di GBUtils, con il prefisso ciechino_; l'elenco delle azioni con il loro preset è suoni_di_ciechino.txt. Le scivolate, i bersagli e il proiettile li crea il motore audio di Ciechino mentre suonano. Tutti i numeri della meccanica di gioco, dal cubo ai punti, stanno in costanti.py, per tararli giocando; il progetto e le decisioni stanno in docs/progetto.txt, l'idea di partenza in docs/idea_73.txt.
 

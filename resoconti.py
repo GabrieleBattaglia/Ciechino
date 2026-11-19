@@ -331,14 +331,16 @@ def livello_nuovo(livello, colpi, riserva):
 
 def bonus_apparso(bonus, livello):
     """Il messaggio «bonus» quando compare un bersaglio bonus: da che parte entra, com'è, quanto
-    resta, quanto vale."""
+    resta, quanto vale. Colpito vale MOLTIPLICATORE_BONUS volte un bersaglio normale del livello in
+    cui è nato, con la stessa precisione (D13): partita.punti_del_centro fa proprio questo conto, e
+    la frase lo dice con le stesse parole."""
     da_sinistra = float(bonus.velocita[0]) > 0
     da = _("da sinistra") if da_sinistra else _("da destra")
     righe = [
         # Traduttori: da è «da sinistra» o «da destra», descrizione come «forma seno, raggio 2,9 metri».
         _("È apparso un bersaglio bonus, che entra {da}: {descrizione}.").format(da=da, descrizione=descrizione_del_bersaglio(bonus)),
         # Traduttori: durata è come «14 secondi», volte come «5 volte», colpi come «5 colpi».
-        _("Attraversa lo spazio dei bersagli in {durata}, poi esce; colpito vale {volte} i punti e dà {colpi} in più.").format(
+        _("Attraversa lo spazio dei bersagli in {durata}, poi esce; colpito vale {volte} i punti di un bersaglio di questo livello e dà {colpi} in più.").format(
             durata=secondi(durata_del_bonus(livello)), volte=plurale(MOLTIPLICATORE_BONUS, "{n} volta", "{n} volte"), colpi=_colpi(COLPI_BONUS)),
     ]
     # Traduttori: l'annuncio breve del bonus apparso; da è «da sinistra» o «da destra».
@@ -384,6 +386,13 @@ def riga_del_primato(chiave, valore=None):
         return _("Nuovo primato: {nome}.").format(nome=nome)
     # Traduttori: nome è come «il centro più preciso», valore come «98%».
     return _("Nuovo primato: {nome}, {valore}.").format(nome=nome, valore=scrivi(valore))
+
+
+def primato_scritto(chiave, valore):
+    """Il valore di un primato come lo scrive il messaggio, «98%» o «0,05 metri dal centro»: due valori
+    che si scrivono uguali sono, a parole, lo stesso primato, e la partita non ne annuncia uno nuovo."""
+    _nome, scrivi = _primati().get(chiave, (None, testi.numero))
+    return scrivi(valore)
 
 
 def righe_dei_primati(chiavi, valori=None):
@@ -438,17 +447,17 @@ def partita_abbandonata(riepilogo, primati=(), valori=None):
 
 # La pausa.
 
-def in_pausa():
+def in_pausa(nella_mira=False):
+    """La pausa chiesta con Ctrl+P (D14). Nella mira dice anche che la barra interrotta, alla ripresa,
+    ricomincia da capo, e che i valori già presi restano."""
+    if nella_mira:
+        return Messaggio("info", _("Partita in pausa: la mira è sospesa e i bersagli tacciono. Alla ripresa la barra in corso ricomincia da capo, "
+                                   "e i valori già presi restano. Ctrl+P per riprendere."), _("Pausa."))
     return Messaggio("info", _("Partita in pausa: il tempo è fermo e i bersagli tacciono. Ctrl+P per riprendere."), _("Pausa."))
 
 
 def ripresa():
     return Messaggio("info", _("La partita riprende."), _("Si riprende."))
-
-
-def pausa_nella_mira():
-    return Messaggio("avviso", _("Durante la mira il tempo è già fermo: la pausa si chiede mentre si ascoltano i bersagli o durante il volo."),
-                     _("Il tempo è già fermo."))
 
 
 def nessuna_partita():

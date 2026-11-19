@@ -159,13 +159,14 @@ def test_bonus(monkeypatch):
     apparso = raccogli(resoconti.bonus_apparso(da_sinistra, 3))
     assert apparso.tipo == "bonus"
     assert apparso.testo.split("\n") == ["È apparso un bersaglio bonus, che entra da sinistra: forma deriva, raggio 2,9 metri.",
-                                         "Attraversa lo spazio dei bersagli in 14 secondi, poi esce; colpito vale 5 volte i punti e dà 5 colpi in più."]
+                                         "Attraversa lo spazio dei bersagli in 14 secondi, poi esce; colpito vale 5 volte i punti di un bersaglio di questo livello "
+                                         "e dà 5 colpi in più."]
     assert apparso.annuncio == "Bonus da sinistra."
     da_destra = bersaglio(raggio=2.9, bonus=True, velocita=(-3.9, 0.0, 0.0))
     assert raccogli(resoconti.bonus_apparso(da_destra, 3)).annuncio == "Bonus da destra."
     monkeypatch.setattr(resoconti, "MOLTIPLICATORE_BONUS", 1)
     monkeypatch.setattr(resoconti, "COLPI_BONUS", 1)
-    assert "vale 1 volta i punti e dà 1 colpo in più." in raccogli(resoconti.bonus_apparso(da_destra, 3)).testo
+    assert "vale 1 volta i punti di un bersaglio di questo livello e dà 1 colpo in più." in raccogli(resoconti.bonus_apparso(da_destra, 3)).testo
     uscito = raccogli(resoconti.bonus_uscito())
     assert (uscito.tipo, uscito.annuncio) == ("bonus", "Bonus uscito.")
 
@@ -182,6 +183,20 @@ def test_primati():
     assert resoconti.riga_del_primato("partita_piu_lunga", 252) == "Nuovo primato: la partita più lunga, 4 minuti e 12 secondi."
     assert resoconti.riga_del_primato("partita_piu_lunga") == "Nuovo primato: la partita più lunga."
     assert resoconti.riga_del_primato("tiri_lunghi", 3.5) == "Nuovo primato: tiri lunghi, 3,5."
+
+
+def test_primato_scritto():
+    """Il valore come lo scrive il messaggio: due precisioni che si arrotondano allo stesso punto
+    percentuale, o due distanze allo stesso centimetro, si scrivono uguali, e la partita non annuncia
+    un primato che a parole non cambia."""
+    assert resoconti.primato_scritto("precisione", 0.9951) == resoconti.primato_scritto("precisione", 0.9999) == "100%"
+    assert resoconti.primato_scritto("precisione", 0.9651) == resoconti.primato_scritto("precisione", 0.9698) == "97%"
+    assert resoconti.primato_scritto("precisione", 0.962) != resoconti.primato_scritto("precisione", 0.972)
+    assert resoconti.primato_scritto("vicino", 0.012) == resoconti.primato_scritto("vicino", 0.011) == "0,01 metri dal centro"
+    assert resoconti.primato_scritto("mancato", 0.2) == "0,20 metri dal centro"
+    assert resoconti.primato_scritto("punteggio", 1230) == "1.230 punti"
+    assert resoconti.primato_scritto("partita_piu_lunga", 252.0) == resoconti.primato_scritto("partita_piu_lunga", 252.3)
+    assert resoconti.primato_scritto("tiri_lunghi", 3.5) == "3,5"
 
 
 def test_fine_e_abbandono():
@@ -201,12 +216,16 @@ def test_fine_e_abbandono():
 
 
 def test_avvisi_e_pausa():
-    for messaggio in (resoconti.ultimo_colpo(), resoconti.in_pausa(), resoconti.ripresa(), resoconti.pausa_nella_mira(), resoconti.nessuna_partita()):
+    for messaggio in (resoconti.ultimo_colpo(), resoconti.in_pausa(), resoconti.in_pausa(nella_mira=True), resoconti.ripresa(), resoconti.nessuna_partita()):
         raccogli(messaggio)
         assert messaggio.testo and messaggio.annuncio and "\n" not in messaggio.testo
     assert resoconti.ultimo_colpo().tipo == "avviso" and resoconti.ultimo_colpo().annuncio == "Ultimo colpo."
     assert "Ctrl+P" in resoconti.in_pausa().testo
-    assert resoconti.pausa_nella_mira().tipo == "avviso"
+    # Nella mira la pausa sospende anche la barra (D14): il messaggio dice che ricomincia da capo, coi valori già presi.
+    nella_mira = resoconti.in_pausa(nella_mira=True)
+    assert nella_mira.tipo == "info" and nella_mira.annuncio == "Pausa." and "Ctrl+P" in nella_mira.testo
+    assert "ricomincia da capo" in nella_mira.testo and "valori già presi restano" in nella_mira.testo
+    assert resoconti.nessuna_partita().annuncio == "Nessuna partita in corso."
 
 
 def test_righe_della_barra():
@@ -244,7 +263,7 @@ def _campionario():
                                                                                                      "serie": 12, "punti_in_un_tiro": 9999}),
         resoconti.ultimo_colpo(), resoconti.fine_partita(riepilogo, ["punteggio", "livello", "centri_in_una_partita", "partita_piu_lunga"],
                                                          {"punteggio": 1234567, "livello": 12, "centri_in_una_partita": 120, "partita_piu_lunga": 4000.0}),
-        resoconti.partita_abbandonata(riepilogo), resoconti.in_pausa(), resoconti.ripresa(), resoconti.pausa_nella_mira(), resoconti.nessuna_partita(),
+        resoconti.partita_abbandonata(riepilogo), resoconti.in_pausa(), resoconti.ripresa(), resoconti.in_pausa(nella_mira=True), resoconti.nessuna_partita(),
     ]
     testi_ = [*TESTI]
     for messaggio in messaggi:

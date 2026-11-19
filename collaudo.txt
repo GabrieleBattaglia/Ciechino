@@ -1,0 +1,23 @@
+Collaudo di Ciechino 0.1.0, la prima partita: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Prima: cuffie in testa, NVDA acceso; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. I dati che scrive restano fuori da git.
+Passo 1: all'apertura leggi la vista con le frecce, poi F7 per la barra di stato e F5 per tornare alla vista.
+Domanda 1: la vista dice nome, versione, autori, record e scheda audio con la latenza, una frase per riga, e la barra si legge bene anche in braille?
+Passo 2: la barra spaziatrice comincia la partita; ascolta il primo bersaglio finché credi di sapere dove sta.
+Domanda 2: panoramica, nota e volume ti fanno capire direzione, altezza e distanza del bersaglio?
+Passo 3: la barra spaziatrice avvia la mira; ferma le tre scivolate, direzione, alzo e potenza, provando anche il minimo nei bip e il massimo lasciandola andare.
+Domanda 3: premendo la barra spaziatrice NVDA tace, senza dire spazio, e il braille resta pulito?
+Domanda 4: bip, tacche e scivolata si capiscono, il secondo di silenzio basta per prepararsi alla barra seguente, e la barra ferma il valore dove volevi?
+Domanda 5: lo sparo, il proiettile che vola e l'impatto, o il tonfo a terra, si seguono nello spazio, e gli avvisi dopo l'impatto arrivano in fila, senza sovrapporsi?
+Domanda 6: il resoconto del tiro arriva da solo alla voce e al braille, e nei primi livelli l'aiuto sul mancato, in metri, ti dice come correggere?
+Passo 4: durante l'ascolto e poi durante la mira premi Ctrl+P, aspetta, e premi di nuovo Ctrl+P; poi, nella mira, apri Volume dal menu Impostazioni e chiudilo, e fai Alt+Tab avanti e indietro.
+Domanda 7: la pausa ferma tutto e tace, quella automatica senza suono, e al ritorno la barra in corso riparte da capo con i valori già scelti?
+Domanda 8: nella mira, aprendo un menu con Alt, la scivolata continua e arriva al massimo: vuoi che anche il menu aperto metta in pausa?
+Passo 5: gioca fino a vuotare la riserva, entrando in classifica; poi Ctrl+K e Ctrl+T.
+Domanda 9: dopo il suono della fine e quello della classifica si apre il dialogo del nome, che NVDA legge, e dopo Invio la vista mette il cursore sulla tua voce?
+Domanda 10: classifica e statistiche si aprono massimizzate, si leggono riga per riga e Esc le chiude?
+Passo 6: con la partita in corso stacca le cuffie, se sono USB o Bluetooth.
+Domanda 11: la vista e la sintesi lo dicono una volta sola, e il gioco va avanti senza suono?
+Passo 7: con Ciechino aperto lancia di nuovo python Ciechino.py.
+Domanda 12: la finestra già aperta torna in primo piano, col fuoco dove NVDA lo legge?
+Domanda 13: fra i 54 suoni degli eventi ce n'è qualcuno che si confonde con un altro o che non ti piace? L'elenco con i preset è suoni_di_ciechino.txt.
+Esito:

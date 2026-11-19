@@ -166,7 +166,7 @@ def durata(secondi):
 
 def informazioni():
     """Le informazioni sul programma, una per riga: nome, versione e data del rilascio, autori,
-    che cos'è, licenza e repository. Aprono la vista della partita e la finestra di F3."""
+    che cos'è, licenza e repository: la finestra di F3; la vista della partita, all'apertura, ne prende le prime due."""
     righe = [
         # Traduttori: la prima riga delle informazioni; data è come «giovedì 19 novembre 2026».
         _("{nome}, il tiro a segno a orecchio, versione {versione}, rilasciata {data}.").format(nome=version.__app_name__, versione=version.__version__,

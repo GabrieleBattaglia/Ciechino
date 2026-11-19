@@ -10,16 +10,16 @@ Ciechino-Setup-*.exe
 *.tmp
 .pytest_cache/
 .ruff_cache/
-# I dati di chi gioca, accanto al programma: classifica, statistiche, impostazioni e la lingua
-# scelta. Con la barra davanti, perché valgono solo nella radice.
-/Ciechino - Classifica.json
-/Ciechino - Classifica.json.bak
-/Ciechino - Statistiche.json
-/Ciechino - Statistiche.json.bak
-/Ciechino - Impostazioni.json
-/Ciechino - Impostazioni.json.bak
+# I dati di chi gioca, accanto al programma, restano fuori da git per decisione di Gabriele (D15,
+# 19 novembre 2026), come in MeTeOra: sono dati personali, e ogni macchina ha i suoi. Classifica,
+# statistiche e impostazioni con tutte le loro copie, .bak, .tmp, .illeggibile e i numeri che le
+# seguono; la lingua scelta; il file dei registri che Chiedi aiuto al PUB prepara da allegare.
+# Con la barra davanti, perché valgono solo nella radice.
+/Ciechino - *.json
+/Ciechino - *.json.*
 /selected_language.json
-# I registri delle sessioni, accanto al programma.
+/Ciechino - Registri per il PUB.txt
+# I registri delle sessioni, accanto al programma, con le loro copie.
 Ciechino - *.log
-Ciechino - *.log.1
+Ciechino - *.log.*
 auto_updater_error.log

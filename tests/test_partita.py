@@ -1,7 +1,8 @@
 """
 Le prove di partita.py: l'inizio con le voci dei bersagli, la mira al campione udibile, lo sparo e
-l'impatto al campione esatto, i tiri a vuoto fino alla fine, il livello, i bonus, la pausa, l'abbandono,
-la barra di stato e le statistiche.
+l'impatto al campione esatto, i tiri a vuoto fino alla fine, il livello, i bonus e i loro punti (D13),
+gli avvisi in fila dopo l'impatto, la pausa chiesta e quella automatica, anche nella mira (D14),
+l'abbandono, i primati, la barra di stato e le statistiche.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 Nessuna prova apre la scheda audio né sintetizza un preset vero: il motore gira sul flusso finto di
@@ -21,7 +22,7 @@ from aiuti_audio import motore_finto
 import partita as modulo_partita
 import suoni
 import testi
-from bersagli import Bersaglio, durata_del_bonus, genera, quanti_bersagli, raggio_del_livello
+from bersagli import Bersaglio, durata_del_bonus, genera, genera_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
     ATTENUAZIONE_IN_MIRA_DB,
     BERSAGLIO_FORMA,
@@ -36,6 +37,7 @@ from costanti import (
     MARGINE_DOPO_LA_SCIVOLATA,
     MOLTIPLICATORE_BONUS,
     PARAMETRI,
+    PAUSA_FRA_BARRE,
     PREMIO_PRECISIONE,
     PROIETTILE_FORMA,
     PUNTI_BASE,
@@ -159,6 +161,16 @@ def tiro_a_vuoto(banco, partita):
     return fino_alla_risoluzione(banco, partita)
 
 
+def senti_anche_le_statistiche(banco, statistiche):
+    """Con le statistiche la partita collega a loro il conto dei suoni: la prova lo vuole anche
+    nell'elenco del banco, per l'ordine in cui i suoni arrivano."""
+    def conta(evento):
+        banco.contati.append(evento)
+        statistiche.suono(evento)
+
+    banco.suoni.conta = conta
+
+
 def mira_sul_bonus(bonus, partenza):
     """I valori che colpiscono il bonus in moto: il punto dove sarà alla fine del volo, ricalcolato
     finché il tempo di volo non si assesta."""
@@ -184,8 +196,21 @@ def test_punti_del_centro():
     assert punti_del_centro(pieno, 2.0) == punti_del_centro(pieno, 1.0)
     piccolo = Bersaglio(numero=2, forma="seno", raggio=RAGGIO_DI_RIFERIMENTO / 2, partenza=(0.0, 20.0, 50.0), velocita=(VELOCITA_DI_RIFERIMENTO, 0.0, 0.0))
     assert punti_del_centro(piccolo, 0.5) == round(PUNTI_BASE * 2 ** ESPONENTE_DEL_RAGGIO * 2 * (1 + PREMIO_PRECISIONE * 0.5))
-    bonus = Bersaglio(numero=3, forma="seno", raggio=RAGGIO_DI_RIFERIMENTO, partenza=(0.0, 20.0, 50.0), bonus=True)
-    assert punti_del_centro(bonus, 0.0) == PUNTI_BASE * MOLTIPLICATORE_BONUS
+    # D13: il bonus vale esattamente MOLTIPLICATORE_BONUS volte un normale del livello in cui è nato, col
+    # raggio e la velocità di quel livello; il suo raggio e la sua corsa non contano.
+    bonus = Bersaglio(numero=3, forma="seno", raggio=RAGGIO_DI_RIFERIMENTO / 4, partenza=(0.0, 20.0, 50.0), velocita=(9.0, 0.0, 0.0), bonus=True)
+    assert raggio_del_livello(1) == RAGGIO_DI_RIFERIMENTO and velocita_del_livello(1) == 0.0
+    assert punti_del_centro(bonus, 0.0, livello=1) == PUNTI_BASE * MOLTIPLICATORE_BONUS
+    with pytest.raises(ValueError):
+        punti_del_centro(bonus, 0.0)
+    # Un normale non ha bisogno del livello, e se lo riceve non cambia.
+    assert punti_del_centro(piccolo, 0.5, livello=20) == punti_del_centro(piccolo, 0.5)
+    rng = random.Random(SEME)
+    for livello in (LIVELLO_DEI_BONUS, 4, 6, 10, 15, 25):
+        normale = genera(livello, rng, 1, 0.0)
+        speciale = genera_bonus(livello, rng, 2, 0.0)
+        for precisione in (0.0, 0.37, 0.5, 1.0):
+            assert punti_del_centro(speciale, precisione, livello=livello) == MOLTIPLICATORE_BONUS * punti_del_centro(normale, precisione)
 
 
 def test_inizio_della_partita_e_voci_dei_bersagli(banco):
@@ -227,6 +252,8 @@ def test_mira_completa_sul_centro_del_bersaglio(banco):
     assert partita.valori == pytest.approx(list(valori), abs=1e-9)
     assert partita.tiri == 1 and partita.fase == "volo"
     assert volo.colpito is bersaglio and volo.precisione > 0.99
+    # L'effetto dell'impatto si conta quando si sente, non allo sparo.
+    assert "colpito" not in banco.contati
     messaggi = fino_alla_risoluzione(banco, partita)
     attesi = round(PUNTI_BASE * (RAGGIO_DI_RIFERIMENTO / bersaglio.raggio) ** ESPONENTE_DEL_RAGGIO * (1 + PREMIO_PRECISIONE * volo.precisione))
     assert partita.punti == attesi == punti_del_centro(bersaglio, volo.precisione)
@@ -237,8 +264,7 @@ def test_mira_completa_sul_centro_del_bersaglio(banco):
     resoconto = messaggi[0]
     assert resoconto.tipo == "resoconto" and resoconto.annuncio == f"Colpito, {attesi} punti."
     assert resoconto.dati["colpito"] and resoconto.dati["punti"] == attesi and resoconto.dati["totale"] == attesi
-    # L'effetto dell'impatto si conta quando è pronto, cioè allo sparo: l'ordine fra i due non conta.
-    assert sorted(banco.contati) == sorted(["nuova_partita", "mira_avviata", "valore_preso", "valore_preso", "valore_preso", "sparo", "colpito"])
+    assert banco.contati == ["nuova_partita", "mira_avviata", "valore_preso", "valore_preso", "valore_preso", "sparo", "colpito"]
 
 
 def test_impatto_al_campione_esatto(banco, monkeypatch):
@@ -452,9 +478,11 @@ def test_il_bonus_colpito_da_i_colpi_e_annulla_l_uscita(banco, bonus_sicuro, mon
     assert evento.annullato
     messaggi = fino_alla_risoluzione(banco, partita)
     assert partita.riserva == riserva + COLPI_BONUS
-    attesi = round(PUNTI_BASE * (RAGGIO_DI_RIFERIMENTO / bonus.raggio) ** ESPONENTE_DEL_RAGGIO * (1 + bonus.velocita_scalare / VELOCITA_DI_RIFERIMENTO)
-                   * (1 + PREMIO_PRECISIONE * volo.precisione) * MOLTIPLICATORE_BONUS)
-    assert partita.punti == attesi == punti_del_centro(bonus, volo.precisione)
+    # D13: cinque volte un normale del livello in cui il bonus è nato, con la stessa precisione.
+    normale = round(PUNTI_BASE * (RAGGIO_DI_RIFERIMENTO / raggio_del_livello(LIVELLO_DEI_BONUS)) ** ESPONENTE_DEL_RAGGIO
+                    * (1 + velocita_del_livello(LIVELLO_DEI_BONUS) / VELOCITA_DI_RIFERIMENTO) * (1 + PREMIO_PRECISIONE * volo.precisione))
+    attesi = MOLTIPLICATORE_BONUS * normale
+    assert partita.punti == attesi == punti_del_centro(bonus, volo.precisione, livello=LIVELLO_DEI_BONUS)
     assert partita.bonus is None and bonus not in partita.bersagli
     assert len(partita.bersagli) == quanti_bersagli(LIVELLO_DEI_BONUS)
     assert messaggi[0].annuncio == f"Colpito il bonus, {testi.intero(attesi)} punti."
@@ -488,12 +516,148 @@ def test_pausa_e_ripresa_nell_ascolto(banco):
     assert banco.motore.tempo_di_gioco() > fermo and voce.guadagno == 1.0
     orologio.valore = 100.0
     assert partita.riepilogo()["durata_s"] == 40.0
-    # Nella mira il tempo è già fermo, e la pausa lo dice soltanto.
+    # Senza partita non c'è niente da mettere in pausa, e lo dice il suono del non ora.
+    nessuna = banco.partita()
+    messaggi = nessuna.pausa()
+    assert [m.annuncio for m in messaggi] == ["Nessuna partita in corso."] and banco.contati[-1] == "non_ora" and not nessuna.in_pausa
+    # Lo stesso a partita finita.
+    nessuna.fase = "finita"
+    prima = len(banco.contati)
+    assert nessuna.pausa()[0].annuncio == "Nessuna partita in corso." and banco.contati[prima:] == ["non_ora"]
+
+
+def test_pausa_nella_mira(banco, cartella_di_prova):
+    """Ctrl+P nella mira (D14): la scivolata in corso si ferma, i bersagli tacciono e la barra non
+    scade; alla ripresa la barra in corso ricomincia da capo, col suo secondo di silenzio, i bersagli
+    tornano attenuati e i valori già presi restano."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    orologio = Orologio(0.0)
+    partita = banco.partita(statistiche=statistiche, orologio=orologio)
+    senti_anche_le_statistiche(banco, statistiche)
+    partita.nuova()
+    banco.flusso.avanza(10)
+    voce = partita._voci[partita.bersagli[0]]
     partita.spazio()
+    porta_udibile_a(banco, campione_del_valore(partita, 0.3))
+    assert partita.spazio() == [] and partita.valori == [pytest.approx(0.3)] and partita.barra == 1
+    porta_udibile_a(banco, campione_del_valore(partita, 0.2))
+    assert partita.battito() == [] and partita.sottofase == "scivolata"
+    barra = partita._voce_barra
+    fermo = banco.motore.tempo_di_gioco()
+    orologio.valore = 5.0
     messaggi = partita.pausa()
-    assert [m.tipo for m in messaggi] == ["avviso"] and not partita.in_pausa and partita.fase == "mira"
-    # Senza partita non c'è niente da mettere in pausa.
-    assert banco.partita().pausa()[0].annuncio == "Nessuna partita in corso."
+    assert partita.in_pausa and partita.fase == "mira" and banco.contati[-1] == "pausa"
+    assert [m.annuncio for m in messaggi] == ["Pausa."] and "ricomincia da capo" in messaggi[0].testo
+    assert partita.righe_della_barra()[-1] == "In pausa: Ctrl+P per riprendere"
+    banco.flusso.avanza(3)
+    assert barra.finita and voce.guadagno == 0.0
+    # La barra ferma non scade, e lo spazio non sceglie niente: fa sentire il non ora.
+    for _blocco in range(10 * FS // banco.motore.blocco):
+        banco.flusso.avanza(1)
+        assert partita.battito() == []
+    assert partita.fase == "mira" and partita.valori == [pytest.approx(0.3)] and partita.barra == 1
+    assert banco.motore.tempo_di_gioco() == fermo
+    assert partita.spazio() == [] and banco.contati[-1] == "non_ora" and partita.valori == [pytest.approx(0.3)]
+    orologio.valore = 65.0
+    k = banco.motore.prossimo_campione()
+    messaggi = partita.pausa()
+    assert not partita.in_pausa and [m.annuncio for m in messaggi] == ["Si riprende."] and banco.contati[-1] == "ripresa"
+    # La barra dell'alzo ricomincia da capo: il secondo di silenzio, i bip e la scivolata.
+    assert partita.barra == 1 and partita.sottofase == "pausa" and partita.inizio_barra == k + round(PAUSA_FRA_BARRE * FS)
+    assert partita._voce_barra is not barra and partita._voce_barra.inizio == partita.inizio_barra
+    banco.flusso.avanza(10)
+    assert voce.guadagno == pytest.approx(db_in_lineare(ATTENUAZIONE_IN_MIRA_DB)) and not banco.motore.tempo_scorre
+    for valore in (0.0, 0.0):
+        porta_udibile_a(banco, campione_del_valore(partita, valore))
+        partita.spazio()
+    assert partita.fase == "volo" and partita.valori[0] == pytest.approx(0.3) and partita.valori[1:] == [0.0, 0.0]
+    assert partita.ultimo_volo.partenza == pytest.approx(fermo)
+    # La durata vera della partita non conta il minuto di pausa; la pausa si conta fra quelle chieste.
+    orologio.valore = 100.0
+    assert partita.riepilogo()["durata_s"] == 40.0
+    assert statistiche.dati["conti"]["pause"] == 1 and statistiche.dati["conti"].get("pause_automatiche", 0) == 0
+
+
+def test_pausa_automatica(banco, cartella_di_prova):
+    """La pausa che mette la finestra (D14): ferma e zittisce come Ctrl+P, ma in silenzio, senza suoni
+    né messaggi; la toglie soltanto se l'aveva messa lei, e Ctrl+P la toglie sempre."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    orologio = Orologio(0.0)
+    partita = banco.partita(statistiche=statistiche, orologio=orologio)
+    senti_anche_le_statistiche(banco, statistiche)
+    # Senza partita non fa niente.
+    assert partita.pausa_automatica(True) == [] and not partita.in_pausa
+    assert partita.pausa_automatica(False) == []
+    partita.nuova()
+    banco.flusso.avanza(10)
+    voce = partita._voci[partita.bersagli[0]]
+    sentiti = len(banco.contati)
+    # Nell'ascolto: il tempo si ferma e i bersagli tacciono, in silenzio.
+    orologio.valore = 10.0
+    assert partita.pausa_automatica(True) == []
+    assert partita.in_pausa and banco.contati[sentiti:] == []
+    assert partita.righe_della_barra()[-1] == "In pausa: Ctrl+P per riprendere"
+    banco.flusso.avanza(5)
+    fermo = banco.motore.tempo_di_gioco()
+    banco.flusso.avanza(20)
+    assert banco.motore.tempo_di_gioco() == fermo and voce.guadagno == 0.0
+    # Una seconda chiamata non cambia niente, e non si conta.
+    assert partita.pausa_automatica(True) == []
+    orologio.valore = 30.0
+    assert partita.pausa_automatica(False) == []
+    assert not partita.in_pausa and banco.contati[sentiti:] == []
+    banco.flusso.avanza(10)
+    assert banco.motore.tempo_di_gioco() > fermo and voce.guadagno == 1.0
+    assert statistiche.dati["conti"]["pause_automatiche"] == 1
+    # La pausa chiesta con Ctrl+P resta finché non la si toglie con Ctrl+P: la finestra non la tocca.
+    partita.pausa()
+    assert partita.pausa_automatica(True) == [] and partita.in_pausa
+    assert partita.pausa_automatica(False) == [] and partita.in_pausa
+    partita.pausa()
+    assert not partita.in_pausa and banco.contati[-2:] == ["pausa", "ripresa"]
+    # Ctrl+P durante la pausa automatica la toglie, col suono della ripresa: la barra dice «Ctrl+P per riprendere».
+    partita.pausa_automatica(True)
+    messaggi = partita.pausa()
+    assert not partita.in_pausa and [m.annuncio for m in messaggi] == ["Si riprende."] and banco.contati[-1] == "ripresa"
+    assert partita.pausa_automatica(False) == [] and not partita.in_pausa
+    assert (statistiche.dati["conti"]["pause"], statistiche.dati["conti"]["pause_automatiche"]) == (1, 2)
+    # Nella mira: la scivolata si ferma, e al ritorno la barra in corso ricomincia da capo, senza suoni della pausa.
+    partita.spazio()
+    porta_udibile_a(banco, campione_del_valore(partita, 0.5))
+    partita.spazio()
+    barra = partita._voce_barra
+    sentiti = len(banco.contati)
+    partita.pausa_automatica(True)
+    banco.flusso.avanza(3)
+    assert partita.in_pausa and partita._voce_barra is None and voce.guadagno == 0.0
+    for _blocco in range(10 * FS // banco.motore.blocco):
+        banco.flusso.avanza(1)
+        assert partita.battito() == []
+    # La barra dell'alzo era ancora nel suo secondo di silenzio: finisce senza aver suonato.
+    assert barra.finita and partita.fase == "mira"
+    k = banco.motore.prossimo_campione()
+    assert partita.pausa_automatica(False) == []
+    assert not partita.in_pausa and partita.barra == 1 and partita.inizio_barra == k + round(PAUSA_FRA_BARRE * FS)
+    assert banco.contati[sentiti:] == [] and partita.valori == [pytest.approx(0.5)]
+    banco.flusso.avanza(10)
+    assert voce.guadagno == pytest.approx(db_in_lineare(ATTENUAZIONE_IN_MIRA_DB))
+    # Durante il volo, e poi la durata vera, senza le pause.
+    for valore in (0.0, 0.0):
+        porta_udibile_a(banco, campione_del_valore(partita, valore))
+        partita.spazio()
+    assert partita.fase == "volo"
+    proiettile = partita._voce_proiettile
+    partita.pausa_automatica(True)
+    banco.flusso.avanza(3)
+    assert proiettile.guadagno == 0.0
+    evento = partita._evento_impatto
+    for _blocco in range(3 * FS // banco.motore.blocco):
+        banco.flusso.avanza(1)
+        assert partita.battito() == []
+    assert partita.fase == "volo" and not evento.scattato
+    partita.pausa_automatica(False)
+    assert fino_alla_risoluzione(banco, partita)[0].tipo == "resoconto"
+    assert statistiche.dati["conti"]["pause_automatiche"] == 4
 
 
 def test_pausa_durante_il_volo(banco):
@@ -537,12 +701,184 @@ def test_abbandona(banco, cartella_di_prova):
     assert not evento.scattato
     assert statistiche.dati["conti"]["partite_abbandonate"] == 1
     assert statistiche.dati["ultime"][-1]["motivo"] == "abbandonata"
+    # Il tiro in volo non si è risolto: non è nel riepilogo né fra i tiri delle statistiche, e
+    # l'effetto del suo impatto, mai suonato, non si conta.
+    assert partita.riepilogo()["tiri"] == 0 and "su 1 tiro" not in messaggi[0].testo and "nessun tiro" in messaggi[0].testo
+    assert statistiche.dati["ultime"][-1]["tiri"] == statistiche.dati["conti"]["tiri"] == 0
+    assert "colpito" not in statistiche.dati["suoni"]
     assert partita.righe_della_barra() == ["Nessuna partita: Spazio per cominciare"]
     # Una partita nuova chiesta durante un'altra la abbandona prima.
     partita.nuova()
     messaggi = partita.nuova()
     assert [m.annuncio for m in messaggi] == ["Partita abbandonata.", "Partita nuova: Spazio per mirare."]
     assert statistiche.dati["conti"]["partite_abbandonate"] == 2
+
+
+def test_abbandono_dopo_un_impatto_gia_partito(banco, cartella_di_prova):
+    """Un centro, poi un tiro il cui impatto è partito nel filo dell'audio, e l'abbandono prima che si
+    risolva: l'effetto si è sentito e si conta, il tiro no, né nel riepilogo né nelle statistiche."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    colpisci(banco, partita)
+    fino_alla_risoluzione(banco, partita)
+    partita.spazio()
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+    evento = partita._evento_impatto
+    for _blocco in range(BLOCCHI_MASSIMI):
+        banco.flusso.avanza(1)
+        if evento.scattato:
+            break
+    assert evento.scattato and partita.fase == "volo" and partita.tiri == 2
+    messaggi = partita.abbandona()
+    assert messaggi[0].dati["tiri"] == 1 and "1 centro su 1 tiro, 100%" in messaggi[0].testo
+    assert statistiche.dati["ultime"][-1]["tiri"] == statistiche.dati["conti"]["tiri"] == 1
+    assert statistiche.dati["suoni"]["a_terra"] == 1 and statistiche.dati["suoni"]["colpito"] == 1
+
+
+def test_gli_avvisi_aspettano_l_effetto_dell_impatto(banco, monkeypatch):
+    """L'ultimo colpo e la fine partono in fila dopo l'effetto dell'impatto che li causa, staccati, e non
+    sopra di lui; la partita nuova chiesta subito dopo la fine aspetta la fine e l'esito della
+    classifica che la finestra mette in fila a dopo_gli_avvisi."""
+    voci = []
+    originale = banco.suoni.suona
+
+    def spia(evento, *argomenti, **opzioni):
+        voce = originale(evento, *argomenti, **opzioni)
+        voci.append((evento, voce))
+        return voce
+
+    monkeypatch.setattr(banco.suoni, "suona", spia)
+    partita = banco.partita()
+    partita.nuova()
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
+    partita.riserva = 2
+    for avviso in ("ultimo_colpo", "partita_finita"):
+        partita.spazio()
+        mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+        evento = partita._evento_impatto
+        fino_alla_risoluzione(banco, partita)
+        voce = next(v for nome, v in voci if nome == avviso)
+        assert voce.inizio == evento.campione + LUNGHEZZA_FINTA + stacco
+    fine = voci[-1][1]
+    assert voci[-1][0] == "partita_finita" and partita.dopo_gli_avvisi() == fine.inizio + LUNGHEZZA_FINTA + stacco
+    esito = banco.suoni.suona("fuori_classifica", inizio=partita.dopo_gli_avvisi())
+    # Lo spazio dato d'abitudine subito dopo l'ultimo tonfo: la partita comincia, e il suo suono aspetta.
+    partita.spazio()
+    assert partita.fase == "ascolto" and voci[-1][0] == "nuova_partita"
+    assert voci[-1][1].inizio == esito.inizio + LUNGHEZZA_FINTA + stacco
+
+
+def _bonus_quasi_uscito(banco, partita, anticipo):
+    """Un bonus in volo, e il tempo di gioco che corre fino a tanti secondi prima della sua uscita."""
+    partita.livello = LIVELLO_DEI_BONUS
+    tiro_a_vuoto(banco, partita)
+    bonus = partita.bonus
+    assert bonus is not None
+    while banco.motore.tempo_di_gioco(banco.motore.prossimo_campione()) < bonus.tempo_di_uscita - anticipo:
+        banco.flusso.avanza(1)
+        assert partita.battito() == []
+    return bonus
+
+
+def test_il_bonus_uscito_durante_il_volo_che_chiude_il_livello(banco, bonus_sicuro, cartella_di_prova, monkeypatch):
+    """Il bonus esce col proiettile in volo, e il centro chiude il livello: l'uscita si dice e si conta
+    prima che il livello nuovo svuoti il cielo."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    bonus = _bonus_quasi_uscito(banco, partita, 0.3)
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
+    colpisci(banco, partita)
+    volo = partita.ultimo_volo
+    assert volo.colpito is not None and not volo.colpito.bonus
+    assert volo.partenza < bonus.tempo_di_uscita < volo.fine
+    messaggi = fino_alla_risoluzione(banco, partita)
+    # Dopo il livello possono venire i primati del centro.
+    assert [m.tipo for m in messaggi][:3] == ["resoconto", "bonus", "livello"] and messaggi[1].annuncio == "Bonus uscito."
+    assert partita.livello == LIVELLO_DEI_BONUS + 1 and partita.bonus is None
+    assert statistiche.dati["conti"]["bonus_usciti"] == 1 and statistiche.dati["suoni"]["bonus_uscito"] == 1
+
+
+def test_il_bonus_uscito_durante_l_ultimo_volo(banco, bonus_sicuro, cartella_di_prova):
+    """Il bonus esce mentre vola il tiro a vuoto che svuota la riserva: l'uscita si dice e si conta
+    prima della fine."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    bonus = _bonus_quasi_uscito(banco, partita, 0.2)
+    partita.riserva = 1
+    partita.spazio()
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+    volo = partita.ultimo_volo
+    assert volo.colpito is None and volo.partenza < bonus.tempo_di_uscita < volo.fine
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert [m.tipo for m in messaggi] == ["resoconto", "bonus", "fine"]
+    assert statistiche.dati["conti"]["bonus_usciti"] == 1 and statistiche.dati["suoni"]["bonus_uscito"] == 1
+
+
+def test_impatto_partito_prima_della_pausa(banco, bonus_sicuro, monkeypatch):
+    """Ctrl+P quando l'impatto è già partito nel filo dell'audio ma non si è ancora sentito: il tiro si
+    risolve e il resoconto arriva, ma a partita ferma i bersagli nuovi nascono muti, e il livello nuovo
+    e il bonus aspettano la ripresa, in fila dopo il suono della ripresa."""
+    voci = []
+    originale = banco.suoni.suona
+
+    def spia(evento, *argomenti, **opzioni):
+        voce = originale(evento, *argomenti, **opzioni)
+        voci.append((evento, voce))
+        return voce
+
+    monkeypatch.setattr(banco.suoni, "suona", spia)
+    partita = banco.partita()
+    partita.nuova()
+    partita.livello = LIVELLO_DEI_BONUS - 1
+    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
+    colpisci(banco, partita)
+    evento = partita._evento_impatto
+    for _blocco in range(BLOCCHI_MASSIMI):
+        banco.flusso.avanza(1)
+        if evento.scattato:
+            break
+    assert evento.scattato and banco.motore.campione_udibile() < evento.campione
+    partita.pausa()
+    assert partita.in_pausa and banco.contati[-1] == "pausa"
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert [m.tipo for m in messaggi] == ["resoconto", "livello"]
+    assert partita.fase == "ascolto" and partita.in_pausa and partita.livello == LIVELLO_DEI_BONUS and partita.bonus is None
+    assert banco.contati[-2:] == ["pausa", "colpito"]
+    banco.flusso.avanza(3)
+    assert partita.bersagli and all(partita._voci[b].guadagno == 0.0 for b in partita.bersagli)
+    assert partita.righe_della_barra()[-1] == "In pausa: Ctrl+P per riprendere"
+    messaggi = partita.pausa()
+    assert [m.tipo for m in messaggi] == ["info", "bonus"] and partita.bonus is not None
+    assert banco.contati[-3:] == ["ripresa", "livello_su", "bonus_appare"]
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
+    ripresa, livello, bonus = (v for _nome, v in voci[-3:])
+    assert livello.inizio == ripresa.inizio + LUNGHEZZA_FINTA + stacco and bonus.inizio == livello.inizio + LUNGHEZZA_FINTA + stacco
+    banco.flusso.avanza(10)
+    assert all(partita._voci[b].guadagno == 1.0 for b in partita.bersagli)
+
+
+def test_i_primati_che_a_parole_non_cambiano_non_si_dicono(banco, cartella_di_prova):
+    """Le statistiche tengono il primato esatto, ma il messaggio lo scrive arrotondato: un primato
+    battuto per meno di quanto si scrive si registra in silenzio."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    detti = []
+    for scarto in (0.05, 1e-7):
+        colpisci(banco, partita)
+        volo = partita.ultimo_volo
+        primati = statistiche.dati["primati"]
+        primati["precisione"] = {"valore": volo.precisione - scarto, "quando": "2026-11-19T10:00:00"}
+        primati["vicino"] = {"valore": volo.distanza_al_centro + scarto, "quando": "2026-11-19T10:00:00"}
+        messaggi = fino_alla_risoluzione(banco, partita)
+        detti.append([chiave for m in messaggi if m.tipo == "info" for chiave in m.dati.get("primati", [])])
+        assert primati["precisione"]["valore"] == volo.precisione and primati["vicino"]["valore"] == volo.distanza_al_centro
+    assert {"precisione", "vicino"} <= set(detti[0])
+    assert "precisione" not in detti[1] and "vicino" not in detti[1]
 
 
 def test_righe_della_barra_in_ogni_fase(banco):

@@ -5,9 +5,11 @@ Nasce il 2026-11-19 con la 0.1.0. Il conftest dirotta la cartella del programma 
 temporanea; l'orologio delle statistiche è finto, così le date delle righe sono note.
 """
 
+import ast
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 
 import costanti
 import statistiche
@@ -168,6 +170,34 @@ def test_file_rovinato_ripiega_sulla_copia(cartella_di_prova):
     assert letto.dati["conti"]["tiri"] == 7
     assert "copia di riserva" in avviso
     assert (cartella_di_prova / (costanti.FILE_STATISTICHE + ".illeggibile")).read_text(encoding="utf-8") == "[rotto"
+    # Il file torna al suo posto dalla copia, e il caricamento seguente non ha niente da dire.
+    assert json.loads(file.read_text(encoding="utf-8"))["conti"]["tiri"] == 7
+    assert (cartella_di_prova / (costanti.FILE_STATISTICHE + ".bak")).exists()
+    di_nuovo, avviso = statistiche.carica(avvio=False)
+    assert avviso is None and di_nuovo.dati["conti"]["tiri"] == 7
+
+
+def test_intero_enorme_non_solleva(cartella_di_prova):
+    enorme = 10 ** 400
+    grezzi = {"conti": {"tiri": enorme, "centri": 3}, "tempo_di_gioco": enorme, "somme": {"punteggi": enorme},
+              "primati": {"punteggio": {"valore": enorme, "quando": "2026-11-18T10:00:00"}}, "suoni": {"sparo": enorme, "colpito": 2},
+              "mira": {"alzo": {"minimo": enorme, "classi": [enorme] * statistiche.CLASSI}}, "forme": {"seno": {"apparsi": enorme}},
+              "ultime": [{"quando": "2026-11-18T10:00:00", "punteggio": enorme, "durata_s": enorme}]}
+    (cartella_di_prova / costanti.FILE_STATISTICHE).write_text(json.dumps(grezzi), encoding="utf-8")
+    letto, avviso = statistiche.carica(avvio=False)
+    assert avviso is None
+    assert letto.dati["conti"]["tiri"] == 0
+    assert letto.dati["conti"]["centri"] == 3
+    assert letto.dati["tempo_di_gioco"] == 0.0 and letto.dati["somme"]["punteggi"] == 0
+    assert "punteggio" not in letto.dati["primati"]
+    assert letto.dati["suoni"] == {"colpito": 2}
+    assert letto.dati["mira"]["alzo"]["minimo"] == 0 and letto.dati["mira"]["alzo"]["classi"] == [0] * statistiche.CLASSI
+    assert letto.dati["forme"]["seno"]["apparsi"] == 0
+    assert letto.dati["ultime"][0]["punteggio"] == 0
+    # La pagina si compone senza sollevare, e un tiro con numeri enormi non entra nei conti.
+    assert letto.righe()
+    letto.tiro((enorme, 0.5, 0.5), esito(precisione=enorme, punti=enorme, distanza_dal_vicino=enorme, serie=enorme))
+    assert letto.dati["conti"]["punti"] == 0 and "serie" not in letto.dati["primati"]
 
 
 def test_file_e_copia_rovinati_ripartono_da_zero(cartella_di_prova):
@@ -268,3 +298,53 @@ def test_righe_piene():
     assert all(r.strip() for r in righe)
     assert not re.search(r"[-_=]{3,}", testo)
     assert "{" not in testo and "}" not in testo
+
+
+def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
+    s = nuove()
+    s.conta("avvii")
+    s.conta("lingua_cambiata")
+    s.conta("mail_al_pub_pronte", 3)
+    s.conta("registri_al_pub", 2)
+    s.conta("ingressi_in_classifica", 4)
+    s.conta("pause", 5)
+    s.conta("pause_automatiche", 6)
+    righe = s.righe()
+    for riga in ("Cambi di lingua: 1.", "Mail al PUB preparate: 3.", "Mail d'aiuto al PUB coi registri allegati: 2.", "Partite entrate in classifica: 4.",
+                 "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo aperto o un'altra finestra: 6."):
+        assert riga in righe
+    # Nessuno di loro finisce negli altri conti, che restano per le chiavi nuove.
+    assert not any("altri conti" in r for r in righe)
+    assert [r for r in righe if r.startswith("Sezione ")][-1] == "Sezione 8 di 8, i suoni."
+
+
+def test_ogni_chiave_dei_conti_ha_la_sua_riga():
+    s = nuove()
+    for chiave in statistiche.CHIAVI_DEI_CONTI:
+        s.conta(chiave, 3)
+    righe = s.righe()
+    assert not any("altri conti" in r for r in righe)
+
+
+def _chiavi_contate(percorso):
+    """Le chiavi scritte per esteso nelle chiamate a conta e _conta di un modulo: ogni testo nel
+    primo argomento, anche dentro un'espressione come «"a" if x else "b"»."""
+    albero = ast.parse(percorso.read_text(encoding="utf-8"))
+    chiavi = set()
+    for nodo in ast.walk(albero):
+        if not isinstance(nodo, ast.Call) or not nodo.args:
+            continue
+        funzione = nodo.func
+        nome = funzione.attr if isinstance(funzione, ast.Attribute) else getattr(funzione, "id", None)
+        if nome not in ("conta", "_conta"):
+            continue
+        chiavi.update(c.value for c in ast.walk(nodo.args[0]) if isinstance(c, ast.Constant) and isinstance(c.value, str))
+    return chiavi
+
+
+def test_ogni_chiave_contata_dalla_partita_e_dalla_finestra_ha_un_etichetta():
+    radice = Path(statistiche.__file__).resolve().parent
+    contate = _chiavi_contate(radice / "partita.py") | _chiavi_contate(radice / "gui" / "finestra.py")
+    # La prova deve trovare davvero le chiamate: se non ne trova, il modo di contare è cambiato.
+    assert {"partite_iniziate", "ingressi_in_classifica"} <= contate
+    assert contate - set(statistiche.CHIAVI_DEI_CONTI) == set()

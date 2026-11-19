@@ -1,5 +1,5 @@
 """
-Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita audio e l'ultimo nome usato in classifica.
+Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita della sintesi e l'ultimo nome usato in classifica.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di impostazioni.py di MESS.
 Si salvano in «Ciechino - Impostazioni.json», accanto al programma, con la scrittura sicura di
@@ -8,20 +8,22 @@ rovinato si mette da parte invece di essere sovrascritto. valide riporta ogni ch
 intervallo, invece di buttarla, perché un volume a 120 scritto a mano vuol dire il massimo; e tiene
 le chiavi che questo Ciechino non conosce, perché un Ciechino più nuovo, sulla stessa cartella, non
 perda le sue.
+La chiave uscita è l'uscita della sintesi di GBsintesi, non la scheda audio: il suono esce sempre
+dal dispositivo che sceglie scegli_dispositivo_audio di GBUtils, e uscita dice soltanto chi legge i
+resoconti, automatica oppure nvda, jaws o sapi5, la voce di Windows; un nome che GBsintesi non
+conosce vale automatica.
 """
-
-import math
 
 import costanti
 import percorsi
-from classifica import leggi_dati, pulisci_nome, scrivi_dati
+from classifica import leggi_dati, numero_valido, pulisci_nome, scrivi_dati
 from lingua import _
 
 # Il volume va da zero, il silenzio, a cento, il pieno: è la scala delle impostazioni, non una
 # taratura del suono.
 VOLUME_MINIMO = 0
 VOLUME_MASSIMO = 100
-# L'uscita audio che lascia la scelta a scegli_dispositivo_audio di GBUtils.
+# L'uscita della sintesi che lascia la scelta a GBsintesi: automatica, oppure nvda, jaws o sapi5.
 USCITA_AUTOMATICA = "automatica"
 PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": ""}
 # L'avviso dell'ultimo caricamento, None se è andato tutto bene: carica restituisce soltanto le
@@ -36,14 +38,15 @@ def _percorso(percorso):
 
 def valide(dati):
     """Le impostazioni ricevute, sistemate: il volume riportato fra VOLUME_MINIMO e VOLUME_MASSIMO,
-    la sintesi vera o falsa, l'uscita un nome non vuoto, l'ultimo nome pulito come in classifica;
-    ciò che manca o ha il tipo sbagliato prende il predefinito, e le chiavi sconosciute restano."""
+    la sintesi vera o falsa, l'uscita della sintesi un nome non vuoto, l'ultimo nome pulito come in
+    classifica; ciò che manca, ha il tipo sbagliato o è un numero oltre NUMERO_MASSIMO di
+    classifica.py prende il predefinito, e le chiavi sconosciute restano."""
     risultato = dict(PREDEFINITE)
     if not isinstance(dati, dict):
         return risultato
     risultato.update({chiave: valore for chiave, valore in dati.items() if chiave not in PREDEFINITE})
     volume = dati.get("volume")
-    if isinstance(volume, int | float) and not isinstance(volume, bool) and math.isfinite(volume):
+    if numero_valido(volume):
         risultato["volume"] = min(VOLUME_MASSIMO, max(VOLUME_MINIMO, round(volume)))
     if isinstance(dati.get("sintesi"), bool):
         risultato["sintesi"] = dati["sintesi"]

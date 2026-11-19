@@ -19,6 +19,13 @@ una fabbrica, che le prove sostituiscono con una partita finta. A partita finita
 entra in classifica e mette la classifica in coda alla vista. Come MESS ha l'istanza unica, il registro
 degli errori e l'aggiornamento automatico, coi quattro metodi che aggiornamento.py si aspetta e
 l'attributo chiusa, che diventa vero quando la finestra comincia a chiudersi.
+Il dialogo del nome si apre quando il suono dell'ingresso in classifica è finito: nell'attesa conta
+già come un dialogo aperto, così lo spazio non comincia una partita nuova.
+La partita si ferma da sola, in silenzio, quando si apre un dialogo o un messaggio, o quando la
+finestra perde l'attivazione, e riprende da sola al ritorno, ma soltanto se la pausa l'aveva messa la
+finestra: una pausa chiesta con Ctrl+P resta (D14). A ogni battito la finestra chiede anche al motore
+audio se il flusso è vivo, e ne legge le notizie: gli errori del filo dell'audio, i buchi e il flusso
+perso finiscono nel registro, riassunti, perché il filo di PortAudio non arriva alla rete degli errori.
 """
 
 import contextlib
@@ -26,6 +33,7 @@ import datetime
 import os
 import sys
 import time
+import traceback
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -67,6 +75,15 @@ ATTESA_MASSIMA_DELL_USCITA = 2.0
 # dopo quanti secondi smette: lo script di sostituzione aspetta la chiusura al massimo 30 secondi.
 RIPROVA_DELLA_CHIUSURA = 200
 LIMITE_DELLA_CHIUSURA = 20
+# Il dialogo del nome aspetta la fine del suono dell'ingresso, sull'orologio del motore; se quell'orologio
+# si fermasse, si apre comunque dopo tanti secondi veri oltre la fine prevista. All'uscita, invece, si
+# aspetta quel suono al più per tanti secondi, fermi, perché il battito non c'è più.
+MARGINE_DEL_NOME = 3.0
+ATTESA_MASSIMA_DEL_NOME = 3.0
+# Ogni quanti secondi, al più, il registro riceve il riassunto dei buchi del flusso audio e degli errori
+# ripetuti del filo dell'audio: un buco o un guasto si ripete anche a ogni blocco, e una riga per volta
+# riempirebbe il registro.
+INTERVALLO_DEI_RIASSUNTI = 60.0
 MILLESIMI = 1000
 MEGABYTE = 1024 * 1024
 # I tasti fuori dai menu, che il gancio dei tasti prende da sé.
@@ -117,6 +134,20 @@ class Voce(NamedTuple):
     spunta: bool = False
 
 
+class NomeInAttesa(NamedTuple):
+    """
+    Una partita entrata in classifica che aspetta il dialogo del nome: fine è il campione dove finisce il
+    suono dell'ingresso, o None se non suona; scadenza l'istante di time.monotonic dopo cui il dialogo si
+    apre comunque; poi il riepilogo, le voci della classifica e la posizione della voce nuova.
+    """
+
+    fine: int | None
+    scadenza: float
+    riepilogo: dict
+    voci: list
+    posizione: int
+
+
 class FinestraPrincipale(wx.Frame):
     """
     La finestra di Ciechino. crash_precedente è il resoconto del crash della volta prima, che la vista
@@ -131,6 +162,9 @@ class FinestraPrincipale(wx.Frame):
         # chiede più niente. congedo dice a Ciechino.py come se n'è andata.
         self.chiusa = False
         self.congedo = USCITA
+        # Chi vuole saperlo, cioè Ciechino.py per l'istanza unica, mette qui una funzione senza argomenti:
+        # la finestra la chiama quando comincia a chiudersi davvero, dopo la domanda.
+        self.al_congedo = None
         self._per_aggiornare = False
         self._per_riaprire = False
         self._chiusura_dal = None
@@ -138,8 +172,23 @@ class FinestraPrincipale(wx.Frame):
         self._comandi_in_corso = 0
         self._nel_battito = False
         self._errore_aperto = False
+        # I lavori del battito che si sono guastati: il registro riceve una volta sola ogni guasto uguale,
+        # e chi gioca un messaggio solo per lavoro, perché il battito li ripeterebbe cento volte al secondo.
+        self._guasti_detti = set()
+        self._guasti_scritti = set()
         # I dati delle partite finite che aspettano la classifica, perché arrivate con un dialogo aperto.
         self._partite_da_concludere = []
+        # La partita entrata in classifica che aspetta la fine del suono dell'ingresso per chiedere il
+        # nome, e se lo si chiede all'uscita, senza battito, aspettando quel suono da fermi.
+        self._nome_in_attesa = None
+        self._all_uscita = False
+        # Le notizie del filo dell'audio ancora da riassumere nel registro: per ogni errore, già scritto
+        # una volta, quante volte si è ripetuto; i buchi, da quando li si è scritti e in tutto.
+        self._errori_del_motore = {}
+        self._buchi_da_dire = 0
+        self._buchi_in_tutto = 0
+        self._ultimo_riassunto = time.monotonic()
+        self._flusso_perso_detto = False
         self._testo_barra = None
         # La riga della barra che dice lo scaricamento dell'aggiornamento, quando c'è.
         self._riga_dell_aggiornamento = None
@@ -153,9 +202,16 @@ class FinestraPrincipale(wx.Frame):
         self._voci_della_classifica, avviso = classifica.carica()
         if avviso:
             self.avvisi_dei_dati.append(avviso)
+        # Vero dopo un salvataggio della classifica non riuscito: allora vale quella in memoria, fino all'uscita.
+        self._classifica_in_memoria = False
         self.motore = motore if motore is not None else Motore()
         if not self.motore.avviato:
             self.motore.avvia()
+        # Perché la scheda non si è aperta, o che cosa non è andato all'avvio del motore: la vista dice
+        # soltanto che il gioco è muto, e il motivo lo legge chi sviluppa, nel registro.
+        ultimo_errore = getattr(self.motore, "ultimo_errore", None)
+        if ultimo_errore:
+            registro.scrivi(f"Motore audio: {ultimo_errore}")
         self.motore.volume = guadagno_del_volume(self.impostazioni["volume"])
         self.suoni = modulo_suoni.Suoni(self.motore, conta=self.statistiche.suono)
         # Tutti i preset si sintetizzano adesso, così il primo sparo non aspetta la sintesi di un rumore.
@@ -165,6 +221,7 @@ class FinestraPrincipale(wx.Frame):
         self._crea_menu()
         dentro_area_utile(self, MISURA)
         self.Bind(wx.EVT_CLOSE, self._alla_chiusura)
+        self.Bind(wx.EVT_ACTIVATE, self._all_attivazione)
         self.Bind(wx.EVT_CHAR_HOOK, self._tasto)
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._al_battito, self.timer)
@@ -352,11 +409,19 @@ class FinestraPrincipale(wx.Frame):
             self._comandi_in_corso -= 1
             self.aggiorna_barra()
 
-    def _dialogo_aperto(self):
-        """Vero se è aperto un dialogo, o un messaggio: allora lo spazio non è della partita, e la classifica aspetta."""
+    def _finestra_modale_aperta(self):
+        """Vero se è aperto davvero un dialogo, o un messaggio: allora la partita si ferma, e F5 e F7 sono suoi."""
         if self._modali:
             return True
         return any(isinstance(finestra, wx.Dialog) and finestra.IsShown() for finestra in wx.GetTopLevelWindows())
+
+    def _dialogo_aperto(self):
+        """
+        Vero se è aperto un dialogo, o un messaggio, o se il dialogo del nome sta per aprirsi, alla fine
+        del suono dell'ingresso: allora lo spazio non è della partita, e la classifica aspetta. Senza
+        l'attesa del nome, lo spazio premuto nel frattempo, a partita finita, ne comincerebbe un'altra.
+        """
+        return self._nome_in_attesa is not None or self._finestra_modale_aperta()
 
     def _spazio_per_la_partita(self):
         """Lo spazio va alla partita soltanto se la finestra principale è attiva e nessun dialogo è aperto."""
@@ -376,7 +441,7 @@ class FinestraPrincipale(wx.Frame):
                 if not event.IsAutoRepeat():
                     self._esegui(self.spazio)
                 return
-            if codice in TASTI_DEL_FUOCO and not self._dialogo_aperto():
+            if codice in TASTI_DEL_FUOCO and not self._finestra_modale_aperta():
                 self._esegui(self.vai_alla_vista if codice == wx.WXK_F5 else self.vai_alla_barra)
                 return
         event.Skip()
@@ -395,11 +460,18 @@ class FinestraPrincipale(wx.Frame):
             self.timer.Start(costanti.BATTITO_MS)
 
     def _al_battito(self, event=None):
-        """Il battito: la partita avanza, i suoi messaggi vanno nella vista e la barra si rinfresca."""
+        """
+        Il battito: il motore dice se il flusso è vivo, la partita si ferma o riprende secondo i dialoghi
+        e l'attivazione della finestra (D14), poi avanza; i suoi messaggi vanno nella vista, le notizie del
+        motore nel registro, e la barra si rinfresca. Il timer batte anche dentro i dialoghi modali e i
+        messaggi di wx, che smistano WM_TIMER: per questo la pausa la decide ogni battito.
+        """
         if self.chiusa or self._nel_battito:
             return
         self._nel_battito = True
         try:
+            self._controlla_il_motore()
+            self._pausa_della_finestra()
             try:
                 messaggi = self.partita.battito()
             except Exception:
@@ -408,29 +480,65 @@ class FinestraPrincipale(wx.Frame):
                 # nuova lo fa ripartire.
                 self.timer.Stop()
                 raise
-            self._ricevi(messaggi)
+            try:
+                self._ricevi(messaggi)
+            except Exception:  # noqa: BLE001 - i messaggi sono già consumati e non si ripetono: il battito seguente va avanti
+                self._guasto("messaggi")
+            self._notizie_del_motore()
         finally:
             self._nel_battito = False
         self.aggiorna_barra()
 
     def _ricevi(self, messaggi, con_la_classifica=True):
         """
-        I messaggi della partita, in coda alla vista uno dopo l'altro, col cursore all'inizio dell'ultimo
-        e l'annuncio alla sintesi. Un messaggio «fine» salva le statistiche e porta la partita finita alla
+        I messaggi della partita, in coda alla vista uno dopo l'altro, col cursore all'inizio del primo e
+        l'annuncio alla sintesi. Un messaggio «fine» salva le statistiche e porta la partita finita alla
         classifica; con_la_classifica falso, all'uscita, la classifica non si chiede.
         """
-        for messaggio in messaggi or ():
-            testo = getattr(messaggio, "testo", "") or ""
-            if testo:
-                self._in_coda(testo, getattr(messaggio, "annuncio", "") or "")
-            if getattr(messaggio, "tipo", None) == "fine":
-                dati = getattr(messaggio, "dati", None)
-                self._partite_da_concludere.append(dati if isinstance(dati, dict) else {})
-                self._salva_le_statistiche()
+        self._accogli(messaggi)
         if not con_la_classifica:
             self._partite_da_concludere.clear()
             return
         self._concludi_le_partite()
+
+    def _accogli(self, messaggi):
+        """
+        I messaggi in coda alla vista, senza ancora la classifica. Il cursore va all'inizio del primo: la
+        partita mette per primo il resoconto del tiro, e dopo il livello, i primati, l'ultimo colpo o il
+        bonus, così Freccia giù li legge tutti in ordine, e le misure del tiro non restano sopra il cursore.
+        """
+        primo = None
+        for messaggio in messaggi or ():
+            testo = getattr(messaggio, "testo", "") or ""
+            if testo:
+                inizio = self._in_coda(testo, getattr(messaggio, "annuncio", "") or "")
+                if primo is None:
+                    primo = inizio
+            if getattr(messaggio, "tipo", None) == "fine":
+                dati = getattr(messaggio, "dati", None)
+                self._partite_da_concludere.append(dati if isinstance(dati, dict) else {})
+                self._salva_le_statistiche()
+        if primo is not None:
+            self.vista.SetInsertionPoint(primo)
+            self.vista.ShowPosition(primo)
+
+    def _guasto(self, lavoro):
+        """
+        Un guasto, dentro un except, in un lavoro che il battito ripete: il resoconto va nel registro una
+        volta sola per guasto uguale, e da sorgente anche sulla console; chi gioca sente il suono
+        dell'errore e legge il messaggio una volta sola per lavoro, quando il battito è finito. Altrimenti
+        un guasto che si ripete a ogni giro aprirebbe un messaggio dopo l'altro e riempirebbe il registro.
+        """
+        tipo, valore, traccia = sys.exc_info()
+        firma = (lavoro, getattr(tipo, "__name__", str(tipo)), str(valore))
+        if firma not in self._guasti_scritti:
+            self._guasti_scritti.add(firma)
+            registro.problema(tipo, valore, traccia)
+            if not getattr(sys, "frozen", False):
+                traceback.print_exception(tipo, valore, traccia)
+        if lavoro not in self._guasti_detti:
+            self._guasti_detti.add(lavoro)
+            wx.CallAfter(self.errore_imprevisto, tipo, valore)
 
     # La vista, la sintesi e la barra.
 
@@ -440,11 +548,11 @@ class FinestraPrincipale(wx.Frame):
         riga_del_cursore del testo nuovo, la prima se non si dice altro; l'annuncio va alla sintesi. Le
         righe vuote non entrano: la vista è una voce per riga. Il cursore si mette dalla posizione che la
         vista dà dopo aver scritto ciò che lo precede, non contando i caratteri, perché con TE_RICH2 le
-        posizioni non sono indici della stringa.
+        posizioni non sono indici della stringa. Restituisce quella posizione, o None se non ha scritto niente.
         """
         righe = [riga for riga in (testo.splitlines() if isinstance(testo, str) else testo) if riga.strip()]
         if not righe:
-            return
+            return None
         riga_del_cursore = min(max(riga_del_cursore, 0), len(righe) - 1)
         vista = self.vista
         if vista.GetLastPosition():
@@ -458,6 +566,7 @@ class FinestraPrincipale(wx.Frame):
         if fuoco:
             vista.SetFocus()
         self._dici(annuncio)
+        return inizio
 
     def _dici(self, testo):
         """L'annuncio alla sintesi, con l'uscita delle impostazioni, se la lettura dei resoconti è accesa."""
@@ -486,11 +595,17 @@ class FinestraPrincipale(wx.Frame):
         Riscrive la barra di stato, ma solo se è cambiata, e mai a metà di un comando: lo fa la fine del
         comando. Si riscrive anche col cursore sopra, che non disturba NVDA: il cursore resta sulla stessa
         riga e nella stessa colonna, a fine riga se la riga si è accorciata, sull'ultima riga se le righe
-        sono meno di prima. Con TE_RICH2 righe e colonne le traduce wx.
+        sono meno di prima. Con TE_RICH2 righe e colonne le traduce wx. Righe che non si compongono, per
+        esempio per un segnaposto sbagliato in una traduzione, lasciano la barra com'era: l'errore si dice
+        una volta sola, e la partita va avanti, invece di un messaggio a ogni battito.
         """
         if not self or self.chiusa or self._comandi_in_corso:
             return
-        testo = "\n".join(self.righe_della_barra())
+        try:
+            testo = "\n".join(self.righe_della_barra())
+        except Exception:  # noqa: BLE001 - il battito riproverebbe cento volte al secondo
+            self._guasto("barra")
+            return
         if testo == self._testo_barra:
             return
         self._testo_barra = testo
@@ -517,19 +632,28 @@ class FinestraPrincipale(wx.Frame):
     # I dialoghi e i messaggi.
 
     def _modale(self, dialogo):
-        """Mostra un dialogo modale; finché resta aperto, lo spazio non è della partita e la classifica aspetta."""
+        """
+        Mostra un dialogo modale; finché resta aperto, lo spazio non è della partita, la classifica aspetta
+        e la partita in corso si ferma, in silenzio (D14). Chiuso il dialogo, riprende da sola, se la
+        finestra è di nuovo attiva e la pausa l'aveva messa lei.
+        """
         self._modali += 1
         try:
+            self._ferma_la_partita()
             return dialogo.ShowModal()
         finally:
             self._modali -= 1
+            self._dopo_un_modale()
 
     def _messaggio(self, testo, stile=wx.OK | wx.ICON_INFORMATION, titolo=TITOLO):
+        """Un messaggio di wx, o una domanda, che ferma la partita come un dialogo."""
         self._modali += 1
         try:
+            self._ferma_la_partita()
             return dialoghi.messaggio(self, testo, titolo, stile)
         finally:
             self._modali -= 1
+            self._dopo_un_modale()
 
     def _domanda(self, testo):
         """Una domanda sì o no, con il suo suono e il no già scelto: vero per il sì. Al no suona l'annullamento."""
@@ -538,6 +662,68 @@ class FinestraPrincipale(wx.Frame):
             return True
         self.suoni.suona("annullato")
         return False
+
+    # La pausa della finestra (D14): una partita che chi gioca non può seguire, perché un dialogo ha il
+    # fuoco o perché la finestra non è attiva, si ferma e tace; la decisione è della partita, con
+    # pausa_automatica, che riprende soltanto le pause messe così e lascia stare quelle di Ctrl+P.
+
+    def _pausa_automatica(self, attiva):
+        """Chiede alla partita la pausa automatica, o la ripresa; una partita che non la conosce, come quelle finte delle prove, non si ferma."""
+        if self.chiusa:
+            return
+        pausa = getattr(self.partita, "pausa_automatica", None)
+        if not callable(pausa):
+            return
+        try:
+            messaggi = pausa(attiva)
+        except Exception:  # noqa: BLE001 - la pausa si chiede anche dentro il messaggio dell'errore: non deve sollevare
+            self._guasto("pausa")
+            return
+        self._accogli(messaggi)
+
+    def _ferma_la_partita(self):
+        self._pausa_automatica(True)
+
+    def _riprendi_la_partita(self):
+        """La partita riprende da sola soltanto senza dialoghi aperti e con la finestra di nuovo attiva."""
+        if self.chiusa or self._finestra_modale_aperta() or not self.IsActive():
+            return
+        self._pausa_automatica(False)
+        self.aggiorna_barra()
+
+    def _pausa_della_finestra(self):
+        """A ogni battito, la pausa segue lo stato della finestra: così non dipende da un evento perso."""
+        if self._finestra_modale_aperta() or not self.IsActive():
+            self._ferma_la_partita()
+        else:
+            self._riprendi_la_partita()
+
+    def _dopo_un_modale(self):
+        """
+        Chiuso un dialogo, la ripresa si prova dopo il comando che l'aveva aperto: Ctrl+N col sì abbandona
+        la partita subito, e una ripresa nel mezzo farebbe ripartire per un attimo la barra e le voci.
+        """
+        if not self.chiusa:
+            wx.CallAfter(self._riprendi_dopo)
+
+    def _riprendi_dopo(self):
+        # Fra la chiamata e adesso la finestra può essere stata distrutta.
+        if self and not self.IsBeingDeleted():
+            self._riprendi_la_partita()
+
+    def _all_attivazione(self, event):
+        """
+        La finestra principale perde l'attivazione, per Alt+Tab, per un'altra applicazione o per un dialogo
+        che si apre, e la partita si ferma subito; la riprende, a cose fatte, la prova del ritorno.
+        """
+        event.Skip()
+        if self.chiusa:
+            return
+        if event.GetActive():
+            # Durante l'evento wx non ha ancora rimesso il fuoco nella finestra, e IsActive direbbe di no.
+            wx.CallAfter(self._riprendi_dopo)
+        else:
+            self._ferma_la_partita()
 
     def errore_imprevisto(self, tipo, valore):
         """
@@ -560,14 +746,17 @@ class FinestraPrincipale(wx.Frame):
         if self.statistiche.salva():
             return True
         self.suoni.suona("salvataggio_non_riuscito")
-        self._in_coda(_("Le statistiche non si sono potute salvare: le ritroverai come erano all'ultimo salvataggio riuscito."))
+        # L'avviso va anche alla sintesi, come ogni messaggio della vista: è una perdita di dati.
+        testo = _("Le statistiche non si sono potute salvare: le ritroverai come erano all'ultimo salvataggio riuscito.")
+        self._in_coda(testo, testo)
         return False
 
     def _salva_le_impostazioni(self):
         if modulo_impostazioni.salva(self.impostazioni):
             return True
         self.suoni.suona("salvataggio_non_riuscito")
-        self._in_coda(_("Le impostazioni non si sono potute salvare: valgono fino all'uscita."))
+        testo = _("Le impostazioni non si sono potute salvare: valgono fino all'uscita.")
+        self._in_coda(testo, testo)
         return False
 
     # La partita.
@@ -589,9 +778,54 @@ class FinestraPrincipale(wx.Frame):
         self.Close()
 
     def _concludi_le_partite(self):
-        """Le partite finite vanno in classifica, una dopo l'altra, quando nessun dialogo è aperto: altrimenti aspettano il battito seguente."""
-        while self._partite_da_concludere and not self.chiusa and not self._dialogo_aperto():
+        """
+        Le partite finite vanno in classifica, una dopo l'altra, quando nessun dialogo è aperto: altrimenti
+        aspettano il battito seguente. Una partita entrata in classifica aspetta, prima del nome, la fine
+        del suono dell'ingresso; intanto le altre aspettano lei.
+        """
+        while not self.chiusa:
+            if self._nome_in_attesa is not None:
+                if not self._nome_pronto():
+                    return
+                self._chiedi_il_nome()
+                continue
+            if not self._partite_da_concludere or self._dialogo_aperto():
+                return
             self._in_classifica(self._partite_da_concludere.pop(0))
+
+    def _secondi_alla_fine(self, fine):
+        """Quanti secondi mancano perché si senta fino al campione fine: zero o meno se è già passato."""
+        return (fine - self.motore.campione_udibile()) / self.motore.fs
+
+    def _nome_pronto(self):
+        """
+        Se il dialogo del nome si può aprire: nessun dialogo vero aperto, e il suono dell'ingresso finito,
+        sull'orologio del motore; con il motore muto non c'è niente da aspettare, e se l'orologio si fosse
+        fermato vale la scadenza in tempo vero. All'uscita il battito non c'è più, e il suono si aspetta da
+        fermi, al più per ATTESA_MASSIMA_DEL_NOME.
+        """
+        if self._finestra_modale_aperta():
+            return False
+        attesa = self._nome_in_attesa
+        if attesa.fine is None or getattr(self.motore, "muto", False):
+            return True
+        mancano = self._secondi_alla_fine(attesa.fine)
+        if self._all_uscita:
+            time.sleep(min(max(mancano, 0.0), ATTESA_MASSIMA_DEL_NOME))
+            return True
+        return mancano <= 0 or time.monotonic() >= attesa.scadenza
+
+    def _chiudi_i_conti(self):
+        """
+        All'uscita, prima che la finestra si chiuda: il nome che aspettava il suono dell'ingresso si chiede
+        adesso, e le partite finite mentre un dialogo era aperto, per esempio la domanda d'uscita, vanno in
+        classifica, col nome, invece di perdersi.
+        """
+        self._all_uscita = True
+        try:
+            self._concludi_le_partite()
+        finally:
+            self._all_uscita = False
 
     def _riepilogo_di(self, dati):
         """Il riepilogo di una partita finita, dai dati del suo messaggio: il riepilogo stesso o la sua chiave, o in mancanza dalla partita."""
@@ -610,18 +844,29 @@ class FinestraPrincipale(wx.Frame):
         dopo = getattr(self.partita, "dopo_gli_avvisi", None)
         return dopo() if callable(dopo) else None
 
+    def _classifica_attuale(self):
+        """
+        La classifica per una partita finita e per Ctrl+K: quella del file, riletta ogni volta; ma dopo un
+        salvataggio non riuscito quella in memoria, con la voce nuova, che vale fino all'uscita, come dice
+        l'avviso. Il salvataggio seguente, se riesce, scrive anche lei.
+        """
+        if self._classifica_in_memoria:
+            return self._voci_della_classifica, None
+        voci, avviso = classifica.carica()
+        self._voci_della_classifica = voci
+        return voci, avviso
+
     def _in_classifica(self, dati):
         """
-        A partita finita: se il punteggio entra in classifica, il suono in_classifica e il dialogo del nome,
-        con l'ultimo nome proposto; poi la voce nuova si scrive, e la classifica va in coda alla vista col
-        cursore sulla voce nuova. Altrimenti il suono fuori_classifica e una riga che lo dice. I due suoni
-        seguono la fine della partita, in fila.
+        A partita finita: se il punteggio entra in classifica, il suono in_classifica, e alla sua fine il
+        dialogo del nome, che intanto aspetta in _nome_in_attesa. Altrimenti il suono fuori_classifica e
+        una riga che lo dice. I due suoni seguono la fine della partita, in fila.
         """
         riepilogo = self._riepilogo_di(dati)
-        voci, avviso = classifica.carica()
+        voci, avviso = self._classifica_attuale()
         if avviso:
             self.suoni.suona("dati_rovinati")
-            self._in_coda(avviso)
+            self._in_coda(avviso, avviso)
         punteggio = riepilogo.get("punteggio")
         dove = classifica.posizione(voci, punteggio)
         if dove is None:
@@ -629,7 +874,19 @@ class FinestraPrincipale(wx.Frame):
             testo = _("Il punteggio di questa partita non entra in classifica.")
             self._in_coda(testo, testo)
             return
-        self.suoni.suona("in_classifica", inizio=self._dopo_gli_avvisi())
+        voce = self.suoni.suona("in_classifica", inizio=self._dopo_gli_avvisi())
+        fine = voce.inizio + len(voce.buffer) if voce is not None else None
+        mancano = max(self._secondi_alla_fine(fine), 0.0) if fine is not None else 0.0
+        self._nome_in_attesa = NomeInAttesa(fine, time.monotonic() + mancano + MARGINE_DEL_NOME, riepilogo, voci, dove)
+
+    def _chiedi_il_nome(self):
+        """
+        Il dialogo del nome della partita in attesa, con l'ultimo nome proposto; poi la voce nuova si
+        scrive, e la classifica va in coda alla vista col cursore sulla voce nuova.
+        """
+        attesa, self._nome_in_attesa = self._nome_in_attesa, None
+        riepilogo, voci, dove = attesa.riepilogo, attesa.voci, attesa.posizione
+        punteggio = riepilogo.get("punteggio")
         punti = plurale(round(punteggio), "{n} punto", "{n} punti", come=testi.intero(punteggio))
         # Traduttori: {punti} è come «1.234 punti», {posizione} un numero.
         spiegazione = _("Con {punti} entri in classifica al posto {posizione}: scrivi il tuo nome.").format(punti=punti, posizione=dove)
@@ -647,13 +904,15 @@ class FinestraPrincipale(wx.Frame):
         voci, posizione = classifica.inserisci(voci, classifica.nuova_voce(nome, riepilogo))
         salvata = classifica.salva(voci)
         self._voci_della_classifica = voci
+        self._classifica_in_memoria = not salvata
         self.impostazioni["ultimo_nome"] = nome
         self.statistiche.conta("ingressi_in_classifica")
         self.suoni.suona("confermato" if salvata else "salvataggio_non_riuscito")
         righe = classifica.righe(voci, nuova=posizione)
         self._in_coda(righe, righe[posizione] if posizione is not None and posizione < len(righe) else "", posizione or 0)
         if not salvata:
-            self._in_coda(_("La classifica non si è potuta salvare: la voce nuova vale fino all'uscita."))
+            testo = _("La classifica non si è potuta salvare: la voce nuova vale fino all'uscita.")
+            self._in_coda(testo, testo)
         self._salva_le_impostazioni()
         self._salva_le_statistiche()
 
@@ -668,7 +927,7 @@ class FinestraPrincipale(wx.Frame):
 
     def mostra_classifica(self):
         """Ctrl+K: la classifica, una voce per riga."""
-        voci, avviso = classifica.carica()
+        voci, avviso = self._classifica_attuale()
         righe = classifica.righe(voci)
         if avviso:
             righe.append(avviso)
@@ -816,7 +1075,9 @@ class FinestraPrincipale(wx.Frame):
         """Offrimi un caffè: l'invito, solo a richiesta, nel dialogo con Dona con PayPal e Chiudi."""
         from GBUtils import Donazione
 
-        invito = Donazione(lang="it", probabilita=100, stampa=False) or _("Grazie se vorrai offrire un caffè all'autore.")
+        # La lingua è quella in cui Ciechino parla adesso, come in MeTeOra: con una traduzione installata
+        # l'invito non resta in italiano mentre il titolo e i pulsanti del dialogo sono tradotti (D9).
+        invito = Donazione(lang=lingua.CODICE, probabilita=100, stampa=False) or _("Grazie se vorrai offrire un caffè all'autore.")
         self.suoni.suona("caffe")
         dialogo = dialoghi.Caffe(self, invito, self.suoni.suona)
         try:
@@ -879,10 +1140,12 @@ class FinestraPrincipale(wx.Frame):
 
         self._modali += 1
         try:
+            self._ferma_la_partita()
             riuscita = finestra_mail(self, mail["titolo"], mail["destinatario"], mail["oggetto"], mail["corpo"], mail["spiegazione"], mail["passi"],
                                      pub.PULSANTI, pub.SENZA_POSTA, casella=casella)
         finally:
             self._modali -= 1
+            self._dopo_un_modale()
         if riuscita:
             self.statistiche.conta("mail_al_pub_pronte")
             self.suoni.suona("confermato")
@@ -910,7 +1173,8 @@ class FinestraPrincipale(wx.Frame):
             dialogo.Destroy()
         if scelta == wx.ID_YES:
             self.suoni.suona("aggiornamento_scelto")
-            testo = _("Scarico Ciechino {versione}: quando è pronto, Ciechino si chiude per installarlo e si riapre da solo.").format(versione=versione_nuova)
+            testo = _("Scarico Ciechino {versione}: quando è pronto, Ciechino si chiude per installarlo, abbandonando la partita in corso, "
+                      "e si riapre da solo.").format(versione=versione_nuova)
         elif scaduta:
             self.suoni.suona("aggiornamento_scaduto")
             testo = _("La proposta di Ciechino {versione} è scaduta: te la ripropongo al prossimo avvio.").format(versione=versione_nuova)
@@ -927,6 +1191,9 @@ class FinestraPrincipale(wx.Frame):
         frase; il testo resta anche nella vista.
         """
         esito = aggiornamento.esito(testo)
+        if esito in (aggiornamento.NON_RIUSCITO, aggiornamento.NON_PRONTO):
+            # Lo scaricamento è finito male: la sua riga non resta nella barra, che direbbe ancora «scaricato al 63%».
+            self._togli_la_riga_dell_aggiornamento()
         self.suoni.suona(SUONI_DEGLI_ESITI.get(esito, "aggiornamento_disponibile"))
         self._in_coda(testo)
         self._messaggio(testo, wx.OK | ICONE_DEGLI_ESITI.get(esito, wx.ICON_INFORMATION), _("Aggiornamento di Ciechino"))
@@ -943,11 +1210,17 @@ class FinestraPrincipale(wx.Frame):
             self._riga_dell_aggiornamento = _("Aggiornamento: {mega} MB scaricati.").format(mega=testi.numero(presi / MEGABYTE, 1))
         self.aggiorna_barra()
 
+    def _togli_la_riga_dell_aggiornamento(self):
+        self._riga_dell_aggiornamento = None
+        self.aggiorna_barra()
+
     def chiudi_per_aggiornare(self):
         """
         GBUtils sta per sostituire Ciechino: la finestra chiude i dialoghi aperti, come annullati, e si
-        chiude senza domande, abbandonando la partita in corso. Un messaggio aperto, che non si può chiudere
-        da qui, si aspetta, e la chiusura riprova, ma per LIMITE_DELLA_CHIUSURA secondi al massimo: dopo, lo
+        chiude senza domande, abbandonando la partita in corso. Il dialogo del nome in classifica no: lo
+        conferma chi gioca, come un messaggio aperto, che non si può chiudere da qui; e prima di chiudersi
+        la finestra aspetta anche le partite finite che attendono la classifica, che il battito porta al
+        dialogo del nome. La chiusura riprova, ma per LIMITE_DELLA_CHIUSURA secondi al massimo: dopo, lo
         script ha rinunciato, e la vista lo dice col suono dell'aggiornamento non riuscito.
         """
         if not self or self.chiusa:
@@ -956,12 +1229,15 @@ class FinestraPrincipale(wx.Frame):
             self._chiusura_dal = time.monotonic()
         aperti = [d for d in wx.GetTopLevelWindows() if isinstance(d, wx.Dialog) and d.IsModal()]
         for dialogo in aperti:
-            dialogo.EndModal(wx.ID_CANCEL)
-        if aperti or self._modali:
+            # Chiuso come annullato, il nome perderebbe la voce della classifica.
+            if not isinstance(dialogo, dialoghi.Nome):
+                dialogo.EndModal(wx.ID_CANCEL)
+        if aperti or self._modali or self._partite_da_concludere or self._nome_in_attesa is not None:
             if time.monotonic() - self._chiusura_dal < LIMITE_DELLA_CHIUSURA:
                 wx.CallLater(RIPROVA_DELLA_CHIUSURA, self.chiudi_per_aggiornare)
             else:
                 self._chiusura_dal = None
+                self._togli_la_riga_dell_aggiornamento()
                 self.suoni.suona("aggiornamento_non_riuscito")
                 testo = _("L'aggiornamento non si è installato: Ciechino doveva chiudersi entro 30 secondi, ma un messaggio è rimasto aperto. "
                           "Continui con questa versione, e te lo ripropongo al prossimo avvio.")
@@ -979,6 +1255,94 @@ class FinestraPrincipale(wx.Frame):
         self.Raise()
         self.suoni.suona("primo_piano")
 
+    # Le notizie del motore audio: il callback trasforma ogni eccezione in una notifica, e il filo di
+    # PortAudio non arriva mai alla rete degli errori; qui le notifiche diventano righe del registro.
+
+    def _controlla_il_motore(self):
+        """A ogni battito il motore guarda se il flusso è vivo: perso, passa al modo muto e lo notifica. Un motore che non lo sa fare non si guarda."""
+        controlla = getattr(self.motore, "controlla", None)
+        if not callable(controlla):
+            return
+        try:
+            controlla()
+        except Exception:  # noqa: BLE001 - si ripeterebbe a ogni battito
+            self._guasto("motore")
+
+    def _notizie_del_motore(self):
+        """
+        Svuota le notifiche del motore. Un errore va nel registro la prima volta, con la riga che la
+        notifica sa dire, pila compresa, e poi, per la stessa origine e lo stesso testo, si contano
+        soltanto le ripetizioni; i buchi si contano; il flusso perso va nel registro, e la vista e la
+        sintesi lo dicono, perché da lì il gioco continua muto. Le voci finite e gli eventi scattati non
+        sono notizie per il registro.
+        """
+        notifiche = getattr(self.motore, "notifiche", None)
+        if not callable(notifiche):
+            return
+        try:
+            for notifica in notifiche() or ():
+                tipo = getattr(notifica, "tipo", None)
+                if tipo == "errore":
+                    self._errore_del_motore(notifica)
+                elif tipo == "buco":
+                    # Il motore conta i buchi da sé, anche quelli delle notifiche perse in una coda piena.
+                    self._buchi_da_dire += 1
+                    self._buchi_in_tutto = max(self._buchi_in_tutto + 1, int(getattr(notifica, "volte", 0) or 0))
+                elif tipo == "flusso_perso":
+                    self._flusso_perso(notifica)
+            self._riassunto_del_motore()
+        except Exception:  # noqa: BLE001 - si ripeterebbe a ogni battito
+            self._guasto("notizie")
+
+    @staticmethod
+    def _riga_della_notifica(notifica, ripiego):
+        """La riga del registro che la notifica sa dire da sé, con la pila alla prima volta; altrimenti il ripiego."""
+        riga = getattr(notifica, "riga", None)
+        if callable(riga):
+            with contextlib.suppress(Exception):
+                return riga()
+        return ripiego
+
+    def _errore_del_motore(self, notifica):
+        oggetto = getattr(notifica, "oggetto", None)
+        dove = getattr(notifica, "origine", "") or (type(oggetto).__name__ if oggetto is not None else "blocco")
+        testo = getattr(notifica, "testo", "") or ""
+        chiave = (dove, testo)
+        if chiave in self._errori_del_motore:
+            self._errori_del_motore[chiave] += 1
+            return
+        self._errori_del_motore[chiave] = 0
+        registro.scrivi(self._riga_della_notifica(notifica, f"Errore nel filo dell'audio al campione {getattr(notifica, 'campione', '?')} ({dove}): {testo}"))
+
+    def _flusso_perso(self, notifica):
+        if self._flusso_perso_detto:
+            return
+        self._flusso_perso_detto = True
+        motivo = getattr(notifica, "testo", "") or getattr(self.motore, "ultimo_errore", None) or "il callback non arriva più"
+        registro.scrivi(self._riga_della_notifica(notifica, f"Flusso audio perso al campione {getattr(notifica, 'campione', '?')}: {motivo}. "
+                                                            "Ciechino continua senza suono."))
+        testo = _("La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono esci e riapri Ciechino.")
+        self._in_coda(testo, testo)
+
+    def _riassunto_del_motore(self, finale=False):
+        """
+        Ogni INTERVALLO_DEI_RIASSUNTI secondi, e all'uscita, una riga per i buchi del flusso e una per ogni
+        errore che si è ripetuto da quando l'ultima riga l'ha detto; niente, se non c'è niente di nuovo.
+        """
+        adesso = time.monotonic()
+        if not finale and adesso - self._ultimo_riassunto < INTERVALLO_DEI_RIASSUNTI:
+            return
+        secondi = round(adesso - self._ultimo_riassunto)
+        self._ultimo_riassunto = adesso
+        if self._buchi_da_dire:
+            registro.scrivi(f"Buchi nel flusso audio: {self._buchi_da_dire} negli ultimi {secondi} secondi, {self._buchi_in_tutto} da quando Ciechino è aperto.")
+            self._buchi_da_dire = 0
+        for (dove, testo), volte in self._errori_del_motore.items():
+            if volte:
+                registro.scrivi(f"L'errore del filo dell'audio in {dove} si è ripetuto ancora {volte} {'volta' if volte == 1 else 'volte'} "
+                                f"negli ultimi {secondi} secondi: {testo}")
+                self._errori_del_motore[(dove, testo)] = 0
+
     # La chiusura.
 
     def _suona_e_aspetta(self, evento):
@@ -986,16 +1350,18 @@ class FinestraPrincipale(wx.Frame):
         voce = self.suoni.suona(evento)
         if voce is None or self.motore.muto:
             return
-        attesa = (voce.inizio + len(voce.buffer) - self.motore.campione_udibile()) / self.motore.fs
+        attesa = self._secondi_alla_fine(voce.inizio + len(voce.buffer))
         time.sleep(min(max(attesa, 0.0), ATTESA_MASSIMA_DELL_USCITA))
 
     def _alla_chiusura(self, event):
         """
         L'uscita: con una partita in corso prima una domanda, col no già scelto, salvo quando la chiusura
-        non si può rifiutare, come per l'aggiornamento. Poi la partita si abbandona, senza chiedere la
-        classifica, le statistiche si salvano, suona il congedo, il motore si chiude e la finestra se ne va.
-        Se si è scelto di riaprire Ciechino per la lingua nuova, la copia nuova parte qui, e aspetta che
-        questa sia uscita.
+        non si può rifiutare, come per l'aggiornamento. Poi, se la chiusura si poteva rifiutare, le partite
+        finite che aspettano ancora il nome o la classifica li ricevono: anche una partita finita mentre la
+        domanda aspettava. Poi la partita in corso si abbandona, senza chiedere la classifica, le statistiche
+        si salvano, il registro riceve l'ultimo riassunto del motore, suona il congedo, il motore si chiude
+        e la finestra se ne va. Se si è scelto di riaprire Ciechino per la lingua nuova, la copia nuova
+        parte qui, e aspetta che questa sia uscita.
         """
         if self.chiusa:
             return
@@ -1004,7 +1370,12 @@ class FinestraPrincipale(wx.Frame):
                 self._per_riaprire = False
                 event.Veto()
                 return
+        if event.CanVeto():
+            self._chiudi_i_conti()
         self.chiusa = True
+        if callable(self.al_congedo):
+            with contextlib.suppress(Exception):
+                self.al_congedo()
         self.timer.Stop()
         try:
             if self.partita.in_corso():
@@ -1012,6 +1383,9 @@ class FinestraPrincipale(wx.Frame):
         except Exception:  # noqa: BLE001 - una partita guasta non deve impedire l'uscita: il resoconto va nel registro
             registro.problema(*sys.exc_info())
         self._salva_le_statistiche()
+        with contextlib.suppress(Exception):
+            self._notizie_del_motore()
+            self._riassunto_del_motore(finale=True)
         suono = "uscita"
         if self._per_aggiornare:
             self.congedo = PER_AGGIORNARE

@@ -49,16 +49,180 @@ def test_file_rovinato_ripiega_sulla_copia_e_si_rinomina(cartella_di_prova):
     assert classifica.salva([voce("Prima", 100)])
     assert classifica.salva([voce("Seconda", 200)])
     file = percorso_predefinito(cartella_di_prova)
+    bak = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".bak")
     file.write_text("{ non è JSON", encoding="utf-8")
     voci, avviso = classifica.carica()
     assert [v["nome"] for v in voci] == ["Prima"]
     assert "non si legge" in avviso and "copia di riserva" in avviso
     illeggibile = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".illeggibile")
     assert illeggibile.read_text(encoding="utf-8") == "{ non è JSON"
-    assert not file.exists()
-    # Il salvataggio seguente non tocca il file rovinato, e la copia di riserva resta quella buona.
+    # Il file principale torna al suo posto, copiato dal .bak, che resta la copia di riserva; e il
+    # file è quello intero, col formato, non la lista delle voci pulite.
+    assert file.read_bytes() == bak.read_bytes()
+    assert json.loads(file.read_text(encoding="utf-8"))["formato"] == costanti.FORMATO_CLASSIFICA
+    assert not (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp")).exists()
+    # L'avviso si dà una volta sola: il caricamento seguente non trova niente da dire.
+    assert classifica.carica() == (voci, None)
+    # Il salvataggio seguente non tocca il file rovinato.
     assert classifica.salva(voci)
     assert illeggibile.read_text(encoding="utf-8") == "{ non è JSON"
+
+
+def test_file_mancante_si_rifa_dal_bak(cartella_di_prova):
+    assert classifica.salva([voce("Prima", 100)])
+    assert classifica.salva([voce("Seconda", 200)])
+    file = percorso_predefinito(cartella_di_prova)
+    file.unlink()
+    voci, avviso = classifica.carica()
+    assert [v["nome"] for v in voci] == ["Prima"]
+    assert "manca" in avviso and "copia di riserva" in avviso
+    assert file.exists() and (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".bak")).exists()
+    assert classifica.carica() == (voci, None)
+
+
+def test_ripiego_dal_tmp_rimette_il_file_al_suo_posto(cartella_di_prova):
+    file = percorso_predefinito(cartella_di_prova)
+    tmp = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp")
+    bak = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".bak")
+    tmp.write_text(json.dumps({"formato": 1, "voci": [voce("Recente", 900)]}), encoding="utf-8")
+    bak.write_text(json.dumps({"formato": 1, "voci": [voce("Vecchia", 100)]}), encoding="utf-8")
+    voci, avviso = classifica.carica()
+    assert [v["nome"] for v in voci] == ["Recente"]
+    assert "ultimo salvataggio" in avviso
+    # Il .tmp ha preso il posto del file, come avrebbe fatto il salvataggio, e il .bak è rimasto.
+    assert not tmp.exists()
+    assert [v["nome"] for v in json.loads(file.read_text(encoding="utf-8"))["voci"]] == ["Recente"]
+    assert [v["nome"] for v in json.loads(bak.read_text(encoding="utf-8"))["voci"]] == ["Vecchia"]
+    assert classifica.carica() == (voci, None)
+
+
+def test_tmp_rovinato_si_mette_da_parte(cartella_di_prova):
+    file = percorso_predefinito(cartella_di_prova)
+    tmp = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp")
+    tmp.write_text("{ salvataggio interrotto a me", encoding="utf-8")
+    voci, avviso = classifica.carica()
+    assert voci == [] and "Riparto da zero" in avviso
+    assert (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp.illeggibile")).exists()
+    assert not tmp.exists() and not file.exists()
+    # Un .tmp rovinato con un .bak buono: si riprende dal .bak, e il file torna.
+    bak = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".bak")
+    bak.write_text(json.dumps({"formato": 1, "voci": [voce("Buona", 50)]}), encoding="utf-8")
+    tmp.write_text("rotto anche questo", encoding="utf-8")
+    voci, avviso = classifica.carica()
+    assert [v["nome"] for v in voci] == ["Buona"] and "copia di riserva" in avviso
+    assert file.read_bytes() == bak.read_bytes()
+    assert (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp.illeggibile.2")).read_text(encoding="utf-8") == "rotto anche questo"
+    assert classifica.carica() == (voci, None)
+
+
+def test_intero_enorme_non_solleva(cartella_di_prova):
+    enorme = 10 ** 400
+    assert not classifica.numero_valido(enorme)
+    assert not classifica.numero_valido(-enorme)
+    assert not classifica.numero_valido(float("inf")) and not classifica.numero_valido(float("nan"))
+    assert not classifica.numero_valido(True) and not classifica.numero_valido("3")
+    assert classifica.numero_valido(classifica.NUMERO_MASSIMO) and classifica.numero_valido(-2.5)
+    grezze = [voce("Enorme", enorme), voce("Buona", 10, livello=enorme, durata_s=enorme)]
+    # json scrive e rilegge l'intero di 401 cifre così com'è: un file che resta JSON valido.
+    percorso_predefinito(cartella_di_prova).write_text(json.dumps({"formato": 1, "voci": grezze}), encoding="utf-8")
+    voci, avviso = classifica.carica()
+    assert avviso is None
+    assert [v["nome"] for v in voci] == ["Buona"]
+    assert voci[0]["livello"] == 0 and voci[0]["durata_s"] == 0.0
+    assert classifica.posizione(voci, enorme) is None
+    assert classifica.righe(voci, oggi=date(2026, 11, 19))
+
+
+def test_lettura_bloccata_si_riprova(cartella_di_prova, monkeypatch):
+    monkeypatch.setattr(classifica, "PAUSA_FRA_I_TENTATIVI", 0)
+    assert classifica.salva([voce("Gabry", 100)])
+    vera = classifica._apri_e_leggi
+    tentativi = []
+
+    def bloccata_due_volte(percorso):
+        tentativi.append(percorso)
+        if len(tentativi) < classifica.TENTATIVI_DEL_DISCO:
+            raise PermissionError(32, "Il file è in uso da un altro processo")
+        return vera(percorso)
+
+    monkeypatch.setattr(classifica, "_apri_e_leggi", bloccata_due_volte)
+    voci, avviso = classifica.carica()
+    assert avviso is None and [v["nome"] for v in voci] == ["Gabry"]
+    assert len(tentativi) == classifica.TENTATIVI_DEL_DISCO
+    assert not (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".illeggibile")).exists()
+
+
+def test_file_che_non_si_lascia_rinominare_non_diventa_la_copia(cartella_di_prova, monkeypatch):
+    monkeypatch.setattr(classifica, "PAUSA_FRA_I_TENTATIVI", 0)
+    monkeypatch.setattr(classifica, "_DA_METTERE_DA_PARTE", set())
+    assert classifica.salva([voce("Vecchia", 100)])
+    assert classifica.salva([voce("Recente", 200)])
+    file = percorso_predefinito(cartella_di_prova)
+    bak = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".bak")
+    contenuto_recente, contenuto_vecchio = file.read_bytes(), bak.read_bytes()
+    vera_lettura, vera_rinomina = classifica._apri_e_leggi, classifica.os.rename
+
+    def lettura(percorso):
+        if str(percorso) == str(file):
+            raise PermissionError(32, "Il file è in uso da un altro processo")
+        return vera_lettura(percorso)
+
+    def rinomina_rifiutata(sorgente, destinazione):
+        raise PermissionError(32, "Il file è in uso da un altro processo")
+
+    monkeypatch.setattr(classifica, "_apri_e_leggi", lettura)
+    monkeypatch.setattr(classifica.os, "rename", rinomina_rifiutata)
+    voci, avviso = classifica.carica()
+    assert [v["nome"] for v in voci] == ["Vecchia"]
+    assert "non si è potuto rinominare" in avviso
+    # Finché il file non si lascia mettere da parte, il salvataggio non scrive niente e non tocca la copia buona.
+    assert not classifica.salva(voci)
+    assert file.read_bytes() == contenuto_recente and bak.read_bytes() == contenuto_vecchio
+    assert not (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp")).exists()
+    # Finito il blocco, il salvataggio mette da parte il file e scrive senza ruotarlo nel .bak.
+    monkeypatch.setattr(classifica.os, "rename", vera_rinomina)
+    assert classifica.salva(voci)
+    assert (cartella_di_prova / (costanti.FILE_CLASSIFICA + ".illeggibile")).read_bytes() == contenuto_recente
+    assert bak.read_bytes() == contenuto_vecchio
+    assert [v["nome"] for v in json.loads(file.read_text(encoding="utf-8"))["voci"]] == ["Vecchia"]
+    assert not classifica._DA_METTERE_DA_PARTE
+
+
+def test_file_che_torna_leggibile_esce_dall_elenco(cartella_di_prova, monkeypatch):
+    monkeypatch.setattr(classifica, "_DA_METTERE_DA_PARTE", set())
+    assert classifica.salva([voce("Gabry", 100)])
+    file = percorso_predefinito(cartella_di_prova)
+    classifica._DA_METTERE_DA_PARTE.add(classifica._chiave(str(file)))
+    assert classifica.carica()[1] is None
+    assert not classifica._DA_METTERE_DA_PARTE
+
+
+def test_seconda_sostituzione_fallita_lascia_il_tmp(cartella_di_prova, monkeypatch):
+    monkeypatch.setattr(classifica, "PAUSA_FRA_I_TENTATIVI", 0)
+    assert classifica.salva([voce("Vecchia", 100)])
+    file = percorso_predefinito(cartella_di_prova)
+    tmp = cartella_di_prova / (costanti.FILE_CLASSIFICA + ".tmp")
+    vera_sostituzione = classifica.os.replace
+    rifiuti = []
+
+    def sostituzione(sorgente, destinazione):
+        if str(sorgente) == str(tmp):
+            rifiuti.append(sorgente)
+            raise PermissionError(32, "Il file è in uso da un altro processo")
+        return vera_sostituzione(sorgente, destinazione)
+
+    monkeypatch.setattr(classifica.os, "replace", sostituzione)
+    nuove = [voce("Nuova", 300), voce("Vecchia", 100)]
+    assert not classifica.salva(nuove)
+    # La sostituzione si è riprovata, poi il .tmp completo è rimasto, e il .bak non è tornato al posto del file.
+    assert len(rifiuti) == classifica.TENTATIVI_DEL_DISCO
+    assert tmp.exists() and not file.exists()
+    monkeypatch.setattr(classifica.os, "replace", vera_sostituzione)
+    voci, avviso = classifica.carica()
+    assert voci == nuove
+    assert "manca" in avviso and "ultimo salvataggio" in avviso
+    assert file.exists() and not tmp.exists()
+    assert classifica.carica() == (nuove, None)
 
 
 def test_un_secondo_file_rovinato_non_sovrascrive_il_primo(cartella_di_prova):

@@ -125,6 +125,9 @@ BERSAGLIO_DB = -3.0
 # Il proiettile in volo.
 PROIETTILE_FORMA = "sega_morbida"
 PROIETTILE_DB = -3.0
+# Il silenzio fra due avvisi in fila, come l'impatto, il livello nuovo e il bonus, in secondi:
+# quanto basta perché l'orecchio li senta due. Da tarare ascoltando, come i suoni stessi.
+STACCO_FRA_GLI_AVVISI = 0.15
 
 # I livelli e i colpi. La riserva parte da 10 colpi; ogni tiro a vuoto ne toglie uno, i centri non
 # costano nulla; 10 centri chiudono il livello e danno altri 10 colpi, il bersaglio bonus ne dà 5;

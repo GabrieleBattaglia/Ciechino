@@ -8,9 +8,12 @@ omettono. Gabriele ama le statistiche e vuole un contatore per ogni caratteristi
 
 I conti arrivano da sette strade:
 - carica(), che conta l'avvio di Ciechino;
-- conta(chiave, quanti), per i contatori semplici che solo la partita conosce: partite_iniziate,
-  mire_avviate, livelli_superati, colpi_guadagnati, bonus_usciti, e qualunque chiave nuova, che la
-  pagina dice nella sezione degli altri conti finché non ha un'etichetta sua;
+- conta(chiave, quanti), per i contatori semplici che solo la partita o la finestra conoscono:
+  dalla partita partite_iniziate, mire_avviate, livelli_superati, colpi_guadagnati, bonus_usciti,
+  pause, quelle chieste con Ctrl+P, e pause_automatiche, quelle di un dialogo aperto o della
+  finestra lasciata (D14); dalla finestra ingressi_in_classifica, lingua_cambiata,
+  mail_al_pub_pronte e registri_al_pub; e qualunque chiave nuova, che la pagina dice nella sezione
+  degli altri conti finché non ha un'etichetta sua;
 - suono(evento), per ogni evento sonoro, contato per nome;
 - bersaglio_apparso(forma, mobile, bonus), per ogni bersaglio che nasce;
 - mira(parametro, valore, esito_della_scivolata), per ogni valore preso con le scivolate;
@@ -24,23 +27,24 @@ classifica.py: un file rovinato non solleva mai, si ripiega sulla copia .bak, e 
 in .illeggibile, mai sovrascritto, ripartendo da zero con un avviso.
 """
 
-import math
 from datetime import datetime
 
 import costanti
 import percorsi
 import testi
-from classifica import leggi_dati, scrivi_dati
+from classifica import leggi_dati, numero_valido, scrivi_dati
 from lingua import _, plurale
 
 # L'istogramma dei valori presi con ogni scivolata ha tante classi quante sono le fasce a decimi
 # della scala: è una scelta della pagina, non una taratura del gioco, e un cambio rimette a zero gli
 # istogrammi salvati con un altro numero di classi.
 CLASSI = 10
-# I contatori che la pagina conosce: nuovi_dati li parte da zero, e la sezione degli altri conti
-# dice soltanto le chiavi che non stanno qui.
+# I contatori che la pagina conosce, ognuno con la sua etichetta tradotta: nuovi_dati li parte da
+# zero, e la sezione degli altri conti dice soltanto le chiavi che non stanno qui. Ogni chiave che la
+# partita o la finestra passano a conta deve starci: lo controlla una prova.
 CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abbandonate", "tiri", "centri", "tiri_a_vuoto", "punti", "bonus_apparsi",
-                    "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate")
+                    "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate", "pause", "pause_automatiche",
+                    "ingressi_in_classifica", "lingua_cambiata", "mail_al_pub_pronte", "registri_al_pub")
 # Come può finire una scivolata, da mira.valore_scelto: fermata nei bip o subito dopo, scelta nella
 # scala, arrivata al massimo senza lo spazio.
 ESITI_DELLA_SCIVOLATA = ("minimo", "scelto", "massimo")
@@ -61,24 +65,19 @@ NOMI_DELLE_FORME = {
 
 # I numeri del file.
 
-def _numero(valore):
-    """Vero per un numero vero, non booleano e finito."""
-    return isinstance(valore, int | float) and not isinstance(valore, bool) and math.isfinite(valore)
-
-
 def _contatore(valore):
-    return round(valore) if _numero(valore) and valore >= 0 else 0
+    return round(valore) if numero_valido(valore) and valore >= 0 else 0
 
 
 def _quantita(valore):
-    return round(float(valore), 3) if _numero(valore) and valore >= 0 else 0.0
+    return round(float(valore), 3) if numero_valido(valore) and valore >= 0 else 0.0
 
 
 def _numeri(valore):
     """Un dizionario di numeri non negativi, senza le voci sbagliate: le chiavi sconosciute restano."""
     if not isinstance(valore, dict):
         return {}
-    return {str(k): v for k, v in valore.items() if _numero(v) and v >= 0}
+    return {str(k): v for k, v in valore.items() if numero_valido(v) and v >= 0}
 
 
 def _somma(attuale, quanto):
@@ -177,7 +176,7 @@ def completa(grezzi, adesso):
             dati["moto"][moto] = _coppia_pulita(grezzi["moto"].get(moto))
     if isinstance(grezzi.get("primati"), dict):
         dati["primati"] = {str(k): {"valore": v["valore"], "quando": v["quando"]} for k, v in grezzi["primati"].items()
-                           if isinstance(v, dict) and _numero(v.get("valore")) and _data_valida(v.get("quando"))}
+                           if isinstance(v, dict) and numero_valido(v.get("valore")) and _data_valida(v.get("quando"))}
     if isinstance(grezzi.get("ultime"), list):
         partite = [_partita_pulita(v) for v in grezzi["ultime"]]
         dati["ultime"] = [p for p in partite if p is not None][-costanti.ULTIME_PARTITE:]
@@ -286,7 +285,7 @@ class Statistiche:
             return
         mira = self._mira(parametro)
         mira[esito_della_scivolata] += 1
-        if _numero(valore):
+        if numero_valido(valore):
             v = min(1.0, max(0.0, float(valore)))
             mira["classi"][min(CLASSI - 1, int(v * CLASSI))] += 1
             mira["somma"] = round(mira["somma"] + v, 6)
@@ -301,7 +300,7 @@ class Statistiche:
         else:
             return
         for parametro, valore in coppie:
-            if _numero(valore):
+            if numero_valido(valore):
                 mira = self._mira(parametro)
                 mira["nei_centri"] += 1
                 mira["somma_nei_centri"] = round(mira["somma_nei_centri"] + min(1.0, max(0.0, float(valore))), 6)
@@ -322,7 +321,7 @@ class Statistiche:
                 self._forma(e["forma"])["colpiti"] += 1
             self.dati["moto"]["mobili" if e.get("mobile") else "fermi"]["colpiti"] += 1
             precisione = e.get("precisione")
-            if _numero(precisione):
+            if numero_valido(precisione):
                 p = min(1.0, max(0.0, float(precisione)))
                 somme = self.dati["somme"]
                 somme["precisione"] = round(somme["precisione"] + p, 6)
@@ -330,7 +329,7 @@ class Statistiche:
                 if self._primato("precisione", p):
                     battuti.append("precisione")
             punti = e.get("punti")
-            if _numero(punti) and punti > 0:
+            if numero_valido(punti) and punti > 0:
                 self.conta("punti", round(punti))
                 if self._primato("punti_in_un_tiro", round(punti)):
                     battuti.append("punti_in_un_tiro")
@@ -338,13 +337,13 @@ class Statistiche:
         else:
             self.conta("tiri_a_vuoto")
         distanza = e.get("distanza_dal_vicino")
-        if _numero(distanza) and distanza >= 0:
+        if numero_valido(distanza) and distanza >= 0:
             if self._primato("vicino", distanza, piu_alto=False):
                 battuti.append("vicino")
             if not colpito and self._primato("mancato", distanza, piu_alto=False):
                 battuti.append("mancato")
         serie = e.get("serie")
-        if _numero(serie) and serie > 0 and self._primato("serie", round(serie)):
+        if numero_valido(serie) and serie > 0 and self._primato("serie", round(serie)):
             battuti.append("serie")
         return battuti
 
@@ -445,6 +444,11 @@ class Pagina:
         primati = self.d["primati"]
         righe = [
             self._voce(_("Avvii di Ciechino: {n}."), self.c("avvii")),
+            self._voce(_("Cambi di lingua: {n}."), self.c("lingua_cambiata")),
+            # Traduttori: il PUB è il gruppo di supporto di Gabriele, e il nome resta così; conta le mail d'iscrizione e quelle d'aiuto.
+            self._voce(_("Mail al PUB preparate: {n}."), self.c("mail_al_pub_pronte")),
+            # Traduttori: le mail d'aiuto al PUB preparate col file dei registri degli errori allegato.
+            self._voce(_("Mail d'aiuto al PUB coi registri allegati: {n}."), self.c("registri_al_pub")),
             self._voce(_("Partite giocate: {n}."), self.partite()),
             _("Tempo di gioco: {durata}.").format(durata=testi.durata(self.d["tempo_di_gioco"])) if self.d["tempo_di_gioco"] else "",
             self._voce(_("Tiri: {n}."), tiri),
@@ -478,6 +482,10 @@ class Pagina:
             righe.append(_("Punteggio medio di una partita: {punti}.").format(punti=self._punti(self.d["somme"]["punteggi"] / partite)))
         righe.append(self._voce(_("Livelli superati: {n}."), self.c("livelli_superati")))
         righe.append(self._voce(_("Colpi guadagnati: {n}."), self.c("colpi_guadagnati")))
+        righe.append(self._voce(_("Partite entrate in classifica: {n}."), self.c("ingressi_in_classifica")))
+        righe.append(self._voce(_("Pause chieste con Ctrl+P: {n}."), self.c("pause")))
+        # Traduttori: le pause che Ciechino mette da solo quando si apre un dialogo o si passa a un'altra finestra.
+        righe.append(self._voce(_("Pause automatiche, per un dialogo aperto o un'altra finestra: {n}."), self.c("pause_automatiche")))
         return righe
 
     # 3.

@@ -61,13 +61,27 @@ class PartitaFinta:
         self.allo_spazio = []
         self.barra = ["Pronta. Livello 1, 0 punti.", "Riserva: 10 colpi."]
         self.guasta = False
+        # La pausa automatica (D14): se c'è, e le volte in cui la partita si è fermata o ripresa da sola.
+        self.automatica = False
+        self.automatiche = []
 
     def in_corso(self):
         return self.fase not in ("pronta", "finita")
 
+    def pausa_automatica(self, attiva):
+        """Come la partita vera: si ferma se è in corso e non già in pausa; riprende soltanto la pausa messa così."""
+        if attiva and self.in_corso() and not self.in_pausa:
+            self.in_pausa = self.automatica = True
+            self.automatiche.append("ferma")
+        elif not attiva and self.automatica:
+            self.in_pausa = self.automatica = False
+            self.automatiche.append("riprende")
+        return []
+
     def nuova(self):
         self.chiamate.append("nuova")
         self.fase = "ascolto"
+        self.in_pausa = self.automatica = False
         return [Messaggio("info", "Comincia la partita, livello 1.", "Si comincia.")]
 
     def spazio(self):
@@ -91,6 +105,7 @@ class PartitaFinta:
         if not self.in_corso():
             return []
         self.fase = "pronta"
+        self.in_pausa = self.automatica = False
         return [Messaggio("info", "Partita abbandonata.", "Partita abbandonata.", self.riepilogo())]
 
     def righe_della_barra(self):
@@ -320,11 +335,12 @@ def test_il_battito_porta_i_messaggi_in_coda_col_cursore_sul_nuovo(finestra, voc
     finestra._al_battito()
     assert finestra.vista.GetValue() == prima + "\nColpito, al centro pieno.\nPunti: 120."
     assert _riga_del_cursore(finestra.vista) == ("Colpito, al centro pieno.", 0)
-    # Due messaggi nello stesso battito: il cursore va all'inizio dell'ultimo, e la sintesi li dice tutti e due.
+    # Due messaggi nello stesso battito: il cursore va all'inizio del primo, così Freccia giù li legge in
+    # ordine, e la sintesi li dice tutti e due.
     finestra.partita.in_arrivo = [Messaggio("livello", "Livello 2: altri 10 colpi.", "Livello 2."), Messaggio("bonus", "Un bonus!", "")]
     finestra._al_battito()
     assert finestra.vista.GetValue().endswith("Punti: 120.\nLivello 2: altri 10 colpi.\nUn bonus!")
-    assert _riga_del_cursore(finestra.vista) == ("Un bonus!", 0)
+    assert _riga_del_cursore(finestra.vista) == ("Livello 2: altri 10 colpi.", 0)
     assert voce_finta == ["Colpito.", "Livello 2."]
     # Un battito senza messaggi non tocca la vista.
     valore = finestra.vista.GetValue()
@@ -376,6 +392,115 @@ def test_un_battito_guasto_ferma_il_timer_e_la_partita_nuova_lo_riavvia(finestra
     finestra.partita.guasta = False
     finestra._esegui(finestra.nuova_partita)
     assert finestra.timer.IsRunning() and finestra.partita.chiamate == ["nuova"]
+
+
+def test_una_barra_guasta_dice_l_errore_una_volta_sola(finestra, sentiti, messaggi, monkeypatch):
+    """Una riga della barra che non si compone, come un segnaposto sbagliato in una traduzione: la barra
+    resta com'era, il registro riceve il guasto una volta, chi gioca un messaggio solo, e il battito va avanti."""
+    import registro
+
+    problemi = []
+    monkeypatch.setattr(registro, "problema", lambda tipo, valore, traccia: problemi.append(tipo))
+    prima = finestra.barra.GetValue()
+
+    def guasta():
+        raise KeyError("part")
+
+    monkeypatch.setattr(finestra.partita, "righe_della_barra", guasta)
+    for _giro in range(5):
+        finestra._al_battito()
+    wx.Yield()
+    assert finestra.barra.GetValue() == prima and finestra.timer.IsRunning() and not finestra._nel_battito
+    assert problemi == [KeyError]
+    assert len(messaggi) == 1 and "KeyError" in messaggi[0][0] and sentiti == ["errore"]
+
+
+def test_un_messaggio_guasto_non_ferma_il_battito(finestra, messaggi, monkeypatch):
+    """Un messaggio che non si scrive nella vista: è già consumato, e il battito seguente va avanti; il messaggio d'errore è uno."""
+    import registro
+
+    problemi = []
+    monkeypatch.setattr(registro, "problema", lambda tipo, valore, traccia: problemi.append(tipo))
+    for _giro in range(3):
+        finestra.partita.in_arrivo = [Messaggio("info", 5)]
+        finestra._al_battito()
+    wx.Yield()
+    assert finestra.timer.IsRunning() and not finestra._nel_battito and problemi == [TypeError] and len(messaggi) == 1
+    finestra.partita.in_arrivo = [Messaggio("info", "Si va avanti.")]
+    finestra._al_battito()
+    assert finestra.vista.GetValue().endswith("\nSi va avanti.")
+
+
+# La pausa della finestra (D14).
+
+def test_un_dialogo_ferma_la_partita_e_alla_chiusura_riprende(finestra, sentiti, monkeypatch):
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    durante = []
+    monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: durante.append((partita.in_pausa, partita.automatica)) or wx.ID_OK)
+    finestra._esegui(finestra.mostra_classifica)
+    assert durante == [(True, True)] and partita.automatiche == ["ferma"]
+    # La ripresa arriva dopo il comando, quando wx smista le chiamate rimandate, ed è silenziosa. Sul
+    # desktop nascosto, nello stesso giro, la finestra può anche perdere e riprendere l'attivazione.
+    wx.Yield()
+    assert not partita.in_pausa and partita.automatiche[-1] == "riprende"
+    assert sentiti == ["classifica"] and partita.chiamate == ["nuova"]
+
+
+def test_le_domande_i_messaggi_e_la_mail_fermano_la_partita(finestra, messaggi, monkeypatch):
+    import GBUtils
+    import GBwx
+
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    stati = []
+
+    def chiede(genitore, testo, titolo, stile=0):
+        stati.append(partita.in_pausa)
+        return messaggi(genitore, testo, titolo, stile)
+
+    monkeypatch.setattr(dialoghi, "messaggio", chiede)
+    # Ctrl+N con una partita in corso: la domanda la ferma, e al no il battito la riprende.
+    finestra._esegui(finestra.nuova_partita)
+    assert stati == [True] and partita.in_pausa
+    finestra._al_battito()
+    assert not partita.in_pausa
+    finestra.avvisa_dell_aggiornamento(aggiornamento.FRASE_NON_RIUSCITO)
+    assert stati == [True, True]
+    finestra._al_battito()
+    monkeypatch.setattr(GBUtils, "informazioni_di_sistema", lambda separatore=".": [("windows", "Windows 11 Pro")])
+    monkeypatch.setattr(GBwx, "finestra_mail", lambda *argomenti, **opzioni: stati.append(partita.in_pausa) or True)
+    finestra._esegui(finestra.chiedi_aiuto_al_pub)
+    assert stati == [True, True, True]
+    finestra._al_battito()
+    assert not partita.in_pausa and partita.automatiche == ["ferma", "riprende"] * 3 and "pausa" not in partita.chiamate
+
+
+def test_la_finestra_non_attiva_ferma_la_partita_ma_ctrl_p_resta(finestra, monkeypatch):
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    attiva = [False]
+    monkeypatch.setattr(finestra, "IsActive", lambda: attiva[0])
+    finestra.GetEventHandler().ProcessEvent(wx.ActivateEvent(wx.wxEVT_ACTIVATE, False))
+    assert partita.in_pausa and partita.automatiche == ["ferma"]
+    # Finché la finestra non torna attiva, il battito la tiene ferma.
+    finestra._al_battito()
+    assert partita.in_pausa
+    attiva[0] = True
+    finestra.GetEventHandler().ProcessEvent(wx.ActivateEvent(wx.wxEVT_ACTIVATE, True))
+    wx.Yield()
+    assert not partita.in_pausa and partita.automatiche[-1] == "riprende"
+    # Una pausa chiesta con Ctrl+P resta: né il ritorno della finestra né il battito la tolgono.
+    finestra._esegui(finestra.pausa)
+    assert partita.in_pausa
+    prima = list(partita.automatiche)
+    attiva[0] = False
+    finestra.GetEventHandler().ProcessEvent(wx.ActivateEvent(wx.wxEVT_ACTIVATE, False))
+    attiva[0] = True
+    finestra.GetEventHandler().ProcessEvent(wx.ActivateEvent(wx.wxEVT_ACTIVATE, True))
+    wx.Yield()
+    finestra._al_battito()
+    assert partita.in_pausa and not partita.automatica and partita.automatiche == prima
 
 
 # La partita, la classifica e le letture.
@@ -447,6 +572,105 @@ def test_la_classifica_aspetta_che_il_dialogo_aperto_si_chiuda(finestra, sentiti
     assert not finestra._partite_da_concludere and sentiti == ["in_classifica", "confermato"]
 
 
+def _porta_udibile_a(motore, flusso, campione):
+    """Il flusso finto prepara il blocco che contiene il campione, e l'orologio si sposta finché il campione udibile è quello."""
+    flusso.avanza_fino(campione)
+    inizio, dac = motore._riferimento
+    flusso.time = dac + (campione - inizio) / flusso.fs
+
+
+def test_il_nome_si_chiede_dopo_il_suono_dell_ingresso(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """Con la scheda, il dialogo del nome aspetta la fine del suono dell'ingresso; intanto conta come un
+    dialogo aperto, e lo spazio non comincia una partita nuova. Se l'orologio del motore si fermasse,
+    il nome si chiede alla scadenza in tempo vero; all'uscita si chiede subito, dopo il suono."""
+    motore, flusso = motore_finto()
+    f = _crea(motore=motore)
+    monkeypatch.setattr(f, "IsActive", lambda: True)
+    aperti = []
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: aperti.append(dialogo.testo.GetValue()) or (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    try:
+        f.impostazioni["ultimo_nome"] = "Gabry"
+        f.partita.in_arrivo = [_fine(700)]
+        f._al_battito()
+        attesa = f._nome_in_attesa
+        assert sentiti == ["in_classifica"] and aperti == [] and attesa is not None and f._dialogo_aperto()
+        # Il suono parte dal prossimo campione sicuro, perché la partita finta non ha avvisi da far finire prima.
+        assert attesa.fine == motore.prossimo_campione() + CAMPIONI_FINTI > motore.campione_udibile()
+        assert _tasto(f, wx.WXK_SPACE).GetSkipped() and f.partita.chiamate == []
+        _porta_udibile_a(motore, flusso, attesa.fine - 1)
+        f._al_battito()
+        assert aperti == []
+        _porta_udibile_a(motore, flusso, attesa.fine)
+        f._al_battito()
+        assert aperti == ["Gabry"] and f._nome_in_attesa is None and sentiti[-1] == "confermato"
+        assert [v["punteggio"] for v in classifica.carica()[0]] == [700]
+        # L'orologio fermo: alla scadenza il nome si chiede lo stesso.
+        f.partita.in_arrivo = [_fine(600)]
+        f._al_battito()
+        assert f._nome_in_attesa is not None
+        f._nome_in_attesa = f._nome_in_attesa._replace(scadenza=0.0)
+        f._al_battito()
+        assert len(aperti) == 2 and f._nome_in_attesa is None
+        # All'uscita, con la partita che aspetta ancora il nome: si chiede prima di chiudere.
+        f.partita.in_arrivo = [_fine(500)]
+        f._al_battito()
+        assert f._nome_in_attesa is not None
+        f.Close()
+        assert f.chiusa and len(aperti) == 3 and [v["punteggio"] for v in classifica.carica()[0]] == [700, 600, 500]
+    finally:
+        _chiudi(f)
+
+
+def test_la_partita_finita_durante_la_domanda_d_uscita_entra_in_classifica(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """Il colpo cade mentre la domanda d'uscita aspetta, e la partita finisce: al sì il nome si chiede e la voce si scrive, poi Ciechino esce."""
+    f = _crea()
+    monkeypatch.setattr(f, "IsActive", lambda: True)
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.testo.SetValue("Gabry"), dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    congedi = []
+    f.al_congedo = lambda: congedi.append(f.chiusa)
+    try:
+        f.partita.fase = "volo"
+
+        def finisce_mentre_chiede(*argomenti):
+            # Dentro la domanda il timer batte ancora: l'ultimo colpo cade, e la partita finisce.
+            f.partita.fase = "finita"
+            f.partita.in_arrivo = [_fine(900)]
+            f._al_battito()
+            assert f._partite_da_concludere
+            return messaggi(*argomenti)
+
+        monkeypatch.setattr(dialoghi, "messaggio", finisce_mentre_chiede)
+        messaggi.risposta = wx.YES
+        f.Close()
+        assert f.chiusa and congedi == [True]
+        voci = classifica.carica()[0]
+        assert [(v["nome"], v["punteggio"]) for v in voci] == [("Gabry", 900)]
+        assert sentiti == ["domanda", "in_classifica", "confermato", "uscita"]
+    finally:
+        _chiudi(f)
+
+
+def test_gli_avvisi_dei_dati_vanno_anche_alla_sintesi(finestra, voce_finta, monkeypatch):
+    monkeypatch.setattr(finestra.statistiche, "salva", lambda: False)
+    monkeypatch.setattr(impostazioni, "salva", lambda dati, percorso=None: False)
+    assert not finestra._salva_le_statistiche() and not finestra._salva_le_impostazioni()
+    assert voce_finta == ["Le statistiche non si sono potute salvare: le ritroverai come erano all'ultimo salvataggio riuscito.",
+                          "Le impostazioni non si sono potute salvare: valgono fino all'uscita."]
+    avviso = "La classifica non si legge: riprendo dalla copia di riserva."
+    monkeypatch.setattr(classifica, "carica", lambda percorso=None: ([], avviso))
+    monkeypatch.setattr(classifica, "salva", lambda voci, percorso=None: False)
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    finestra.impostazioni["ultimo_nome"] = "Gabry"
+    finestra.partita.in_arrivo = [_fine(500)]
+    finestra._al_battito()
+    assert avviso in voce_finta and "La classifica non si è potuta salvare: la voce nuova vale fino all'uscita." in voce_finta
+    # La voce nuova vale fino all'uscita: Ctrl+K la mostra, anche se il file non la contiene.
+    letti = []
+    monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: letti.append(dialogo.testo.GetValue()) or wx.ID_OK)
+    finestra.mostra_classifica()
+    assert len(letti) == 1 and "Gabry" in letti[0] and avviso not in letti[0]
+
+
 def test_classifica_e_statistiche_si_leggono_nel_dialogo(finestra, sentiti, monkeypatch):
     letti = []
     monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: letti.append((dialogo.GetTitle(), dialogo.testo.GetValue(),
@@ -512,6 +736,52 @@ def test_chiudi_per_aggiornare_non_chiede_e_abbandona(app_wx, sentiti, messaggi,
         assert messaggi == [] and f.chiusa and f.congedo == modulo_finestra.PER_AGGIORNARE and f.partita.chiamate == ["abbandona"]
     finally:
         _chiudi(f)
+
+
+def test_chiudi_per_aggiornare_aspetta_il_nome_in_classifica(finestra, monkeypatch):
+    """Il dialogo del nome non si chiude come annullato, e la chiusura aspetta anche le partite che attendono la classifica o il nome."""
+    riprove = []
+    monkeypatch.setattr(wx, "CallLater", lambda millesimi, funzione, *argomenti: riprove.append(funzione))
+    nome = dialoghi.Nome(finestra, "Gabry")
+    lettura = dialoghi.Lettura(finestra, "Classifica", "Nessuna voce.")
+    chiusi = []
+    try:
+        with monkeypatch.context() as provvisorio:
+            provvisorio.setattr(wx.Dialog, "IsModal", lambda dialogo: dialogo in (nome, lettura))
+            provvisorio.setattr(wx.Dialog, "EndModal", lambda dialogo, codice: chiusi.append((type(dialogo).__name__, codice)))
+            finestra.chiudi_per_aggiornare()
+        assert chiusi == [("Lettura", wx.ID_CANCEL)] and not finestra.chiusa and len(riprove) == 1
+    finally:
+        nome.Destroy()
+        lettura.Destroy()
+    finestra._partite_da_concludere.append({"punteggio": 300})
+    finestra.chiudi_per_aggiornare()
+    assert not finestra.chiusa and len(riprove) == 2
+    finestra._partite_da_concludere.clear()
+    finestra._nome_in_attesa = modulo_finestra.NomeInAttesa(None, 0.0, {"punteggio": 300}, [], 1)
+    finestra.chiudi_per_aggiornare()
+    assert not finestra.chiusa and len(riprove) == 3
+    finestra._nome_in_attesa = None
+    finestra.chiudi_per_aggiornare()
+    assert finestra.chiusa and finestra.congedo == modulo_finestra.PER_AGGIORNARE
+
+
+def test_la_riga_dello_scaricamento_se_ne_va_se_l_aggiornamento_non_riesce(finestra, sentiti, messaggi, monkeypatch):
+    finestra.avanzamento_dell_aggiornamento(63, 100)
+    assert finestra.barra.GetValue().splitlines()[-1] == "Aggiornamento scaricato al 63%."
+    finestra.avvisa_dell_aggiornamento(aggiornamento.FRASE_NON_RIUSCITO)
+    assert "Aggiornamento scaricato" not in finestra.barra.GetValue()
+    # Anche quando la chiusura per l'aggiornamento rinuncia, perché un messaggio è rimasto aperto troppo a lungo.
+    monkeypatch.setattr(wx, "CallLater", lambda *argomenti: None)
+    finestra.avanzamento_dell_aggiornamento(1, 2)
+    assert finestra.barra.GetValue().splitlines()[-1] == "Aggiornamento scaricato al 50%."
+    finestra._modali = 1
+    finestra.chiudi_per_aggiornare()
+    finestra._chiusura_dal -= modulo_finestra.LIMITE_DELLA_CHIUSURA
+    finestra.chiudi_per_aggiornare()
+    finestra._modali = 0
+    assert "Aggiornamento scaricato" not in finestra.barra.GetValue() and not finestra.chiusa
+    assert sentiti[-1] == "aggiornamento_non_riuscito"
 
 
 # Le impostazioni.
@@ -619,11 +889,17 @@ def test_manuale_novita_e_informazioni(finestra, sentiti, monkeypatch, tmp_path)
 def test_il_caffe(finestra, sentiti, monkeypatch):
     import GBUtils
 
+    import lingua
+
     chiesti, letti = [], []
     monkeypatch.setattr(GBUtils, "Donazione", lambda **opzioni: chiesti.append(opzioni) or "Offrimi un caffè.")
     monkeypatch.setattr(dialoghi.Caffe, "ShowModal", lambda dialogo: letti.append(dialogo.testo.GetValue()) or wx.ID_OK)
     finestra._esegui(finestra.caffe)
-    assert chiesti == [{"lang": "it", "probabilita": 100, "stampa": False}] and letti == ["Offrimi un caffè."] and sentiti == ["caffe"]
+    assert chiesti == [{"lang": lingua.CODICE, "probabilita": 100, "stampa": False}] and letti == ["Offrimi un caffè."] and sentiti == ["caffe"]
+    # Con una traduzione installata l'invito è nella lingua in cui Ciechino parla, non in italiano.
+    monkeypatch.setattr(lingua, "CODICE", "en")
+    finestra._esegui(finestra.caffe)
+    assert chiesti[-1]["lang"] == "en"
 
 
 def test_le_due_voci_del_pub(finestra, sentiti, monkeypatch):
@@ -680,6 +956,93 @@ def test_primo_piano_ed_errore_imprevisto(finestra, sentiti, messaggi):
     assert sentiti[-1] == "errore" and "ValueError, qualcosa di storto" in messaggi[-1][0] and messaggi[-1][2] & wx.ICON_ERROR
 
 
+# Le notizie del motore audio.
+
+def test_le_notizie_del_motore_vanno_nel_registro_riassunte(finestra, voce_finta, monkeypatch):
+    import registro
+    from motore_audio import Notifica
+
+    righe, controlli, coda = [], [], []
+    monkeypatch.setattr(registro, "scrivi", righe.append)
+    monkeypatch.setattr(finestra.motore, "controlla", lambda: controlli.append(True), raising=False)
+
+    def notifiche():
+        prese = list(coda)
+        coda.clear()
+        return prese
+
+    monkeypatch.setattr(finestra.motore, "notifiche", notifiche)
+    errore = Notifica("errore", 100, None, "ValueError: rotto")
+    coda.extend([errore] * 3 + [Notifica("buco", 200)] * 5 + [Notifica("voce_finita", 300), Notifica("evento", 400)])
+    finestra._al_battito()
+    # A ogni battito il motore guarda il flusso; un errore va nel registro la prima volta, con la riga
+    # che la notifica sa dire, e i buchi e le ripetizioni si contano.
+    assert controlli == [True]
+    assert righe == [errore.riga()] and righe[0].startswith("Errore nel filo dell'audio al campione 100")
+    finestra._ultimo_riassunto -= modulo_finestra.INTERVALLO_DEI_RIASSUNTI
+    finestra._al_battito()
+    assert len(righe) == 3
+    assert righe[1].startswith("Buchi nel flusso audio: 5 negli ultimi ") and righe[1].endswith(", 5 da quando Ciechino è aperto.")
+    assert righe[2].startswith("L'errore del filo dell'audio in blocco si è ripetuto ancora 2 volte negli ultimi ") and righe[2].endswith(": ValueError: rotto")
+    # Niente di nuovo, niente righe; lo stesso errore che torna si conta soltanto.
+    finestra._ultimo_riassunto -= modulo_finestra.INTERVALLO_DEI_RIASSUNTI
+    coda.append(Notifica("errore", 500, None, "ValueError: rotto"))
+    finestra._al_battito()
+    assert len(righe) == 4 and "si è ripetuto ancora 1 volta negli ultimi " in righe[3]
+    # Il flusso perso: il registro, la vista e la sintesi lo dicono, una volta.
+    testo = "La scheda audio non risponde più, forse si è staccata: Ciechino continua senza suono. Per riavere il suono esci e riapri Ciechino."
+    coda.extend([Notifica("flusso_perso", 600, None, "flusso perso")] * 2)
+    finestra._al_battito()
+    assert righe[-1].startswith("Flusso audio perso al campione 600: flusso perso") and righe[-1].endswith(". Ciechino continua senza suono.")
+    assert finestra.vista.GetValue().endswith("\n" + testo) and voce_finta == [testo]
+    assert sum(1 for riga in righe if riga.startswith("Flusso audio perso")) == 1
+    # All'uscita l'ultimo riassunto, anche prima dell'intervallo.
+    coda.extend([Notifica("buco", 700)] * 2)
+    finestra._al_battito()
+    finestra.Close(force=True)
+    assert righe[-1].startswith("Buchi nel flusso audio: 2 negli ultimi ") and righe[-1].endswith(", 7 da quando Ciechino è aperto.")
+
+
+def test_una_voce_guasta_del_motore_finisce_nel_registro(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """Il filo dell'audio non arriva alla rete degli errori: la voce guasta diventa una notifica, e il battito la scrive nel registro."""
+    import registro
+    from motore_audio import VoceTono
+
+    righe = []
+    monkeypatch.setattr(registro, "scrivi", righe.append)
+    motore, flusso = motore_finto()
+    f = _crea(motore=motore)
+    try:
+        def parametri(tempi_di_gioco, tempi_audio):
+            raise ValueError("parametri guasti")
+
+        motore.aggiungi(VoceTono(parametri, "seno", motore.prossimo_campione()))
+        flusso.avanza(3)
+        f._al_battito()
+        errori = [riga for riga in righe if riga.startswith("Errore nel filo dell'audio al campione ")]
+        assert len(errori) == 1 and "ValueError: parametri guasti" in errori[0]
+    finally:
+        _chiudi(f)
+
+
+def test_il_motivo_del_motore_muto_va_nel_registro(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    import registro
+    from motore_audio import Motore
+
+    righe = []
+    monkeypatch.setattr(registro, "scrivi", righe.append)
+
+    def non_si_apre(callback, fs, blocco):
+        raise OSError("scheda occupata")
+
+    f = _crea(motore=Motore(apri=non_si_apre))
+    try:
+        assert any(riga.startswith("Motore audio: ") and "scheda occupata" in riga for riga in righe)
+        assert "Non trovo una scheda audio che si apra" in f.vista.GetValue()
+    finally:
+        _chiudi(f)
+
+
 # Il punto d'avvio.
 
 def test_ciechino_lascia_il_posto_alla_copia_aperta(monkeypatch):
@@ -722,6 +1085,63 @@ def test_ciechino_registra_l_uscita_e_ferma_tutto(monkeypatch):
     monkeypatch.setattr(Ciechino, "avvia_finestra", lambda crash, finestre: 1 / 0)
     monkeypatch.setattr(Ciechino, "_errore_fatale", lambda *eccezione: fatali.append(eccezione[0]))
     assert Ciechino.main([]) == 1 and fatali == [ZeroDivisionError] and fatti[-2:] == ["ferma", "chiudi"]
+
+
+def test_una_copia_chiesta_durante_la_chiusura_si_apre_dopo(monkeypatch):
+    """Una copia di Ciechino che si presenta quando questa si sta già chiudendo non resta senza risposta:
+    all'uscita pulita main lancia la copia nuova, che aspetta l'uscita di questa."""
+    import Ciechino
+    import istanza
+    import registro
+
+    fatti, mostre, rimandate = [], [], []
+
+    class AscoltoFinto:
+        attiva = True
+
+        def __init__(self, mostra):
+            mostre.append(mostra)
+
+        def ferma(self):
+            fatti.append("ferma")
+
+    class FinestraFinta:
+        def porta_in_primo_piano(self):
+            fatti.append("primo piano")
+
+    monkeypatch.setattr(istanza, "manda", lambda: False)
+    monkeypatch.setattr(istanza, "Ascolto", AscoltoFinto)
+    monkeypatch.setattr(istanza, "riapri", lambda: fatti.append("riapri"))
+    monkeypatch.setattr(registro, "avvia", lambda *a, **k: None)
+    monkeypatch.setattr(registro, "scrivi", lambda riga: fatti.append(riga))
+    monkeypatch.setattr(registro, "chiudi", lambda: fatti.append("chiudi"))
+    monkeypatch.setattr(wx, "CallAfter", lambda funzione, *argomenti: rimandate.append((funzione, argomenti)))
+
+    def si_chiude(crash, finestre, esito=Ciechino.APERTA):
+        finestre.append(FinestraFinta())
+        # Aperta: la copia nuova la porta in primo piano, nel filo della finestra.
+        mostre[-1]()
+        funzione, argomenti = rimandate.pop()
+        funzione(*argomenti)
+        # Una richiesta partita prima della chiusura e arrivata nel filo della finestra dopo: si rimanda.
+        mostre[-1]()
+        funzione, argomenti = rimandate.pop()
+        finestre.in_chiusura.set()
+        funzione(*argomenti)
+        # Dalla chiusura in poi il filo dell'ascolto non tocca più la finestra.
+        mostre[-1]()
+        assert rimandate == [] and finestre.rimandata.is_set()
+        return esito
+
+    monkeypatch.setattr(Ciechino, "avvia_finestra", si_chiude)
+    assert Ciechino.main([]) == 0
+    assert fatti == [f"Ciechino {costanti.VERSIONE} si avvia.", "primo piano", Ciechino.ESITI[Ciechino.APERTA][1], "riapri",
+                     "Una copia di Ciechino ha chiesto di aprirsi durante la chiusura: si apre appena questa è uscita.", "ferma", "chiudi"]
+    # Chi si riapre per la lingua, o si aggiorna, non lancia un'altra copia.
+    for esito in (Ciechino.RIAPERTA, Ciechino.AGGIORNATA):
+        fatti.clear()
+        monkeypatch.setattr(Ciechino, "avvia_finestra", lambda crash, finestre, esito=esito: si_chiude(crash, finestre, esito))
+        assert Ciechino.main([]) == 0 and "riapri" not in fatti
 
 
 def test_la_rete_per_gli_errori(monkeypatch):

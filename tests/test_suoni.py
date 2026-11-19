@@ -222,6 +222,27 @@ def test_il_conteggio(fabbrica, finto):
     assert len(contati) == 4
 
 
+def test_un_effetto_preparato_si_conta_quando_suona(fabbrica, finto, capsys):
+    """L'impatto di un proiettile si prepara allo sparo e suona soltanto se l'evento programmato
+    scatta: preparato con conta_subito falso non si conta, e si conta con suonato quando è partito."""
+    motore, _flusso = finto
+    contati = []
+    suoni_ = Suoni(motore, conta=contati.append)
+    contato = suoni_.pronto("a_terra", posizione=VICINO)
+    rimandato = suoni_.pronto("a_terra", posizione=VICINO, conta_subito=False)
+    np.testing.assert_array_equal(rimandato, contato)
+    assert contati == ["a_terra"]
+    # La partita abbandonata in volo: l'effetto non suona, e non si conta mai. Quello sentito sì.
+    suoni_.suonato("colpito")
+    assert contati == ["a_terra", "colpito"]
+    # Un evento sconosciuto o senza suono non si conta, come in suona e in pronto.
+    fabbrica.vuoti.add(EVENTI["pausa"])
+    suoni_.suonato("pausa")
+    suoni_.suonato("evento_che_non_c_e")
+    assert contati == ["a_terra", "colpito"]
+    assert capsys.readouterr().err.count("evento_che_non_c_e") == 1
+
+
 def test_il_conteggio_collegato_dopo_alle_statistiche(fabbrica, finto):
     motore, _flusso = finto
     statistiche = Statistiche()

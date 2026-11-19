@@ -216,7 +216,7 @@ PRESET = {
         "score": [["d4", 0.045, 0.0, -0.1], ["p", 0.035, 0.0, -0.5], ["d4.b3", 0.08, 0.0, -0.15]],
         "kind": 3,
         "adsr": [5.0, 30.0, 50.0, 40.0],
-        "descrizione": ("Ciechino, lo spazio premuto quando non può fare niente, per esempio col proiettile in volo o a partita finita: "
+        "descrizione": ("Ciechino, lo spazio premuto quando non può fare niente, per esempio col proiettile in volo, o Ctrl+P senza una partita: "
                         "due tocchi sordi di onda triangolare sul re 4, il secondo più piano, che cede di una terza minore fino al si 3, "
                         "al centro, in 160 ms. Un garbato non adesso. Va bene per un comando che arriva nel momento sbagliato o un tasto "
                         "che deve aspettare."),

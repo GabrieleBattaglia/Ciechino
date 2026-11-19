@@ -11,15 +11,17 @@ chi chiama decide come dirlo. Qui sta anche la scrittura sicura dei file JSON di
 pure statistiche.py e impostazioni.py: prima un file .tmp, poi il file vecchio diventa la copia
 .bak, poi il .tmp prende il suo posto con os.replace. Un file che non si legge non si sovrascrive
 mai: si rinomina in .illeggibile, con un numero se ce n'è già uno, e si riparte dalla copia di
-riserva o da zero.
+riserva o da zero; ripresi i dati da una copia, il file principale torna al suo posto, così
+l'avviso si sente una volta sola.
 Una voce è {"nome", "punteggio", "data" (ISO, ora locale), "livello", "tiri", "centri",
 "durata_s"}; il file è {"formato": FORMATO_CLASSIFICA, "voci": [...]}.
 """
 
 import contextlib
 import json
-import math
 import os
+import shutil
+import time
 from datetime import datetime
 
 import costanti
@@ -33,17 +35,65 @@ PUNTEGGIO_MINIMO = 1
 # I campi numerici di una voce, oltre al punteggio, con il loro tipo.
 CAMPI_INTERI = ("livello", "tiri", "centri")
 CAMPI_DECIMALI = ("durata_s",)
+# Il numero più grande che un file dei dati può contenere, in valore assoluto: 2 alla 53, l'intero
+# più grande che un float tiene esatto. Un intero più grande, scritto a mano in un file che resta
+# JSON valido, fa sollevare OverflowError a ogni conversione in float, e nessun conto vero di
+# Ciechino ci arriva. È il confine fra un numero e un file rovinato, non una taratura del gioco.
+NUMERO_MASSIMO = 2 ** 53
 # Gli errori che dicono un file rovinato: il disco, il JSON, la codifica, una struttura troppo
-# annidata. Tutti finiscono in un avviso, mai in un'eccezione.
-ERRORI_DI_LETTURA = (OSError, ValueError, RecursionError)
+# annidata, un numero troppo grande. Tutti finiscono in un avviso, mai in un'eccezione.
+ERRORI_DI_LETTURA = (OSError, ValueError, RecursionError, OverflowError)
+# Un antivirus o un programma di backup può tenere un file aperto per un attimo, e Windows rifiuta
+# l'apertura, la rinomina o la sostituzione con PermissionError: prima di dire rovinato un file
+# sano, o di rinunciare a un salvataggio, si riprova qualche volta, da vicino. Sono attese del
+# disco, non tarature del gioco.
+TENTATIVI_DEL_DISCO = 3
+PAUSA_FRA_I_TENTATIVI = 0.2
+# I file rovinati che Windows non ha lasciato rinominare, per percorso: finché stanno qui, il
+# salvataggio non li ruota nella copia di riserva, che è buona, ma riprova a metterli da parte, e
+# se non ci riesce non scrive niente.
+_DA_METTERE_DA_PARTE = set()
+
+
+# I numeri dei file.
+
+def numero_valido(valore):
+    """Vero per un numero che un file dei dati può contenere: un int o un float, non booleano,
+    finito e non oltre NUMERO_MASSIMO in valore assoluto. Il confronto con abs scarta anche
+    l'infinito e il NaN, e non converte mai un intero enorme in float."""
+    return isinstance(valore, int | float) and not isinstance(valore, bool) and abs(valore) <= NUMERO_MASSIMO
 
 
 # I file JSON, scritti e letti con cura.
 
-def _leggi_json(percorso):
+def _con_pazienza(azione, *argomenti):
+    """L'azione sul disco, riprovata fino a TENTATIVI_DEL_DISCO volte se Windows risponde
+    PermissionError, cioè un file tenuto aperto da un altro programma; l'ultimo errore passa a chi
+    chiama. Gli altri errori passano subito: un file che manca non arriva aspettando."""
+    for tentativo in range(1, TENTATIVI_DEL_DISCO + 1):
+        try:
+            return azione(*argomenti)
+        except PermissionError:
+            if tentativo >= TENTATIVI_DEL_DISCO:
+                raise
+            time.sleep(PAUSA_FRA_I_TENTATIVI)
+    return None
+
+
+def _apri_e_leggi(percorso):
     # utf-8-sig accetta anche il BOM che il Blocco note di Windows mette davanti.
     with open(percorso, encoding="utf-8-sig") as f:
         return json.load(f)
+
+
+def _leggi_json(percorso):
+    return _con_pazienza(_apri_e_leggi, percorso)
+
+
+def _chiave(percorso):
+    """Il percorso come chiave di _DA_METTERE_DA_PARTE: assoluto e con le maiuscole di Windows
+    ignorate, perché lo stesso file non conti due volte."""
+    return os.path.normcase(os.path.abspath(percorso))
 
 
 def _spiega(errore):
@@ -65,16 +115,18 @@ def _metti_da_parte(percorso):
     Restituisce il nome nuovo, o None se Windows non lo lascia rinominare."""
     nuovo = _nome_libero(percorso + ".illeggibile")
     try:
-        os.rename(percorso, nuovo)
+        _con_pazienza(os.rename, percorso, nuovo)
     except OSError:
         return None
     return nuovo
 
 
 def _dalle_copie(percorso, controlla, suffissi):
-    """I dati dalla prima copia che si legge, fra quelle coi suffissi dati, e la frase che lo
-    dice; se nessuna si legge, None e la frase della ripartenza. Una copia di riserva che non si
-    legge si mette da parte, così il salvataggio seguente non la sovrascrive."""
+    """I dati dalla prima copia che si legge, fra quelle coi suffissi dati, la frase che lo dice
+    e il percorso della copia usata; se nessuna si legge, None, la frase della ripartenza e None.
+    Una copia che non si legge si mette da parte: quella di riserva, perché il salvataggio
+    seguente non la sovrascriva; il .tmp di un salvataggio interrotto a metà, perché il caricamento
+    seguente non ridica ogni volta che il file manca."""
     for suffisso in suffissi:
         copia = percorso + suffisso
         if not os.path.exists(copia):
@@ -82,15 +134,36 @@ def _dalle_copie(percorso, controlla, suffissi):
         try:
             dati = controlla(_leggi_json(copia))
         except ERRORI_DI_LETTURA:
-            if suffisso == ".bak":
-                _metti_da_parte(copia)
+            _metti_da_parte(copia)
             continue
         if suffisso == ".tmp":
             # Traduttori: dopo un salvataggio interrotto; file è il nome del file della copia.
-            return dati, _("Riprendo dalla copia dell'ultimo salvataggio, {file}.").format(file=os.path.basename(copia))
+            return dati, _("Riprendo dalla copia dell'ultimo salvataggio, {file}.").format(file=os.path.basename(copia)), copia
         # Traduttori: file è il nome del file della copia di riserva.
-        return dati, _("Riprendo dalla copia di riserva, {file}.").format(file=os.path.basename(copia))
-    return None, _("Riparto da zero.")
+        return dati, _("Riprendo dalla copia di riserva, {file}.").format(file=os.path.basename(copia)), copia
+    return None, _("Riparto da zero."), None
+
+
+def _rimetti_a_posto(copia, percorso):
+    """Il file principale, che manca, rifatto dalla copia da cui si sono appena ripresi i dati:
+    senza, il caricamento seguente direbbe di nuovo che il file manca, e l'avviso dei dati rovinati
+    tornerebbe a ogni avvio e a ogni partita finita. Si sposta il file grezzo, non si riscrivono i
+    dati puliti, perché per la classifica sono la lista delle voci e non il file intero. Il .tmp di
+    un salvataggio interrotto prende il suo posto, come avrebbe fatto il salvataggio; il .bak
+    invece si copia, e resta la copia di riserva. La copia passa dal .tmp, così il file principale
+    o c'è intero o non c'è. Un disco che non collabora lascia tutto com'è: il ripiego riuscirà di
+    nuovo al prossimo caricamento."""
+    if copia.endswith(".tmp"):
+        with contextlib.suppress(OSError):
+            _con_pazienza(os.replace, copia, percorso)
+        return
+    temporaneo = percorso + ".tmp"
+    try:
+        shutil.copyfile(copia, temporaneo)
+        _con_pazienza(os.replace, temporaneo, percorso)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(temporaneo)
 
 
 def leggi_dati(percorso, controlla):
@@ -98,27 +171,37 @@ def leggi_dati(percorso, controlla):
     i dati puliti, o solleva ValueError se il contenuto non è quello giusto.
     Un file che manca senza copie è il primo avvio: (None, None). Un file che non si legge si
     rinomina in .illeggibile e si prova la copia .bak; un file che manca, per un salvataggio
-    interrotto fra le due sostituzioni, si cerca nella copia .tmp e poi nella .bak. Senza niente
-    da leggere i dati sono None, e chi chiama riparte dai suoi predefiniti."""
+    interrotto fra le due sostituzioni, si cerca nella copia .tmp e poi nella .bak. Ripresi i dati
+    da una copia, il file principale si rimette al suo posto, e l'avviso si dà una volta sola.
+    Senza niente da leggere i dati sono None, e chi chiama riparte dai suoi predefiniti."""
     nome = os.path.basename(percorso)
     if os.path.exists(percorso):
         try:
-            return controlla(_leggi_json(percorso)), None
+            dati = controlla(_leggi_json(percorso))
         except ERRORI_DI_LETTURA as e:
             errore = _spiega(e)
+        else:
+            # Un file che ora si legge non va più messo da parte, anche se una volta non si lasciava rinominare.
+            _DA_METTERE_DA_PARTE.discard(_chiave(percorso))
+            return dati, None
         rinominato = _metti_da_parte(percorso)
         # Traduttori: file è il nome del file, errore il motivo, spesso in inglese.
         parti = [_("Il file {file} non si legge: {errore}.").format(file=nome, errore=errore)]
         if rinominato:
             parti.append(_("Il file rovinato ora si chiama {file}, e resta com'era.").format(file=os.path.basename(rinominato)))
         else:
+            # Il file resta col suo nome: il salvataggio seguente lo deve mettere da parte, non ruotare nel .bak.
+            _DA_METTERE_DA_PARTE.add(_chiave(percorso))
             parti.append(_("Il file rovinato non si è potuto rinominare."))
-        dati, frase = _dalle_copie(percorso, controlla, (".bak",))
+        dati, frase, copia = _dalle_copie(percorso, controlla, (".bak",))
     elif os.path.exists(percorso + ".tmp") or os.path.exists(percorso + ".bak"):
         parti = [_("Il file {file} manca.").format(file=nome)]
-        dati, frase = _dalle_copie(percorso, controlla, (".tmp", ".bak"))
+        dati, frase, copia = _dalle_copie(percorso, controlla, (".tmp", ".bak"))
     else:
         return None, None
+    # Il file rovinato che non si è potuto rinominare è ancora lì, col suo nome: non si tocca.
+    if dati is not None and not os.path.exists(percorso):
+        _rimetti_a_posto(copia, percorso)
     parti.append(frase)
     return dati, " ".join(parti)
 
@@ -126,17 +209,32 @@ def leggi_dati(percorso, controlla):
 def scrivi_dati(dati, percorso):
     """Scrive i dati in JSON senza mai lasciare un file a metà: prima il .tmp, poi il file
     vecchio diventa la copia .bak, poi il .tmp prende il suo posto. Vero se è riuscito; un disco
-    che non collabora restituisce falso, e il .tmp se ne va."""
+    che non collabora restituisce falso.
+    Il file principale che il caricamento ha trovato rovinato e non ha potuto rinominare non
+    diventa mai la copia di riserva: prima si riprova a metterlo da parte, e se ancora non si
+    lascia rinominare non si scrive niente. Se la seconda sostituzione fallisce, quando il file
+    vecchio è già nel .bak, il .tmp resta: è completo, è l'unica copia dei dati nuovi, e il
+    caricamento seguente lo riprende."""
+    chiave = _chiave(percorso)
+    if chiave in _DA_METTERE_DA_PARTE:
+        if os.path.exists(percorso) and _metti_da_parte(percorso) is None:
+            return False
+        _DA_METTERE_DA_PARTE.discard(chiave)
     temporaneo = percorso + ".tmp"
+    spostato = False
     try:
         with open(temporaneo, "w", encoding="utf-8", newline="\n") as f:
             json.dump(dati, f, ensure_ascii=False, indent=1)
         if os.path.exists(percorso):
-            os.replace(percorso, percorso + ".bak")
-        os.replace(temporaneo, percorso)
+            _con_pazienza(os.replace, percorso, percorso + ".bak")
+            spostato = True
+        _con_pazienza(os.replace, temporaneo, percorso)
     except OSError:
-        with contextlib.suppress(OSError):
-            os.remove(temporaneo)
+        # Il .bak non torna al posto del file: il caricamento leggerebbe i dati vecchi e
+        # ignorerebbe il .tmp più nuovo, che il salvataggio seguente sovrascriverebbe.
+        if not spostato:
+            with contextlib.suppress(OSError):
+                os.remove(temporaneo)
         return False
     return True
 
@@ -179,16 +277,12 @@ def nuova_voce(nome, riepilogo, data=None):
     return voce
 
 
-def _numero(valore):
-    return isinstance(valore, int | float) and not isinstance(valore, bool) and math.isfinite(valore)
-
-
 def _intero(valore):
-    return max(0, round(valore)) if _numero(valore) else 0
+    return max(0, round(valore)) if numero_valido(valore) else 0
 
 
 def _decimale(valore):
-    return max(0.0, round(float(valore), 3)) if _numero(valore) else 0.0
+    return max(0.0, round(float(valore), 3)) if numero_valido(valore) else 0.0
 
 
 def _data(testo):
@@ -207,7 +301,7 @@ def _voce_pulita(grezza):
         return None
     nome = pulisci_nome(grezza.get("nome")) if isinstance(grezza.get("nome"), str) else ""
     punteggio = grezza.get("punteggio")
-    if len(nome) < costanti.NOME_MINIMO or not _numero(punteggio) or punteggio < 0 or _data(grezza.get("data")) is None:
+    if len(nome) < costanti.NOME_MINIMO or not numero_valido(punteggio) or punteggio < 0 or _data(grezza.get("data")) is None:
         return None
     voce = {"nome": nome, "punteggio": round(punteggio), "data": grezza["data"]}
     for campo in CAMPI_INTERI:
@@ -250,7 +344,7 @@ def salva(voci, percorso=None):
 def posizione(voci, punteggio):
     """La posizione, da 1, che avrebbe una voce nuova con quel punteggio, dietro tutte quelle con
     punti uguali o più alti; None se resta fuori dai POSTI_IN_CLASSIFICA o non ha punti."""
-    if not _numero(punteggio) or punteggio < PUNTEGGIO_MINIMO:
+    if not numero_valido(punteggio) or punteggio < PUNTEGGIO_MINIMO:
         return None
     davanti = sum(1 for v in voci if v["punteggio"] >= punteggio)
     return davanti + 1 if davanti < costanti.POSTI_IN_CLASSIFICA else None
