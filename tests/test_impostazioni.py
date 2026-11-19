@@ -11,7 +11,8 @@ import impostazioni
 
 
 def test_predefinite():
-    assert impostazioni.PREDEFINITE == {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": "automatica", "ultimo_nome": ""}
+    assert impostazioni.PREDEFINITE == {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": "automatica", "ultimo_nome": "",
+                                        "proiettile": costanti.PROIETTILE_FORMA}
     assert impostazioni.valide(None) == impostazioni.PREDEFINITE
     assert impostazioni.valide([1, 2]) == impostazioni.PREDEFINITE
     # valide restituisce una copia: cambiarla non tocca i predefiniti.
@@ -37,6 +38,17 @@ def test_valide_riporta_nell_intervallo():
     assert impostazioni.valide({"ultimo_nome": None})["ultimo_nome"] == ""
 
 
+def test_il_proiettile_e_una_delle_sue_forme():
+    """D17: la forma del proiettile sta in PROIETTILE_FORME, altrimenti torna quella di serie."""
+    assert impostazioni.PREDEFINITE["proiettile"] == costanti.PROIETTILE_FORMA in costanti.PROIETTILE_FORME
+    for forma in costanti.PROIETTILE_FORME:
+        assert impostazioni.valide({"proiettile": forma})["proiettile"] == forma
+    assert impostazioni.valide({"proiettile": "  triangolo "})["proiettile"] == "triangolo"
+    # L'organo resta ai bersagli, e i nomi sbagliati o d'altro tipo non valgono.
+    for sbagliato in ("organo", "quadra", "Seno", "", None, 3, ["seno"], {"forma": "seno"}):
+        assert impostazioni.valide({"proiettile": sbagliato})["proiettile"] == costanti.PROIETTILE_FORMA
+
+
 def test_valide_tiene_le_chiavi_sconosciute():
     dati = impostazioni.valide({"volume": 20, "chiave_del_futuro": [1, 2], "lingua": "en"})
     assert dati["chiave_del_futuro"] == [1, 2]
@@ -50,10 +62,13 @@ def test_carica_senza_file(cartella_di_prova):
 
 
 def test_salva_e_carica(cartella_di_prova):
-    assert impostazioni.salva({"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "extra": 1})
+    assert impostazioni.salva({"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "proiettile": "sega_morbida", "extra": 1})
     file = cartella_di_prova / costanti.FILE_IMPOSTAZIONI
     assert json.loads(file.read_text(encoding="utf-8"))["volume"] == 33
-    assert impostazioni.carica() == {"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "extra": 1}
+    assert impostazioni.carica() == {"volume": 33, "sintesi": False, "uscita": "Cuffie", "ultimo_nome": "Gab", "proiettile": "sega_morbida", "extra": 1}
+    # Un file senza la chiave, come quelli della 0.1.0, dà il proiettile di serie.
+    file.write_text(json.dumps({"volume": 20}), encoding="utf-8")
+    assert impostazioni.carica()["proiettile"] == costanti.PROIETTILE_FORMA
 
 
 def test_salva_sistema_i_valori(cartella_di_prova):

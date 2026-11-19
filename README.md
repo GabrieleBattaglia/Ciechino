@@ -2,7 +2,7 @@
 
 Un gioco di tiro accessibile, pensato da un giocatore cieco per chi non vede, e per chi vuole provare a mirare con le orecchie. Il nome è un gioco di parole fra cieco e cecchino.
 
-Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte un bersaglio normale del suo livello. I cento punteggi migliori restano in classifica.
+Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani, e ognuno ha una voce un po' diversa dagli altri. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte un bersaglio normale del suo livello. I cento punteggi migliori restano in classifica.
 
 ## Scaricare e installare
 
@@ -23,10 +23,12 @@ La finestra ha la vista della partita, dove arriva il resoconto di ogni tiro, e 
 2. Ascolti il bersaglio, finché hai capito dove sta.
 3. La barra spaziatrice avvia la mira: il tempo si ferma, e i bersagli restano dove sono, più piano.
 4. Tre scivolate, direzione, alzo e potenza: ognuna comincia dopo un secondo di silenzio con tre bip, poi scivola per tre secondi con dieci tacche, e la barra spaziatrice la ferma sul valore che vuoi. Lo spazio nei bip sceglie il minimo, nessuno spazio il massimo.
-5. Parte il colpo: senti lo sparo, il proiettile che vola e l'impatto, dal punto in cui avviene.
+5. Parte il colpo: senti lo sparo, il proiettile che vola e l'impatto, dal punto in cui avviene; un centro finisce con un breve jingle, e quello del bonus è più lungo e più acuto.
 6. Il resoconto dice l'esito, i valori del tiro e dove è passato il colpo; nei primi livelli, dopo un tiro a vuoto, anche di quanto e dove hai mancato il bersaglio.
 
 Un tiro a vuoto costa un colpo, un centro non costa niente e vale fino al doppio per la precisione. Dieci centri chiudono il livello e danno altri dieci colpi; a riserva vuota la partita finisce.
+
+Proiettile, nel menu Impostazioni, sceglie il timbro del proiettile in volo, seno, triangolo o sega morbida, e fa sentire un esempio di ciascuno mentre scorri l'elenco; la forma scelta vale dalla partita seguente, e i bersagli non la usano mai, così il colpo non si confonde con loro.
 
 Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere. La partita si ferma da sola, in silenzio, anche quando si apre un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
 
@@ -81,7 +83,7 @@ Una traduzione è il file locales/CODICE/LC_MESSAGES/messages.po, dove CODICE è
 
 ## Dati
 
-Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la lettura dei resoconti, l'uscita della sintesi e l'ultimo nome usato in classifica. L'uscita della sintesi non è la scheda audio, che Ciechino sceglie da solo: dice chi legge i resoconti, automatica, oppure nvda, jaws o sapi5, la voce di Windows, e si cambia soltanto scrivendola nel file, a Ciechino chiuso. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, Ciechino - Registri per il PUB.txt, quando lo prepari, e selected_language.json, la lingua scelta. Chi gioca dai sorgenti li trova nella cartella del repository: sono dati personali di chi gioca, e .gitignore li tiene tutti fuori da git, con le loro copie .bak, .tmp e .illeggibile, come in MeTeOra (decisione D15).
+Ciechino scrive tutto accanto al programma: Ciechino - Classifica.json, la classifica dei cento migliori; Ciechino - Statistiche.json, le statistiche con i primati e le ultime partite; Ciechino - Impostazioni.json, il volume, la forma del proiettile, la lettura dei resoconti, l'uscita della sintesi e l'ultimo nome usato in classifica. L'uscita della sintesi non è la scheda audio, che Ciechino sceglie da solo: dice chi legge i resoconti, automatica, oppure nvda, jaws o sapi5, la voce di Windows, e si cambia soltanto scrivendola nel file, a Ciechino chiuso. Ognuno si salva con la sua copia .bak, e un file rovinato non si sovrascrive mai: si mette da parte come .illeggibile. Accanto stanno anche i registri, Ciechino - Errori.log e i resoconti dei crash, Ciechino - Registri per il PUB.txt, quando lo prepari, e selected_language.json, la lingua scelta. Chi gioca dai sorgenti li trova nella cartella del repository: sono dati personali di chi gioca, e .gitignore li tiene tutti fuori da git, con le loro copie .bak, .tmp e .illeggibile, come in MeTeOra (decisione D15).
 
 I suoni degli eventi vengono dalla collezione comune Acu_Collection.json di GBUtils, con il prefisso ciechino_; l'elenco delle azioni con il loro preset è suoni_di_ciechino.txt. Le scivolate, i bersagli e il proiettile li crea il motore audio di Ciechino mentre suonano. Tutti i numeri della meccanica di gioco, dal cubo ai punti, stanno in costanti.py, per tararli giocando; il progetto e le decisioni stanno in docs/progetto.txt, l'idea di partenza in docs/idea_73.txt.
 

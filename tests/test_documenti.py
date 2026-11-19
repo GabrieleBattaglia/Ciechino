@@ -7,7 +7,11 @@ erano già 54, e il manuale prometteva un bonus a cinque volte con i numeri dell
 Un numero scritto a mano in un documento invecchia in silenzio; queste prove lo confrontano con le
 tabelle di suoni.py e con partita.punti_del_centro, così chi cambia il codice se ne accorge.
 Il manuale si controlla anche come pagina: ben formato, con ogni collegamento interno che porta a un
-titolo che esiste, e senza separatori grafici nel testo, come vuole Gabriele per lo screen reader.
+titolo che esiste, e senza separatori grafici nel testo né righe vuote nel sorgente, come vuole
+Gabriele per lo screen reader.
+Dopo i banchi d'ascolto del 19 novembre 2026 il manuale dice anche la scala dell'alzo (D19), quante
+sono le forme dei bersagli e di quanto varia la loro escursione (D18), e le forme del proiettile (D17):
+anche questi numeri si confrontano con costanti.py.
 """
 
 import re
@@ -18,12 +22,26 @@ from types import SimpleNamespace
 import suoni
 import testi
 from bersagli import raggio_del_livello, velocita_del_livello
-from costanti import LIVELLO_DEI_BONUS, RAGGIO_BONUS_FATTORE, VERSIONE
+from costanti import (
+    ALZO_FREQUENZE,
+    ESCURSIONE_A_CASO,
+    FORME_LFO,
+    LIVELLO_DEI_BONUS,
+    PROIETTILE_FORMA,
+    PROIETTILE_FORME,
+    RAGGIO_BONUS_FATTORE,
+    VERSIONE,
+)
 from partita import punti_del_centro
 
 RADICE = Path(__file__).resolve().parent.parent
 # Una riga di trattini, di uguali o di sottolineature: i separatori grafici che non si scrivono.
 SEPARATORE = re.compile(r"-{3,}|={3,}|_{3,}")
+# I numeri che il manuale scrive a parole, per contare le forme dei bersagli.
+A_PAROLE = ("zero", "una", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci", "undici", "dodici", "tredici",
+            "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove", "venti")
+# Come il manuale dice le forme del proiettile, nell'elenco delle Impostazioni.
+PROIETTILI_A_PAROLE = {"seno": "il seno", "triangolo": "il triangolo", "sega_morbida": "la sega morbida"}
 # Gli elementi HTML che non si chiudono.
 VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
@@ -123,6 +141,38 @@ def test_gli_id_del_manuale_sono_unici_e_ogni_collegamento_interno_porta_a_uno()
     assert not doppi, doppi
     mancanti = sorted(set(pagina.collegamenti) - set(pagina.id))
     assert not mancanti, mancanti
+
+
+def test_il_manuale_non_ha_righe_vuote():
+    vuote = [numero for numero, riga in enumerate(_leggi("manuale.html").splitlines(), 1) if not riga.strip()]
+    assert not vuote, f"righe vuote nel manuale: {vuote}"
+
+
+def test_il_manuale_da_la_scala_vera_dell_alzo():
+    """D19: l'alzo sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] hertz, e il manuale lo dice."""
+    frase = f"da {testi.intero(ALZO_FREQUENZE[0])} a {testi.intero(ALZO_FREQUENZE[1])} hertz"
+    assert frase in _leggi("manuale.html"), f"il manuale non dice «{frase}» per l'alzo"
+
+
+def test_il_manuale_conta_le_forme_dei_bersagli():
+    """D18: tante forme nel titolo e nell'elenco quante in FORME_LFO, e la variazione vera dell'escursione."""
+    manuale = _leggi("manuale.html")
+    quante = A_PAROLE[len(FORME_LFO)]
+    assert f"Le {quante} forme</h3>" in manuale, f"il titolo delle forme non dice «Le {quante} forme»"
+    sezione = re.search(r'<h3 id="forme">.*?<ul>(.*?)</ul>', manuale, re.DOTALL)
+    assert sezione, "nel manuale manca l'elenco delle forme"
+    assert sezione.group(1).count("<li>") == len(FORME_LFO)
+    variazione = round(max(1.0 - ESCURSIONE_A_CASO[0], ESCURSIONE_A_CASO[1] - 1.0) * 100)
+    assert f"al massimo del {variazione}%" in manuale, f"il manuale non dice che l'escursione varia al massimo del {variazione}%"
+
+
+def test_il_manuale_dice_le_forme_del_proiettile():
+    """D17: le forme di PROIETTILE_FORME, una per una, e quella di serie."""
+    manuale = _leggi("manuale.html")
+    assert set(PROIETTILI_A_PAROLE) == set(PROIETTILE_FORME), "una forma del proiettile nuova va detta anche nel manuale"
+    for forma in PROIETTILE_FORME:
+        assert f"{PROIETTILI_A_PAROLE[forma]}, " in manuale, f"il manuale non descrive la forma {forma} del proiettile"
+    assert f"All'inizio è {PROIETTILI_A_PAROLE[PROIETTILE_FORMA]}." in manuale
 
 
 def test_niente_separatori_grafici_nei_documenti():

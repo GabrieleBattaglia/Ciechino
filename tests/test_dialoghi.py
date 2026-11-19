@@ -60,6 +60,7 @@ FABBRICHE = {
     "Nome": lambda suona: dialoghi.Nome(None, "Gabry", "Con 1.234 punti entri in classifica al posto 1: scrivi il tuo nome.", suona),
     "Volume": lambda suona: dialoghi.Volume(None, 80, None, suona),
     "SceltaLingua": lambda suona: dialoghi.SceltaLingua(None, ["italiano, codice it"], 0, suona),
+    "SceltaProiettile": lambda suona: dialoghi.SceltaProiettile(None, costanti.PROIETTILE_FORMA, None, suona),
 }
 
 
@@ -277,6 +278,91 @@ def test_scelta_della_lingua(app_wx):
         assert dialogo.scelta == 0 and dialogo.GetReturnCode() == wx.ID_OK
     finally:
         dialogo.Destroy()
+
+
+def test_scelta_del_proiettile_etichette_ed_elenco(app_wx, sentiti):
+    """D17: la spiegazione sopra, l'elenco etichettato delle tre forme dette a parole, la forma attuale già scelta, OK e Annulla, la grazia dell'apertura."""
+    dialogo = dialoghi.SceltaProiettile(None, "triangolo", None, sentiti)
+    try:
+        figli = list(dialogo.pannello.GetChildren())
+        posto = figli.index(dialogo.elenco)
+        etichetta, spiegazione = figli[posto - 1], figli[posto - 2]
+        assert isinstance(etichetta, wx.StaticText) and etichetta.GetLabel() == "&Forma del proiettile"
+        assert dialogo.elenco.GetName() == "Forma del proiettile"
+        assert isinstance(spiegazione, wx.StaticText) and "prossima partita" in spiegazione.GetLabel() and "esempio" in spiegazione.GetLabel()
+        assert dialogo.GetTitle() == "Proiettile"
+        assert dialogo.forme == costanti.PROIETTILE_FORME
+        righe = dialogo.elenco.GetStrings()
+        assert righe[0].startswith("Seno, ") and righe[1].startswith("Triangolo, ") and righe[2].startswith("Sega morbida, ")
+        # Ogni riga dice anche il carattere del suono, senza segnaposti rimasti né separatori.
+        assert all(len(riga.split(", ", 1)) == 2 and "{" not in riga and "_" not in riga and "---" not in riga for riga in righe)
+        assert dialogo.elenco.GetSelection() == costanti.PROIETTILE_FORME.index("triangolo")
+        assert dialogo.GRAZIA_ALL_APERTURA and dialogo.GetEscapeId() == wx.ID_ANY
+        assert dialogo.GetDefaultItem().GetId() == wx.ID_OK
+        assert [b.GetLabelText() for b in dialogo.pannello.GetChildren() if isinstance(b, wx.Button)] == ["OK", "Annulla"]
+    finally:
+        dialogo.Destroy()
+    # Una forma sconosciuta, come un file scritto a mano, apre il dialogo su quella di serie.
+    dialogo = dialoghi.SceltaProiettile(None, "organo")
+    try:
+        assert dialogo.elenco.GetSelection() == costanti.PROIETTILE_FORME.index(costanti.PROIETTILE_FORMA)
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_scelta_del_proiettile_prova_al_cambio_e_conferma(app_wx, sentiti, monkeypatch):
+    provate = []
+    # L'esempio arriva quando ci si ferma: qui subito, al posto del timer.
+    monkeypatch.setattr(dialoghi._Dialogo, "suona_fra_poco", lambda self, funzione: funzione())
+    dialogo = dialoghi.SceltaProiettile(None, "seno", provate.append, sentiti)
+    try:
+        # Spostarsi nell'elenco è l'evento della selezione cambiata: fa sentire la forma della riga.
+        for indice in (2, 1):
+            dialogo.elenco.SetSelection(indice)
+            evento = wx.CommandEvent(wx.wxEVT_LISTBOX, dialogo.elenco.GetId())
+            evento.SetEventObject(dialogo.elenco)
+            evento.SetInt(indice)
+            dialogo.elenco.GetEventHandler().ProcessEvent(evento)
+        assert provate == ["sega_morbida", "triangolo"]
+        dialogo.conferma()
+        assert dialogo.scelta == "triangolo" and dialogo.GetReturnCode() == wx.ID_OK
+        # Chiuso il dialogo, niente più esempi, nemmeno quello che aspettava il ritardo.
+        dialogo.ferma_la_prova()
+        dialogo.prova()
+        assert provate == ["sega_morbida", "triangolo"]
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_scelta_del_proiettile_annulla_ed_esc(app_wx, sentiti):
+    for azione in (lambda d: _premi(next(b for b in d.pannello.GetChildren() if isinstance(b, wx.Button) and b.GetId() == wx.ID_CANCEL)), _esc):
+        dialogo = dialoghi.SceltaProiettile(None, "seno", None, sentiti)
+        try:
+            dialogo.elenco.SetSelection(2)
+            codice, massimizzato = _apri(dialogo, azione)
+            assert codice == wx.ID_CANCEL and massimizzato and dialogo.scelta is None
+        finally:
+            dialogo.Destroy()
+    # Il ritardo dell'esempio vero, col timer di wx: chiuso il dialogo prima che scada, l'esempio non suona.
+    provate = []
+    dialogo = dialoghi.SceltaProiettile(None, "seno", provate.append, sentiti)
+    try:
+        dialogo._cambiato()
+        assert dialogo._timer_del_suono is not None and dialogo._timer_del_suono.IsRunning()
+        dialogo.ferma_la_prova()
+        assert not dialogo._timer_del_suono.IsRunning()
+    finally:
+        dialogo.Destroy()
+    assert provate == [] and sentiti == []
+
+
+def test_i_nomi_delle_forme_del_proiettile():
+    assert set(dialoghi.NOMI_DEI_PROIETTILI) == set(dialoghi.CARATTERI_DEI_PROIETTILI) == set(costanti.PROIETTILE_FORME)
+    assert dialoghi.nome_del_proiettile("sega_morbida") == "sega morbida"
+    assert dialoghi.nome_del_proiettile("organo") == "organo"
+    assert dialoghi.riga_del_proiettile("seno") == "Seno, " + dialoghi.CARATTERI_DEI_PROIETTILI["seno"]
 
 
 def test_il_resoconto_degli_errori(cartella_di_prova):

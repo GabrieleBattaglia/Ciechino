@@ -565,7 +565,9 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # pagina impara a dirli, e la prova guarda soltanto quelli che la partita ha mosso.
         assert {chiave: n for chiave, n in statistiche["conti"].items() if n} == {
             "avvii": 1, "partite_iniziate": 1, "partite_finite": 1, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "tiri_a_vuoto": riserva, "punti": totale,
-            "livelli_superati": 1, "colpi_guadagnati": COLPI_PER_LIVELLO, "mire_avviate": tiri, "ingressi_in_classifica": 1, "pause": 1}
+            "livelli_superati": 1, "colpi_guadagnati": COLPI_PER_LIVELLO, "mire_avviate": tiri, "ingressi_in_classifica": 1, "pause": 1,
+            # La partita si è giocata col proiettile di serie, il seno (D17).
+            "partite_col_seno": 1}
         assert statistiche["suoni"] == {"nuova_partita": 1, "mira_avviata": tiri, "valore_preso": 3 * tiri, "sparo": tiri, "colpito": CENTRI_PER_LIVELLO,
                                         "a_terra": riserva, "livello_su": 1, "non_ora": 1, "pausa": 1, "ripresa": 1, "ultimo_colpo": 1,
                                         "partita_finita": 1, "in_classifica": 1, "confermato": 1}
@@ -741,6 +743,87 @@ def test_un_dialogo_e_un_alt_tab_fermano_la_partita_e_la_riprendono(app_wx, pres
         assert not {"pausa", "ripresa"} & {nome for nome, _voce in tavolo.suonati[suonati:]}
         assert "In pausa" not in finestra.vista.GetValue() and messaggi_wx == []
         assert finestra.statistiche.dati["conti"]["pause_automatiche"] == 2 and finestra.statistiche.dati["conti"].get("pause", 0) == 0
+    finally:
+        _chiudi(finestra)
+    assert motore.chiuso
+
+
+def test_il_proiettile_delle_impostazioni_nella_partita_vera(app_wx, preset_finti, messaggi_wx, voce_finta, monkeypatch):
+    """D17 e D18 coi pezzi veri: la forma del proiettile scelta dal menu Impostazioni, col suo esempio che
+    suona davvero nel motore, vale subito se nessuna partita è in corso, e i bersagli nascono in un'altra
+    portante. Scelta a proiettile in volo, la forma nuova aspetta la partita seguente, e quella in corso
+    tiene il suo proiettile fino alla fine. Le impostazioni e le statistiche lo ricordano."""
+    motore, flusso = motore_finto()
+    finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([]), motore=motore)
+    try:
+        finestra.Show()
+        tavolo = Tavolo(finestra, monkeypatch, flusso=flusso)
+        partita = tavolo.partita
+        assert partita.proiettile == partita.proiettile_scelto == costanti.PROIETTILE_FORMA
+        scelte = ["sega_morbida", "triangolo"]
+        esempi = []
+
+        def sceglie(dialogo):
+            forma = scelte.pop(0)
+            dialogo.elenco.SetSelection(costanti.PROIETTILE_FORME.index(forma))
+            dialogo.prova()
+            # L'esempio suona davvero, nella forma della riga, mentre il dialogo è aperto e la partita, se c'è, tace.
+            voce = finestra._esempio_del_proiettile
+            esempi.append(voce)
+            uscita = flusso.avanza_fino(voce.inizio + motore.fs // 2)
+            assert not voce.finita and np.abs(uscita[-motore.blocco:]).max() > 0
+            dialogo.conferma()
+            return dialogo.GetReturnCode()
+
+        monkeypatch.setattr(dialoghi.SceltaProiettile, "ShowModal", sceglie)
+        _menu(finestra, finestra.cambia_proiettile)
+        assert partita.proiettile == partita.proiettile_scelto == "sega_morbida"
+        assert esempi[0].forma == "sega_morbida" and finestra._esempio_del_proiettile is None
+        # Chiuso il dialogo, l'esempio si ferma prima della sua fine naturale.
+        flusso.avanza(BLOCCHI_DEGLI_EFFETTI)
+        assert esempi[0].finita and esempi[0].finita_al < esempi[0].inizio + round(modulo_partita.DURATA_DELL_ESEMPIO * motore.fs)
+        assert finestra.vista.GetValue().endswith("\nIl proiettile adesso suona in sega morbida: lo senti dalla prossima partita.")
+
+        # La partita: i bersagli in un'altra portante, il proiettile in sega morbida.
+        tavolo.spazio()
+        assert partita.fase == "ascolto" and partita.proiettile == "sega_morbida"
+        assert all(partita._voci[b].forma == b.portante != "sega_morbida" for b in partita.bersagli)
+        _riposo(tavolo)
+        _bersaglio, valori = _valori_sul_centro(tavolo)
+        _mira(tavolo, valori)
+        assert partita._voce_proiettile.forma == "sega_morbida"
+        # Col proiettile in volo si sceglie il triangolo: la partita in corso tiene la sega morbida.
+        _menu(finestra, finestra.cambia_proiettile)
+        assert (partita.proiettile, partita.proiettile_scelto) == ("sega_morbida", "triangolo") and esempi[1].forma == "triangolo"
+        assert finestra.vista.GetValue().endswith("\nIl proiettile suonerà in triangolo dalla prossima partita: quella in corso resta in sega morbida.")
+        tavolo.battito()
+        assert not partita.in_pausa and partita.fase == "volo"
+        nuovi = _volo(tavolo)
+        assert nuovi[0].dati["colpito"]
+        # Il bersaglio nato al posto del colpito evita ancora la forma della partita in corso.
+        assert partita.bersagli and all(partita._voci[b].forma == b.portante != "sega_morbida" for b in partita.bersagli)
+        _riposo(tavolo)
+        _a_vuoto(tavolo)
+        assert partita._voce_proiettile.forma == "sega_morbida"
+        _volo(tavolo)
+        _riposo(tavolo)
+
+        # Ctrl+N, col sì: la partita nuova ha il proiettile in triangolo, e i bersagli un'altra portante.
+        messaggi_wx.risposta = wx.YES
+        _menu(finestra, finestra.nuova_partita)
+        assert partita.fase == "ascolto" and partita.proiettile == "triangolo"
+        assert all(partita._voci[b].forma == b.portante != "triangolo" for b in partita.bersagli)
+        _riposo(tavolo)
+        _a_vuoto(tavolo)
+        assert partita._voce_proiettile.forma == "triangolo"
+        _volo(tavolo)
+
+        # Le impostazioni sul disco, le statistiche e i suoni.
+        assert _leggi(costanti.FILE_IMPOSTAZIONI)["proiettile"] == "triangolo" and scelte == []
+        conti = finestra.statistiche.dati["conti"]
+        assert (conti["proiettile_cambiato"], conti["partite_con_la_sega_morbida"], conti["partite_col_triangolo"], conti["partite_col_seno"]) == (2, 1, 1, 0)
+        assert [nome for nome, _voce in tavolo.suonati].count("proiettile") == 2
+        assert len(messaggi_wx) == 1 and messaggi_wx[0][2] & wx.YES_NO
     finally:
         _chiudi(finestra)
     assert motore.chiuso

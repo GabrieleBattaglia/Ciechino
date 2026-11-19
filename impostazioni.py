@@ -1,5 +1,6 @@
 """
-Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita della sintesi e l'ultimo nome usato in classifica.
+Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita della sintesi, l'ultimo nome usato in classifica
+e la forma d'onda del proiettile.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di impostazioni.py di MESS.
 Si salvano in «Ciechino - Impostazioni.json», accanto al programma, con la scrittura sicura di
@@ -12,6 +13,9 @@ La chiave uscita è l'uscita della sintesi di GBsintesi, non la scheda audio: il
 dal dispositivo che sceglie scegli_dispositivo_audio di GBUtils, e uscita dice soltanto chi legge i
 resoconti, automatica oppure nvda, jaws o sapi5, la voce di Windows; un nome che GBsintesi non
 conosce vale automatica.
+La chiave proiettile è la forma d'onda del proiettile in volo, una di costanti.PROIETTILE_FORME (D17,
+decisione di Gabriele del 19 novembre 2026); una forma che non sta lì vale quella di serie,
+PROIETTILE_FORMA.
 """
 
 import costanti
@@ -25,7 +29,7 @@ VOLUME_MINIMO = 0
 VOLUME_MASSIMO = 100
 # L'uscita della sintesi che lascia la scelta a GBsintesi: automatica, oppure nvda, jaws o sapi5.
 USCITA_AUTOMATICA = "automatica"
-PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": ""}
+PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": "", "proiettile": costanti.PROIETTILE_FORMA}
 # L'avviso dell'ultimo caricamento, None se è andato tutto bene: carica restituisce soltanto le
 # impostazioni, come vuole il contratto, e la finestra può dire qui perché sono tornate ai predefiniti.
 ultimo_avviso = None
@@ -39,8 +43,9 @@ def _percorso(percorso):
 def valide(dati):
     """Le impostazioni ricevute, sistemate: il volume riportato fra VOLUME_MINIMO e VOLUME_MASSIMO,
     la sintesi vera o falsa, l'uscita della sintesi un nome non vuoto, l'ultimo nome pulito come in
-    classifica; ciò che manca, ha il tipo sbagliato o è un numero oltre NUMERO_MASSIMO di
-    classifica.py prende il predefinito, e le chiavi sconosciute restano."""
+    classifica, il proiettile una delle forme di PROIETTILE_FORME; ciò che manca, ha il tipo
+    sbagliato o è un numero oltre NUMERO_MASSIMO di classifica.py prende il predefinito, e le chiavi
+    sconosciute restano."""
     risultato = dict(PREDEFINITE)
     if not isinstance(dati, dict):
         return risultato
@@ -55,6 +60,9 @@ def valide(dati):
         risultato["uscita"] = uscita.strip()
     if isinstance(dati.get("ultimo_nome"), str):
         risultato["ultimo_nome"] = pulisci_nome(dati["ultimo_nome"])
+    proiettile = dati.get("proiettile")
+    if isinstance(proiettile, str) and proiettile.strip() in costanti.PROIETTILE_FORME:
+        risultato["proiettile"] = proiettile.strip()
     return risultato
 
 

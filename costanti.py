@@ -119,11 +119,60 @@ MARGINE_DOPO_LA_SCIVOLATA = 0.05
 # I bersagli: il suono è una portante la cui frequenza oscilla con un LFO di pochi hertz attorno
 # all'altezza del centro; l'escursione copre le altezze da y meno il raggio a y più il raggio,
 # moltiplicata per FATTORE_ESCURSIONE: più grande il bersaglio, più ampia l'oscillazione.
-FORME_LFO = ("seno", "sega", "sega_inversa", "triangolo", "quadra", "casuale", "deriva")
+# Le forme dell'LFO: le sette della 0.1.0, poi cinque nuove dal banco dei bersagli del 19 novembre
+# 2026, quando Gabriele le ha volute tutte e anche di più (D18): molla, un guizzo che vibra e si
+# smorza a ogni ciclo, una volta in su e una in giù; gradini, una scala che sale o scende; impulsi,
+# due colpetti a ogni ciclo, uno in su e uno in giù, col centro fermo in mezzo; doppia, due
+# oscillazioni di frequenza diversa insieme; trillo, due note vicine che si alternano in alto e poi
+# in basso.
+FORME_LFO = ("seno", "sega", "sega_inversa", "triangolo", "quadra", "casuale", "deriva", "molla", "gradini", "impulsi", "doppia", "trillo")
 FREQUENZA_LFO = (2.0, 6.0)
+# I parametri a caso di ogni forma (D18): ogni bersaglio li estrae dentro questi intervalli, i capi
+# compresi, così due bersagli della stessa forma suonano sempre un po' diversi. Con qualunque valore
+# ogni forma resta fra meno 1 e 1, arriva agli estremi in uno o pochi cicli e ha la media vicina a
+# zero: l'escursione dice la grandezza e il centro dice l'altezza.
+# Il seno con una seconda armonica, in ampiezza rispetto alla fondamentale: col più le creste
+# arrivano prima e scendono piano, col meno il contrario.
+ARMONICA_DEL_SENO = (-0.3, 0.3)
+# La curvatura di sega e sega inversa, un esponente: sotto 1 la rampa passa svelta dal centro e
+# indugia vicino agli estremi, sopra 1 il contrario; 1 è la rampa dritta.
+CURVATURA_DELLA_SEGA = (0.6, 1.6)
+# La pendenza del triangolo: la parte del ciclo in cui sale; 0,5 è il triangolo simmetrico.
+PENDENZA_DEL_TRIANGOLO = (0.3, 0.7)
+# La quadra: la larghezza è la parte del ciclo passata in alto, che si scosta poco da metà perché
+# la media resti vicina a zero; il fronte è la durata di ogni salto, in parte del ciclo, da quasi
+# netto, coi soli millesimi del raccordo contro i click, a un trapezio.
+LARGHEZZA_DELLA_QUADRA = (0.46, 0.54)
+FRONTE_DELLA_QUADRA = (0.0, 0.2)
+# Il casuale: quanti valori nuovi in un ciclo, interi.
+VALORI_DEL_CASUALE = (1, 3)
+# La deriva: la morbidezza è la parte del ciclo in cui scivola verso il valore seguente; nel resto
+# lo tiene fermo. 1 vuol dire che scivola sempre.
+MORBIDEZZA_DELLA_DERIVA = (0.4, 1.0)
+# Casuale e deriva: l'esponente che spinge i valori a caso verso gli estremi, perché anche questi
+# bersagli facciano sentire presto tutta la loro grandezza; 1 li lascerebbe uniformi.
+SPINTA_DEL_CASO = (0.4, 0.9)
+# La molla: quante oscillazioni in un ciclo, intere, così il ciclo finisce dove il seguente comincia,
+# e lo smorzamento, cioè di quanto cala l'ampiezza in un ciclo: alla fine è e alla meno questo.
+OSCILLAZIONI_DELLA_MOLLA = (2, 3)
+SMORZAMENTO_DELLA_MOLLA = (1.5, 4.0)
+# I gradini: quanti, interi, dal più basso al più alto, e il verso della scala, 1 sale e meno 1 scende.
+GRADINI = (3, 5)
+VERSI_DEI_GRADINI = (1, -1)
+# Gli impulsi: quanto dura ciascuno, in parte del ciclo.
+LARGHEZZA_DEGLI_IMPULSI = (0.1, 0.3)
+# La doppia: il rapporto fra la seconda frequenza e la prima, uno di questi, e il peso della
+# seconda oscillazione. Coi rapporti a metà fra due interi la forma si ripete ogni due cicli.
+RAPPORTI_DELLA_DOPPIA = (1.5, 2.5, 3.5)
+PESO_DELLA_DOPPIA = (0.4, 0.8)
+# Il trillo: quante note in ogni mezzo ciclo, intere, e la profondità, cioè di quanto la nota vicina
+# si stacca da quella dell'estremo, nella scala dell'LFO che va da meno 1 a 1.
+NOTE_DEL_TRILLO = (2, 3)
+PROFONDITA_DEL_TRILLO = (0.25, 0.5)
 FATTORE_ESCURSIONE = 1.0
 # Ogni bersaglio moltiplica la sua escursione per un numero a caso fra questi due: un po' di varietà,
-# senza confondere la grandezza (D18, 19 novembre 2026).
+# al prezzo, accettato da Gabriele, di una grandezza un po' meno netta: un bonus, più piccolo di un quinto,
+# può suonare largo quanto un bersaglio normale estratto stretto (D18, 19 novembre 2026).
 ESCURSIONE_A_CASO = (0.85, 1.15)
 # La portante di ogni bersaglio si estrae a caso fra queste (D18), tolta quella che chi gioca ha
 # scelto per il proiettile, perché proiettile e bersagli non si confondano. BERSAGLIO_FORMA resta

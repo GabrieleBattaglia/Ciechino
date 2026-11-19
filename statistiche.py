@@ -11,11 +11,13 @@ I conti arrivano da sette strade:
 - conta(chiave, quanti), per i contatori semplici che solo la partita o la finestra conoscono:
   dalla partita partite_iniziate, mire_avviate, livelli_superati, colpi_guadagnati, bonus_usciti,
   pause, quelle chieste con Ctrl+P, e pause_automatiche, quelle di un dialogo aperto o della
-  finestra lasciata (D14); dalla finestra ingressi_in_classifica, lingua_cambiata,
-  mail_al_pub_pronte e registri_al_pub; e qualunque chiave nuova, che la pagina dice nella sezione
-  degli altri conti finché non ha un'etichetta sua;
+  finestra lasciata (D14), e partite_col_seno, partite_col_triangolo e partite_con_la_sega_morbida,
+  le partite cominciate con ogni forma del proiettile (D17); dalla finestra ingressi_in_classifica,
+  lingua_cambiata, proiettile_cambiato, mail_al_pub_pronte e registri_al_pub; e qualunque chiave
+  nuova, che la pagina dice nella sezione degli altri conti finché non ha un'etichetta sua;
 - suono(evento), per ogni evento sonoro, contato per nome;
-- bersaglio_apparso(forma, mobile, bonus), per ogni bersaglio che nasce;
+- bersaglio_apparso(forma, mobile, bonus, portante=None), per ogni bersaglio che nasce, col timbro
+  della sua voce, la portante di D18, che tiro conta anche fra i colpiti;
 - mira(parametro, valore, esito_della_scivolata), per ogni valore preso con le scivolate;
 - tiro(valori, esito), dopo ogni tiro;
 - partita_finita(riepilogo), alla fine di ogni partita, finita a riserva vuota o abbandonata.
@@ -44,7 +46,8 @@ CLASSI = 10
 # partita o la finestra passano a conta deve starci: lo controlla una prova.
 CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abbandonate", "tiri", "centri", "tiri_a_vuoto", "punti", "bonus_apparsi",
                     "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate", "pause", "pause_automatiche",
-                    "ingressi_in_classifica", "lingua_cambiata", "mail_al_pub_pronte", "registri_al_pub")
+                    "partite_col_seno", "partite_col_triangolo", "partite_con_la_sega_morbida", "ingressi_in_classifica", "lingua_cambiata",
+                    "proiettile_cambiato", "mail_al_pub_pronte", "registri_al_pub")
 # Come può finire una scivolata, da mira.valore_scelto: fermata nei bip o subito dopo, scelta nella
 # scala, arrivata al massimo senza lo spazio.
 ESITI_DELLA_SCIVOLATA = ("minimo", "scelto", "massimo")
@@ -60,6 +63,12 @@ NOMI_DELLE_FORME = {
     # Traduttori: da qui, le forme dell'oscillazione che fa vibrare il suono di un bersaglio.
     "seno": _("seno"), "sega": _("dente di sega"), "sega_inversa": _("dente di sega inverso"), "triangolo": _("triangolo"), "quadra": _("onda quadra"),
     "casuale": _("casuale"), "deriva": _("deriva"),
+    # Le cinque forme di D18, coi nomi del manuale: «scala a gradini» e «onda doppia» come «onda quadra».
+    "molla": _("molla"), "gradini": _("scala a gradini"), "impulsi": _("impulsi"), "doppia": _("onda doppia"), "trillo": _("trillo"),
+}
+NOMI_DELLE_PORTANTI = {
+    # Traduttori: da qui, i timbri della voce di un bersaglio, cioè le sue forme d'onda: «Timbro sega morbida».
+    "organo": _("organo"), "seno": _("seno"), "triangolo": _("triangolo"), "sega_morbida": _("sega morbida"),
 }
 
 
@@ -112,6 +121,8 @@ def nuovi_dati(adesso):
         "somme": {"precisione": 0.0, "centri_misurati": 0, "punteggi": 0},
         "mira": {parametro: _nuova_mira() for parametro in costanti.PARAMETRI},
         "forme": {forma: _nuova_coppia() for forma in costanti.FORME_LFO},
+        # I timbri dei bersagli, le portanti estratte a caso da D18, apparsi e colpiti.
+        "portanti": {portante: _nuova_coppia() for portante in costanti.BERSAGLIO_PORTANTI},
         "moto": {"fermi": _nuova_coppia(), "mobili": _nuova_coppia()},
         "primati": {},
         "ultime": [],
@@ -152,7 +163,7 @@ def _partita_pulita(valore):
 
 def completa(grezzi, adesso):
     """Le statistiche lette dal file, risanate: ciò che manca o ha il tipo sbagliato torna al
-    predefinito, le chiavi nuove dei contatori, delle forme e dei suoni restano. Restituisce un
+    predefinito, le chiavi nuove dei contatori, delle forme, dei timbri e dei suoni restano. Restituisce un
     dizionario nuovo e non tocca quello ricevuto."""
     dati = nuovi_dati(adesso)
     if not isinstance(grezzi, dict):
@@ -168,9 +179,10 @@ def completa(grezzi, adesso):
     if isinstance(grezzi.get("mira"), dict):
         for parametro, valore in grezzi["mira"].items():
             dati["mira"][str(parametro)] = _mira_pulita(valore)
-    if isinstance(grezzi.get("forme"), dict):
-        for forma, valore in grezzi["forme"].items():
-            dati["forme"][str(forma)] = _coppia_pulita(valore)
+    for gruppo in ("forme", "portanti"):
+        if isinstance(grezzi.get(gruppo), dict):
+            for chiave, valore in grezzi[gruppo].items():
+                dati[gruppo][str(chiave)] = _coppia_pulita(valore)
     if isinstance(grezzi.get("moto"), dict):
         for moto in dati["moto"]:
             dati["moto"][moto] = _coppia_pulita(grezzi["moto"].get(moto))
@@ -259,6 +271,9 @@ class Statistiche:
     def _forma(self, forma):
         return self.dati["forme"].setdefault(str(forma), _nuova_coppia())
 
+    def _portante(self, portante):
+        return self.dati["portanti"].setdefault(str(portante), _nuova_coppia())
+
     def _mira(self, parametro):
         return self.dati["mira"].setdefault(str(parametro), _nuova_mira())
 
@@ -271,9 +286,12 @@ class Statistiche:
         primati[chiave] = {"valore": valore, "quando": self._iso()}
         return attuale is not None
 
-    def bersaglio_apparso(self, forma, mobile, bonus):
-        """Un bersaglio nato, con la forma del suo LFO, fermo o mobile, normale o bonus."""
+    def bersaglio_apparso(self, forma, mobile, bonus, portante=None):
+        """Un bersaglio nato, con la forma del suo LFO, fermo o mobile, normale o bonus, e il timbro
+        della sua voce, la portante di D18; senza portante il timbro non si conta."""
         self._forma(forma)["apparsi"] += 1
+        if isinstance(portante, str):
+            self._portante(portante)["apparsi"] += 1
         self.dati["moto"]["mobili" if mobile else "fermi"]["apparsi"] += 1
         if bonus:
             self.conta("bonus_apparsi")
@@ -307,8 +325,9 @@ class Statistiche:
 
     def tiro(self, valori, esito):
         """Un tiro sparato. valori sono la direzione, l'alzo e la potenza, da 0 a 1; esito è
-        {"colpito", "bonus", "forma", "mobile", "precisione", "punti", "distanza_dal_vicino",
-        "serie"}, con precisione e distanza None quando non ci sono. Restituisce i primati battuti."""
+        {"colpito", "bonus", "forma", "portante", "mobile", "precisione", "punti",
+        "distanza_dal_vicino", "serie"}, con precisione e distanza None quando non ci sono; la
+        portante, il timbro del bersaglio colpito, può mancare. Restituisce i primati battuti."""
         e = esito if isinstance(esito, dict) else {}
         battuti = []
         self.conta("tiri")
@@ -319,6 +338,8 @@ class Statistiche:
                 self.conta("bonus_colpiti")
             if isinstance(e.get("forma"), str):
                 self._forma(e["forma"])["colpiti"] += 1
+            if isinstance(e.get("portante"), str):
+                self._portante(e["portante"])["colpiti"] += 1
             self.dati["moto"]["mobili" if e.get("mobile") else "fermi"]["colpiti"] += 1
             precisione = e.get("precisione")
             if numero_valido(precisione):
@@ -445,6 +466,8 @@ class Pagina:
         righe = [
             self._voce(_("Avvii di Ciechino: {n}."), self.c("avvii")),
             self._voce(_("Cambi di lingua: {n}."), self.c("lingua_cambiata")),
+            # Traduttori: le volte in cui si è scelta nelle Impostazioni una forma d'onda nuova per il proiettile.
+            self._voce(_("Cambi della forma del proiettile: {n}."), self.c("proiettile_cambiato")),
             # Traduttori: il PUB è il gruppo di supporto di Gabriele, e il nome resta così; conta le mail d'iscrizione e quelle d'aiuto.
             self._voce(_("Mail al PUB preparate: {n}."), self.c("mail_al_pub_pronte")),
             # Traduttori: le mail d'aiuto al PUB preparate col file dei registri degli errori allegato.
@@ -480,6 +503,10 @@ class Pagina:
         if partite:
             righe.append(_("Durata media di una partita: {durata}.").format(durata=testi.durata(self.d["tempo_di_gioco"] / partite)))
             righe.append(_("Punteggio medio di una partita: {punti}.").format(punti=self._punti(self.d["somme"]["punteggi"] / partite)))
+        # Traduttori: da qui, le partite cominciate con ogni forma d'onda del proiettile, scelta nelle Impostazioni.
+        righe.append(self._voce(_("Partite col proiettile in seno: {n}."), self.c("partite_col_seno")))
+        righe.append(self._voce(_("Partite col proiettile in triangolo: {n}."), self.c("partite_col_triangolo")))
+        righe.append(self._voce(_("Partite col proiettile in sega morbida: {n}."), self.c("partite_con_la_sega_morbida")))
         righe.append(self._voce(_("Livelli superati: {n}."), self.c("livelli_superati")))
         righe.append(self._voce(_("Colpi guadagnati: {n}."), self.c("colpi_guadagnati")))
         righe.append(self._voce(_("Partite entrate in classifica: {n}."), self.c("ingressi_in_classifica")))
@@ -573,6 +600,12 @@ class Pagina:
             # Traduttori: forma è il nome della forma dell'oscillazione, come «dente di sega».
             etichetta = _("Forma {forma}").format(forma=NOMI_DELLE_FORME.get(forma, forma.replace("_", " ")))
             righe.append(self._apparsi_e_colpiti(etichetta, forme[forma]))
+        portanti = self.d["portanti"]
+        ordine = [p for p in costanti.BERSAGLIO_PORTANTI if p in portanti] + sorted(p for p in portanti if p not in costanti.BERSAGLIO_PORTANTI)
+        for portante in ordine:
+            # Traduttori: timbro è il nome della forma d'onda della voce di un bersaglio, come «sega morbida».
+            etichetta = _("Timbro {timbro}").format(timbro=NOMI_DELLE_PORTANTI.get(portante, portante.replace("_", " ")))
+            righe.append(self._apparsi_e_colpiti(etichetta, portanti[portante]))
         bonus_apparsi, bonus_colpiti = self.c("bonus_apparsi"), self.c("bonus_colpiti")
         righe.append(self._voce(_("Bonus apparsi: {n}."), bonus_apparsi))
         if bonus_colpiti:

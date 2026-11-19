@@ -37,6 +37,8 @@ EVENTI_DEL_CONTRATTO = (
     "riavvio", "crash_precedente", "dati_rovinati", "salvataggio_non_riuscito", "sintesi_spenta", "lingua", "lingua_scelta", "file_mancante",
     "caffe_paypal", "pub_aiuto", "domanda", "confermato", "annullato", "campo_da_correggere", "aggiornamento_disponibile", "aggiornamento_scelto",
     "aggiornamento_rimandato", "aggiornamento_scaduto", "aggiornamento_pronto", "aggiornamento_non_pronto", "aggiornamento_non_riuscito",
+    # La scelta della forma del proiettile, dai banchi d'ascolto (D17): un suono suo, non quello della sintesi accesa.
+    "proiettile",
 )
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98

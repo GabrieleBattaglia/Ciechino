@@ -121,6 +121,41 @@ def test_bersagli_apparsi():
     assert s.dati["forme"]["forma_futura"]["apparsi"] == 1
     assert s.dati["moto"]["mobili"]["apparsi"] == 2
     assert s.dati["conti"]["bonus_apparsi"] == 1
+    # Senza la portante il timbro non si conta: le chiamate di prima di D18 restano valide.
+    assert all(coppia == {"apparsi": 0, "colpiti": 0} for coppia in s.dati["portanti"].values())
+
+
+def test_ogni_forma_e_ogni_timbro_hanno_il_loro_nome():
+    """D9 e D18: le dodici forme dell'LFO e i quattro timbri passano da _, con i nomi del manuale."""
+    assert set(statistiche.NOMI_DELLE_FORME) == set(costanti.FORME_LFO)
+    assert set(statistiche.NOMI_DELLE_PORTANTI) == set(costanti.BERSAGLIO_PORTANTI)
+    assert statistiche.NOMI_DELLE_FORME["gradini"] == "scala a gradini" and statistiche.NOMI_DELLE_FORME["doppia"] == "onda doppia"
+
+
+def test_i_timbri_dei_bersagli_apparsi_e_colpiti():
+    """D18: ogni bersaglio ha un timbro a caso, e le statistiche lo contano, apparsi e colpiti, timbro per timbro."""
+    s = nuove()
+    assert set(s.dati["portanti"]) == set(costanti.BERSAGLIO_PORTANTI)
+    s.bersaglio_apparso("seno", False, False, portante="organo")
+    s.bersaglio_apparso("trillo", False, True, portante="sega_morbida")
+    s.bersaglio_apparso("gradini", True, False, portante="organo")
+    s.tiro((0.5, 0.5, 0.5), esito(forma="trillo", portante="sega_morbida", bonus=True))
+    s.tiro((0.5, 0.5, 0.5), esito(colpito=False))
+    assert s.dati["portanti"]["organo"] == {"apparsi": 2, "colpiti": 0}
+    assert s.dati["portanti"]["sega_morbida"] == {"apparsi": 1, "colpiti": 1}
+    righe = s.righe()
+    assert "Timbro organo: 2 apparsi, 0 colpiti, 0%." in righe
+    assert "Timbro sega morbida: 1 apparso, 1 colpito, 100%." in righe
+    assert not any(r.startswith("Timbro seno") for r in righe)
+    assert "Forma trillo: 1 apparso, 1 colpito, 100%." in righe and "Forma scala a gradini: 1 apparso, 0 colpiti, 0%." in righe
+    # I timbri vengono dopo le forme, nella sezione dei bersagli.
+    assert righe.index("Timbro organo: 2 apparsi, 0 colpiti, 0%.") > righe.index("Forma trillo: 1 apparso, 1 colpito, 100%.")
+    # Un file di prima di D18, senza i timbri, si legge e li parte da zero; un timbro sconosciuto resta.
+    grezzi = dict(s.dati)
+    del grezzi["portanti"]
+    assert statistiche.Statistiche(dati=grezzi).dati["portanti"]["organo"] == {"apparsi": 0, "colpiti": 0}
+    grezzi["portanti"] = {"futuro": {"apparsi": 2, "colpiti": "tanti"}}
+    assert statistiche.Statistiche(dati=grezzi).dati["portanti"]["futuro"] == {"apparsi": 2, "colpiti": 0}
 
 
 def test_partita_finita_e_ultime_partite():
@@ -309,10 +344,17 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     s.conta("ingressi_in_classifica", 4)
     s.conta("pause", 5)
     s.conta("pause_automatiche", 6)
+    s.conta("proiettile_cambiato", 7)
+    s.conta("partite_col_seno", 8)
+    s.conta("partite_col_triangolo", 9)
+    s.conta("partite_con_la_sega_morbida", 10)
     righe = s.righe()
     for riga in ("Cambi di lingua: 1.", "Mail al PUB preparate: 3.", "Mail d'aiuto al PUB coi registri allegati: 2.", "Partite entrate in classifica: 4.",
-                 "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo aperto o un'altra finestra: 6."):
+                 "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo aperto o un'altra finestra: 6.", "Cambi della forma del proiettile: 7.",
+                 "Partite col proiettile in seno: 8.", "Partite col proiettile in triangolo: 9.", "Partite col proiettile in sega morbida: 10."):
         assert riga in righe
+    # Il cambio del proiettile sta in breve, subito dopo quello della lingua (D17).
+    assert righe.index("Cambi della forma del proiettile: 7.") == righe.index("Cambi di lingua: 1.") + 1
     # Nessuno di loro finisce negli altri conti, che restano per le chiavi nuove.
     assert not any("altri conti" in r for r in righe)
     assert [r for r in righe if r.startswith("Sezione ")][-1] == "Sezione 8 di 8, i suoni."
@@ -346,5 +388,14 @@ def test_ogni_chiave_contata_dalla_partita_e_dalla_finestra_ha_un_etichetta():
     radice = Path(statistiche.__file__).resolve().parent
     contate = _chiavi_contate(radice / "partita.py") | _chiavi_contate(radice / "gui" / "finestra.py")
     # La prova deve trovare davvero le chiamate: se non ne trova, il modo di contare è cambiato.
-    assert {"partite_iniziate", "ingressi_in_classifica"} <= contate
+    assert {"partite_iniziate", "ingressi_in_classifica", "proiettile_cambiato"} <= contate
     assert contate - set(statistiche.CHIAVI_DEI_CONTI) == set()
+
+
+def test_i_conti_delle_partite_per_forma_del_proiettile_hanno_un_etichetta():
+    """La partita conta le partite di ogni forma del proiettile con una chiave presa da CONTI_DEL_PROIETTILE: la prova
+    con ast non la vede scritta per esteso, e la guarda qui (D17)."""
+    import partita
+
+    assert set(partita.CONTI_DEL_PROIETTILE) == set(costanti.PROIETTILE_FORME)
+    assert set(partita.CONTI_DEL_PROIETTILE.values()) <= set(statistiche.CHIAVI_DEI_CONTI)

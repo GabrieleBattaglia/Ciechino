@@ -1,6 +1,6 @@
 """
-I dialoghi di Ciechino: il testo da leggere, il nome per la classifica, il volume, la lingua, l'invito
-al caffè e la proposta dell'aggiornamento automatico.
+I dialoghi di Ciechino: il testo da leggere, il nome per la classifica, il volume, la forma del
+proiettile, la lingua, l'invito al caffè e la proposta dell'aggiornamento automatico.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di gui/dialoghi.py di MESS. Ogni dialogo segue lo schema
 di GBwx: stile adattabile, controlli in un pannello che scorre, misura presa dal contenuto con
@@ -49,6 +49,18 @@ BORDO = 8
 SPAZIO_FRA_I_PULSANTI = 4
 TASTI_INVIO = (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER)
 MILLESIMI = 1000
+# Le forme d'onda del proiettile (D17), una per ogni voce di costanti.PROIETTILE_FORME: il nome, come lo
+# dicono i messaggi, «il proiettile suona in seno», e il carattere, poche parole sul suo timbro.
+NOMI_DEI_PROIETTILI = {
+    # Traduttori: da qui, i nomi delle forme d'onda del proiettile, come si dicono dopo «in»: «il proiettile suona in seno».
+    "seno": _("seno"), "triangolo": _("triangolo"), "sega_morbida": _("sega morbida"),
+}
+CARATTERI_DEI_PROIETTILI = {
+    # Traduttori: da qui, il carattere del suono di ogni forma d'onda del proiettile, nell'elenco del dialogo.
+    "seno": _("il suono più puro e morbido, quasi un fischio"),
+    "triangolo": _("un poco più chiaro e vivo del seno, ancora dolce"),
+    "sega_morbida": _("il più ricco e brillante, con un leggero ronzio"),
+}
 
 
 def _muto(*_argomenti, **_opzioni):
@@ -92,6 +104,21 @@ def etichetta_del_nome():
 def _senza_tasto(testo):
     """Il testo di un'etichetta senza la e commerciale del tasto rapido, per SetName."""
     return testo.replace("&&", "\x00").replace("&", "").replace("\x00", "&")
+
+
+def nome_del_proiettile(forma):
+    """Il nome a parole di una forma d'onda del proiettile, come lo dicono i messaggi: «sega morbida»."""
+    return NOMI_DEI_PROIETTILI.get(forma, str(forma).replace("_", " "))
+
+
+def riga_del_proiettile(forma):
+    """La riga dell'elenco del dialogo del proiettile: il nome, con la maiuscola, e il carattere del suono."""
+    nome = nome_del_proiettile(forma)
+    carattere = CARATTERI_DEI_PROIETTILI.get(forma)
+    if not carattere:
+        return nome[:1].upper() + nome[1:]
+    # Traduttori: una riga dell'elenco delle forme del proiettile, come «Seno, il suono più puro e morbido, quasi un fischio».
+    return _("{nome}, {carattere}").format(nome=nome[:1].upper() + nome[1:], carattere=carattere)
 
 
 class _Dialogo(wx.Dialog):
@@ -399,6 +426,68 @@ class Volume(_Dialogo):
 
     def conferma(self, event=None):
         self.valore = self.numero.GetValue()
+        self.chiudi(wx.ID_OK)
+
+
+class SceltaProiettile(_Dialogo):
+    """
+    La forma d'onda del proiettile (D17): sotto la spiegazione, l'elenco delle forme di
+    costanti.PROIETTILE_FORME, ognuna col nome e il carattere del suono, con la forma attuale già
+    scelta; OK e Annulla, che vale anche per Esc. Spostandosi nell'elenco, quando ci si ferma, al_cambio
+    riceve la forma della riga: la finestra ne fa sentire un esempio, e lo ferma quando ne parte un
+    altro o quando il dialogo si chiude. In scelta resta la forma scelta con OK, o None. Come quello
+    della lingua ha la grazia dell'apertura: l'Invio tenuto giù dalla voce del menu non conferma.
+    """
+
+    GRAZIA_ALL_APERTURA = True
+
+    def __init__(self, genitore, forma, al_cambio=None, suona=None):
+        super().__init__(genitore, _("Proiettile"), suona)
+        self.spiegazione(_("La forma d'onda dà il timbro al proiettile in volo, e i bersagli ne usano un'altra, così non li confondi con lui. "
+                           "Spostandoti nell'elenco senti un esempio di ogni forma. La forma scelta vale dalla prossima partita."))
+        self.forme = tuple(costanti.PROIETTILE_FORME)
+        righe = [riga_del_proiettile(f) for f in self.forme]
+        self.elenco = self.campo(_("&Forma del proiettile"), lambda: wx.ListBox(self.pannello, choices=righe, style=wx.LB_SINGLE), 1)
+        self.elenco.SetSelection(self.forme.index(forma if forma in self.forme else costanti.PROIETTILE_FORMA))
+        ok, _annulla = self.pulsanti((wx.ID_OK, _("&OK")), (wx.ID_CANCEL, _("&Annulla")))
+        ok.Bind(wx.EVT_BUTTON, self.conferma)
+        self.elenco.Bind(wx.EVT_LISTBOX, self._cambiato)
+        self.elenco.Bind(wx.EVT_LISTBOX_DCLICK, self.conferma)
+        self._al_cambio = al_cambio
+        self.scelta = None
+        self.completa()
+        self.elenco.SetFocus()
+
+    def _cambiato(self, event=None):
+        if event is not None:
+            event.Skip()
+        if self._al_cambio is not None:
+            self.suona_fra_poco(self.prova)
+
+    def prova(self):
+        """La forma della riga scelta, a chi ne fa sentire l'esempio."""
+        if self._al_cambio is None:
+            return
+        indice = self.elenco.GetSelection()
+        if indice != wx.NOT_FOUND:
+            self._al_cambio(self.forme[indice])
+
+    def ferma_la_prova(self):
+        """
+        Niente più esempi: la finestra la chiama quando il dialogo si è chiuso, prima di distruggerlo,
+        così l'esempio chiesto un attimo prima della chiusura, che aspettava la fine del ritardo, non
+        suona a dialogo chiuso.
+        """
+        self._al_cambio = None
+        if self._timer_del_suono is not None and self._timer_del_suono.IsRunning():
+            self._timer_del_suono.Stop()
+
+    def conferma(self, event=None):
+        indice = self.elenco.GetSelection()
+        if indice == wx.NOT_FOUND:
+            self.avvisa(_("Scegli una forma dall'elenco."), self.elenco)
+            return
+        self.scelta = self.forme[indice]
         self.chiudi(wx.ID_OK)
 
 

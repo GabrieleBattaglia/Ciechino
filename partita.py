@@ -27,22 +27,31 @@ finestra, in silenzio, quando si apre un dialogo o lei perde l'attivazione: ques
 questa, la toglie la finestra al ritorno. Ciò che succede mentre la partita è ferma, come un tiro il
 cui impatto era già partito quando la pausa è arrivata, si dice subito nella vista, ma gli avvisi e
 il bonus nuovo aspettano la ripresa.
+Il proiettile ha la forma d'onda che chi gioca sceglie nelle Impostazioni (D17), e i bersagli una
+portante a caso fra BERSAGLIO_PORTANTI, tolta quella del proiettile, perché non si confondano con lui
+(D18): la finestra dà la forma con scegli_proiettile, e una partita tiene quella con cui è cominciata
+fino alla fine. La forma scelta a partita in corso vale dalla partita seguente.
 """
 
+import functools
 import random
 import time
+
+import numpy as np
 
 import fisica
 import mira
 import resoconti
-from bersagli import genera, genera_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
+from bersagli import genera, genera_bonus, portanti_senza, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
     ATTENUAZIONE_IN_MIRA_DB,
-    BERSAGLIO_FORMA,
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
     COLPI_INIZIALI,
     COLPI_PER_LIVELLO,
+    CUBO_X,
+    CUBO_Y,
+    CUBO_Z,
     ESPONENTE_DEL_RAGGIO,
     LIVELLO_DEI_BONUS,
     MOLTIPLICATORE_BONUS,
@@ -51,9 +60,11 @@ from costanti import (
     PREMIO_PRECISIONE,
     PROBABILITA_BONUS,
     PROIETTILE_FORMA,
+    PROIETTILE_FORME,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     STACCO_FRA_GLI_AVVISI,
+    VELOCITA_DEL_TEMPO,
     VELOCITA_DI_RIFERIMENTO,
 )
 from motore_audio import VoceTono
@@ -61,7 +72,7 @@ from resoconti import Messaggio
 from sintesi import db_in_lineare, scivolata
 from volo import calcola_volo, parametri_del_proiettile
 
-__all__ = ["FASI", "SOTTOFASI", "Messaggio", "Partita", "punti_del_centro"]
+__all__ = ["CONTI_DEL_PROIETTILE", "FASI", "SOTTOFASI", "Messaggio", "Partita", "esempio_del_proiettile", "punti_del_centro", "volo_d_esempio"]
 
 # Le fasi della partita e le parti di una barra della mira, come le vuole il contratto.
 FASI = ("pronta", "ascolto", "mira", "volo", "finita")
@@ -71,6 +82,14 @@ IN_CORSO = ("ascolto", "mira", "volo")
 # I suoni con cui la finestra dice, dopo la fine, se il punteggio entra in classifica: li mette in fila
 # a dopo_gli_avvisi, e la partita nuova chiesta subito dopo li lascia suonare.
 ESITI_DELLA_CLASSIFICA = ("in_classifica", "fuori_classifica")
+# Il contatore delle statistiche che ogni partita nuova accresce, secondo la forma del suo proiettile:
+# così le statistiche dicono quante partite si giocano con ogni forma (D17).
+CONTI_DEL_PROIETTILE = {"seno": "partite_col_seno", "triangolo": "partite_col_triangolo", "sega_morbida": "partite_con_la_sega_morbida"}
+# L'esempio del proiettile che il dialogo delle Impostazioni fa sentire (D17): tanti secondi di volo
+# di un tiro al centro del cubo, dallo sparo, e una sfumatura finale, in secondi, perché l'esempio
+# non si tronchi con un click.
+DURATA_DELL_ESEMPIO = 1.5
+SFUMATURA_DELL_ESEMPIO = 0.1
 
 
 def punti_del_centro(bersaglio, precisione, livello=None):
@@ -106,6 +125,51 @@ def _sentito(evento, udibile):
     return evento is not None and evento.scattato and evento.campione is not None and udibile >= evento.campione
 
 
+def _forma_del_proiettile(forma):
+    """La forma del proiettile, controllata: una di PROIETTILE_FORME, altrimenti ValueError."""
+    if forma not in PROIETTILE_FORME:
+        raise ValueError(f"Forma del proiettile sconosciuta: {forma!r}; le forme sono {', '.join(PROIETTILE_FORME)}.")
+    return forma
+
+
+@functools.cache
+def volo_d_esempio():
+    """Il volo dell'esempio del proiettile (D17): il tiro più dolce di fisica.soluzione verso il
+    centro del cubo, senza bersagli, sparato al tempo di gioco zero, fino a terra. Si calcola una
+    volta sola, e chi lo riceve non lo cambia."""
+    centro = tuple((basso + alto) / 2 for basso, alto in (CUBO_X, CUBO_Y, CUBO_Z))
+    valori = fisica.soluzione(centro)
+    if valori is None:
+        raise ValueError("Il centro del cubo non si raggiunge con un tiro dentro i margini: l'esempio del proiettile non ha un volo.")
+    traiettoria = fisica.Traiettoria(*fisica.parametri_del_tiro(*valori))
+    return calcola_volo(traiettoria, [], 0.0)
+
+
+def esempio_del_proiettile(motore, forma, durata=DURATA_DELL_ESEMPIO):
+    """L'esempio del proiettile di quella forma, per il dialogo delle Impostazioni (D17): la stessa
+    voce del gioco, una VoceTono coi parametri sonori del volo d'esempio, che parte dal prossimo
+    campione sicuro del motore e dopo durata secondi si spegne, con SFUMATURA_DELL_ESEMPIO. Il volo
+    segue il tempo dell'audio, alla VELOCITA_DEL_TEMPO del gioco, non il tempo di gioco, che col
+    dialogo aperto è fermo. La voce entra nel motore e si restituisce: chi la vuole fermare prima la
+    passa a motore.ferma, e la fermata più vicina vince. Una forma fuori da PROIETTILE_FORME solleva
+    ValueError, prima di toccare il motore."""
+    forma = _forma_del_proiettile(forma)
+    volo = volo_d_esempio()
+    suono_del_volo = parametri_del_proiettile(volo)
+    inizio = motore.prossimo_campione()
+    sparo = inizio / motore.fs
+
+    def parametri(tempi_di_gioco, tempi_audio):
+        audio = np.atleast_1d(np.asarray(tempi_audio, dtype=float))
+        return suono_del_volo(volo.partenza + (audio - sparo) * VELOCITA_DEL_TEMPO)
+
+    voce = VoceTono(parametri, forma, inizio)
+    motore.aggiungi(voce)
+    sfumatura = round(SFUMATURA_DELL_ESEMPIO * motore.fs)
+    motore.ferma(voce, inizio + max(round(durata * motore.fs) - sfumatura, 0), SFUMATURA_DELL_ESEMPIO)
+    return voce
+
+
 class Partita:
     """Una partita di Ciechino, dall'inizio alla fine, e poi la seguente.
     motore è il Motore audio, suoni i Suoni che suonano sul motore; statistiche, se c'è, riceve ogni
@@ -118,14 +182,20 @@ class Partita:
     tre barre, e inizio_barra, il campione del motore dove comincia il buffer della barra in corso.
     Oltre ai metodi del contratto ci sono pausa_automatica, la pausa silenziosa che mette e toglie la
     finestra (D14), e dopo_gli_avvisi, che dice alla finestra da quale campione far partire l'esito
-    della classifica, in fila dopo il suono della fine."""
+    della classifica, in fila dopo il suono della fine.
+    Il proiettile (D17): proiettile è la forma d'onda dell'unico proiettile della partita in corso, o
+    di quella che comincerà se nessuna è in corso; proiettile_scelto quella che chi gioca ha chiesto,
+    da cui ogni partita nuova prende la sua. Si sceglie con scegli_proiettile, o all'inizio con
+    l'argomento proiettile, PROIETTILE_FORMA se è None."""
 
-    def __init__(self, motore, suoni, statistiche=None, rng=None, orologio=None):
+    def __init__(self, motore, suoni, statistiche=None, rng=None, orologio=None, proiettile=None):
         self.motore = motore
         self.suoni = suoni
         self.statistiche = statistiche
         self.rng = random.Random() if rng is None else rng
         self.orologio = time.monotonic if orologio is None else orologio
+        self.proiettile_scelto = _forma_del_proiettile(PROIETTILE_FORMA if proiettile is None else proiettile)
+        self.proiettile = self.proiettile_scelto
         if statistiche is not None:
             suoni.conta = statistiche.suono
         # I buffer delle tre barre si preparano una volta sola: sintetizzarli a ogni mira farebbe
@@ -180,6 +250,23 @@ class Partita:
         """Vero se c'è una partita in corso, in pausa compresa."""
         return self.fase in IN_CORSO
 
+    def scegli_proiettile(self, forma):
+        """La forma d'onda del proiettile, una di PROIETTILE_FORME, scelta nelle Impostazioni (D17).
+        Vale dalla prossima partita: se nessuna è in corso, cioè subito, e allora cambia anche
+        proiettile; con una partita in corso questa tiene la sua fino alla fine. Restituisce vero se
+        la forma vale già per la partita che comincerà, falso se aspetta la fine di quella in corso.
+        Una forma sconosciuta solleva ValueError e non cambia niente."""
+        self.proiettile_scelto = _forma_del_proiettile(forma)
+        if self.in_corso():
+            return False
+        self.proiettile = self.proiettile_scelto
+        return True
+
+    def _portanti(self):
+        """Le portanti fra cui nascono i bersagli della partita: tutte quelle di BERSAGLIO_PORTANTI,
+        tolta la forma del proiettile, perché un bersaglio non suoni come il colpo (D18)."""
+        return portanti_senza(self.proiettile)
+
     def riepilogo(self):
         """{"punteggio", "livello", "tiri", "centri", "durata_s"} della partita in corso o dell'ultima;
         la durata è quella vera, senza le pause, al decimo di secondo."""
@@ -199,13 +286,15 @@ class Partita:
 
     def nuova(self):
         """Comincia una partita nuova, abbandonando prima quella in corso: livello 1, riserva
-        COLPI_INIZIALI, i bersagli del primo livello che nascono al prossimo campione sicuro, col
-        tempo di gioco che scorre da lì. Il suono della partita nuova aspetta in fila gli avvisi
-        della partita di prima, e dopo la fine anche l'esito della classifica che la finestra vi ha
-        messo, perché lo spazio dato d'abitudine subito dopo l'ultimo tiro non li copra."""
+        COLPI_INIZIALI, il proiettile della forma scelta, i bersagli del primo livello che nascono al
+        prossimo campione sicuro, col tempo di gioco che scorre da lì. Il suono della partita nuova
+        aspetta in fila gli avvisi della partita di prima, e dopo la fine anche l'esito della
+        classifica che la finestra vi ha messo, perché lo spazio dato d'abitudine subito dopo
+        l'ultimo tiro non li copra."""
         finita = self.fase == "finita"
         messaggi = self.abbandona() if self.in_corso() else []
         self._ferma_voci()
+        self.proiettile = self.proiettile_scelto
         self.livello = 1
         self.riserva = COLPI_INIZIALI
         self.punti = self.tiri = self.centri = self.serie = self.centri_del_livello = 0
@@ -226,6 +315,7 @@ class Partita:
             dopo_l_esito = self._fine_degli_avvisi + self._lunghezza_degli_esiti() + self._stacco()
         self._avviso("nuova_partita", dopo_l_esito)
         self._conta("partite_iniziate")
+        self._conta(CONTI_DEL_PROIETTILE[self.proiettile])
         self.fase = "ascolto"
         messaggi.append(resoconti.inizio_partita(self.livello, self.riserva))
         messaggi.extend(self._forse_un_bonus())
@@ -368,26 +458,26 @@ class Partita:
         return self._numero
 
     def _nasce(self, bersaglio, k):
-        """Un bersaglio entra in volo, con la sua voce dal campione k, e si conta. A partita ferma nasce
-        muto, come gli altri, e la ripresa gli dà la voce con loro: succede quando un impatto partito
-        prima della pausa si risolve durante la pausa."""
+        """Un bersaglio entra in volo, con la sua voce dal campione k, nella sua portante, e si conta. A
+        partita ferma nasce muto, come gli altri, e la ripresa gli dà la voce con loro: succede quando
+        un impatto partito prima della pausa si risolve durante la pausa."""
         self.bersagli.append(bersaglio)
-        voce = VoceTono(bersaglio.parametri_sonori, BERSAGLIO_FORMA, inizio=k, guadagno=0.0 if self.in_pausa else 1.0)
+        voce = VoceTono(bersaglio.parametri_sonori, bersaglio.portante, inizio=k, guadagno=0.0 if self.in_pausa else 1.0)
         self._voci[bersaglio] = voce
         self.motore.aggiungi(voce)
         if self.statistiche is not None:
-            self.statistiche.bersaglio_apparso(bersaglio.forma, bersaglio.mobile, bersaglio.bonus)
+            self.statistiche.bersaglio_apparso(bersaglio.forma, bersaglio.mobile, bersaglio.bonus, portante=bersaglio.portante)
 
     def _nuovo_bersaglio(self):
         """Un bersaglio normale del livello, nato al tempo di gioco del prossimo campione sicuro."""
         k = self.motore.prossimo_campione()
-        self._nasce(genera(self.livello, self.rng, self._nuovo_numero(), self.motore.tempo_di_gioco(k)), k)
+        self._nasce(genera(self.livello, self.rng, self._nuovo_numero(), self.motore.tempo_di_gioco(k), portanti=self._portanti()), k)
 
     def _nuovi_bersagli(self, k):
         """Tutti i bersagli normali del livello, nati insieme al campione k."""
         tempo = self.motore.tempo_di_gioco(k)
         for _indice in range(quanti_bersagli(self.livello)):
-            self._nasce(genera(self.livello, self.rng, self._nuovo_numero(), tempo), k)
+            self._nasce(genera(self.livello, self.rng, self._nuovo_numero(), tempo, portanti=self._portanti()), k)
 
     def _togli(self, bersaglio):
         """Toglie un bersaglio dall'elenco e dimentica la sua voce, senza fermarla."""
@@ -509,7 +599,7 @@ class Partita:
         if self.rng.random() >= PROBABILITA_BONUS:
             return []
         k = self.motore.prossimo_campione()
-        bonus = genera_bonus(self.livello, self.rng, self._nuovo_numero(), self.motore.tempo_di_gioco(k))
+        bonus = genera_bonus(self.livello, self.rng, self._nuovo_numero(), self.motore.tempo_di_gioco(k), portanti=self._portanti())
         self._nasce(bonus, k)
         self.bonus = bonus
         self._livello_del_bonus = self.livello
@@ -570,10 +660,14 @@ class Partita:
 
     def _avvia_barra(self, indice, k):
         """La barra indice comincia dopo PAUSA_FRA_BARRE di silenzio dal campione k: il buffer parte a
-        pausa finita, e la partita si ricorda dove, per il conto di mira.valore_scelto."""
+        pausa finita, e la partita si ricorda dove, per il conto di mira.valore_scelto. Se gli avvisi
+        in fila dopo l'impatto, come il livello nuovo o l'ultimo colpo, o la coda dell'effetto stesso,
+        suonano ancora a pausa finita, la pausa si allunga fino alla loro fine, stacco compreso: la
+        mira avviata subito dopo l'impatto non copre i bip con gli effetti lunghi di D16. Lo spazio
+        nella pausa allungata non conta, come nell'altra."""
         self.barra = indice
         self.sottofase = "pausa"
-        self.inizio_barra = k + round(PAUSA_FRA_BARRE * self.motore.fs)
+        self.inizio_barra = max(k + round(PAUSA_FRA_BARRE * self.motore.fs), self._fine_degli_avvisi)
         self._voce_barra = self.motore.suona(self._scivolata().buffer, inizio=self.inizio_barra)
 
     def _spazio_nella_mira(self):
@@ -622,11 +716,12 @@ class Partita:
 
     def _spara(self):
         """Il colpo: la traiettoria dai tre valori, il volo calcolato tutto subito dal tempo di gioco
-        dello sparo, lo sparo dal cannone e la voce del proiettile dal campione k, i bersagli di nuovo a
-        guadagno pieno e il tempo che riprende da k. L'effetto dell'impatto si prepara adesso, perché
-        nel filo dell'audio non c'è tempo per farlo; l'evento della fine del volo, al campione esatto,
-        ferma il proiettile e il bersaglio colpito e fa partire l'effetto. L'effetto si conta quando si
-        sente, non adesso: se la partita si abbandona col proiettile in volo non suona mai.
+        dello sparo, lo sparo dal cannone e la voce del proiettile, nella forma della partita, dal
+        campione k, i bersagli di nuovo a guadagno pieno e il tempo che riprende da k. L'effetto
+        dell'impatto si prepara adesso, perché nel filo dell'audio non c'è tempo per farlo; l'evento
+        della fine del volo, al campione esatto, ferma il proiettile e il bersaglio colpito e fa
+        partire l'effetto. L'effetto si conta quando si sente, non adesso: se la partita si abbandona
+        col proiettile in volo non suona mai.
         Il conto del volo e la preparazione dell'effetto vengono prima di scegliere k: durano qualche
         millesimo, e un k scelto prima potrebbe essere già passato quando i comandi arrivano al
         motore. Nella mira il tempo di gioco è fermo, quindi la partenza è la stessa a qualunque
@@ -644,7 +739,7 @@ class Partita:
             effetto = "colpito"
         buffer = self._pronto_senza_conto(effetto, volo.punto_finale)
         k = self.motore.prossimo_campione()
-        proiettile = VoceTono(parametri_del_proiettile(volo), PROIETTILE_FORMA, inizio=k)
+        proiettile = VoceTono(parametri_del_proiettile(volo), self.proiettile, inizio=k)
         self.suoni.suona("sparo", posizione=fisica.CANNONE, inizio=k)
         self.motore.aggiungi(proiettile)
         for voce in self._voci.values():
@@ -767,7 +862,7 @@ class Partita:
         else:
             distanza = None
         esito = {"colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "forma": colpito.forma if colpito is not None else None,
-                 "mobile": bool(colpito is not None and colpito.mobile), "precisione": volo.precisione, "punti": punti, "distanza_dal_vicino": distanza,
+                 "portante": colpito.portante if colpito is not None else None, "mobile": bool(colpito is not None and colpito.mobile), "precisione": volo.precisione, "punti": punti, "distanza_dal_vicino": distanza,
                  "serie": self.serie}
         prima = self._primati_attuali()
         battuti = self._primati_che_cambiano(self.statistiche.tiro(list(self.valori), esito), prima)

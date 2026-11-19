@@ -3,14 +3,21 @@ Ciechino, il banco dei bersagli: le forme dell'LFO, le grandezze e le portanti, 
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di strumenti/banco_spazio.py di MESS, con le parti
 comuni di strumenti/banco_mira.py.
-Tre gruppi alla cieca, ciascuno col controllo. Le sette forme dell'LFO, tutte nello stesso punto e
-della stessa grandezza, con la domanda di quanto ogni suono si distingue dagli altri e quanto è
-gradevole: nel gioco ci sono tutte, a caso, quindi nessuna è quella attuale. Le grandezze di una
-forma sola, dal raggio del primo livello a quello minimo, con la domanda di quanto sembra grande il
-bersaglio: se i voti seguono il raggio, la grandezza si sente; anche qui nessuna è l'attuale, e il
-riepilogo segue l'ordine dei raggi invece dei voti. Le portanti dei bersagli, sentite prima in basso
-e poi in alto, perché il timbro cambia con l'altezza, con la domanda di quanto il suono è gradevole e
-quanto fa capire l'altezza.
+Tre prove alla cieca, divise in gruppi, ciascuno col controllo. Le forme dell'LFO, tutte nello stesso punto, della
+stessa grandezza e con la stessa portante, con la domanda di quanto ogni suono si distingue dagli
+altri e quanto è gradevole: nel gioco ci sono tutte, a caso, quindi nessuna è quella attuale. Ogni
+forma suona coi suoi parametri estratti a caso come nel gioco (D18), da un seme fisso, così tutte le
+sessioni sentono gli stessi, e il nome che si rivela alla fine li dice. Le forme sono più delle
+lettere di un gruppo, che ne tiene una di meno, per il controllo: si dividono in più gruppi, nell'ordine
+di FORME_LFO, e il primo tiene le sette della 0.1.0. Le grandezze di una forma sola, dal raggio del
+primo livello a quello minimo, con la domanda di quanto sembra grande il bersaglio: se i voti seguono
+il raggio, la grandezza si sente; anche qui nessuna è l'attuale, e il riepilogo segue l'ordine dei
+raggi invece dei voti. Le portanti dei bersagli, sentite prima in basso e poi in alto, perché il
+timbro cambia con l'altezza, con la domanda di quanto il suono è gradevole e quanto fa capire
+l'altezza: dal 19 novembre 2026 ogni bersaglio estrae la sua fra tutte quelle di BERSAGLIO_PORTANTI
+(D18), quindi sono tutte in gioco e nessuna è l'attuale; una che prendesse voti bassi si toglierebbe
+dall'elenco. Grandezze e portanti usano la forma più regolare coi parametri di serie, perché cambi
+soltanto ciò che il gruppo vuole far sentire.
 I bersagli sono quelli del gioco: Bersaglio di bersagli.py, col suo LFO e i suoi parametri sonori,
 suonato da una VoceTono del motore audio di Ciechino, resa fuori tempo reale sul flusso in memoria
 di banco_mira, coi blocchi, il tetto e la panoramica del motore vero; la voce entra e esce con la
@@ -21,6 +28,7 @@ Uso, dalla cartella del programma: python strumenti\\banco_bersagli.py; con un n
 python strumenti\\banco_bersagli.py 4127, usa quel seme, e quindi le stesse lettere di una sessione passata.
 """
 
+import random
 import sys
 from pathlib import Path
 
@@ -33,11 +41,11 @@ if str(STRUMENTI) not in sys.path:
 import banco_mira as banco  # noqa: E402
 from GBUtils import enter_escape  # noqa: E402
 
-from bersagli import Bersaglio  # noqa: E402
-from costanti import BERSAGLIO_FORMA, CUBO_LATO, CUBO_Y, CUBO_Z, FORME_LFO, FREQUENZA_LFO, FS, RAGGIO_INIZIALE  # noqa: E402
+from bersagli import PARAMETRI_LFO, Bersaglio, parametri_a_caso  # noqa: E402
+from costanti import BERSAGLIO_FORMA, BERSAGLIO_PORTANTI, CUBO_LATO, CUBO_Y, CUBO_Z, FORME_LFO, FREQUENZA_LFO, FS, RAGGIO_INIZIALE  # noqa: E402
 from lingua import _  # noqa: E402
 from motore_audio import VoceTono  # noqa: E402
-from testi import conta, metri  # noqa: E402
+from testi import conta, elenco, metri, numero  # noqa: E402
 
 FILE_DEGLI_ESITI = STRUMENTI / "banco_bersagli_esiti.txt"
 # Il punto delle forme e delle grandezze: davanti al cannone, a metà altezza del cubo e a un quarto
@@ -50,15 +58,20 @@ PUNTI_DELLE_PORTANTI = ((0.0, CUBO_Y[0] + CUBO_LATO / 8, PUNTO_DI_PROVA[2]), (0.
 # Gabriele il 19 novembre 2026: oggi vanno dal raggio del primo livello a quello minimo.
 RAGGIO_DI_PROVA = RAGGIO_INIZIALE
 RAGGI_DI_PROVA = (5.0, 2.5, 1.0, 0.5)
-# La forma dell'LFO delle grandezze e delle portanti: il seno, la più regolare, perché cambi soltanto
-# ciò che il gruppo vuole far sentire.
+# La forma dell'LFO delle grandezze e delle portanti: il seno, la più regolare, coi parametri di
+# serie, perché cambi soltanto ciò che il gruppo vuole far sentire.
 FORMA_DI_PROVA = "seno"
-# Le portanti da confrontare, l'attuale fra loro.
-PORTANTI_DI_PROVA = ("organo", "seno", "triangolo", "sega_morbida")
+# Le portanti da confrontare: tutte quelle in gioco, che i bersagli si estraggono a caso (D18).
+PORTANTI_DI_PROVA = BERSAGLIO_PORTANTI
 # L'LFO a metà dell'intervallo del gioco, con la fase a zero; il seme conta per casuale e deriva, ed è
 # fisso perché tutte le sessioni sentano gli stessi valori a caso.
 FREQUENZA_LFO_DI_PROVA = (FREQUENZA_LFO[0] + FREQUENZA_LFO[1]) / 2
 SEME_DEL_BERSAGLIO = 73
+# Il seme dei parametri a caso delle forme, fisso per lo stesso motivo: le forme li estraggono da un
+# solo generatore, nell'ordine di FORME_LFO, come farebbe un bersaglio del gioco.
+SEME_DEI_PARAMETRI = 18
+# Quante versioni stanno in un gruppo: le lettere di banco_mira, meno quella del controllo.
+VERSIONI_PER_GRUPPO = len(banco.LETTERE) - 1
 # Quanto suona un bersaglio: le forme e le grandezze, abbastanza cicli dell'LFO per riconoscerli; le
 # portanti, ciascuno dei due punti, con una pausa fra l'uno e l'altro.
 DURATA_DEL_BERSAGLIO = 4.0
@@ -66,12 +79,21 @@ DURATA_DI_UN_PUNTO = 3.0
 PAUSA_FRA_I_PUNTI = 0.6
 
 
-def rendi_bersaglio(forma, raggio, punto, portante, durata, fs=FS):
-    """Il suono di un bersaglio fermo, come lo suonerebbe il motore del gioco: (campioni, 2) float32."""
-    bersaglio = Bersaglio(numero=0, forma=forma, raggio=raggio, partenza=punto, frequenza_lfo=FREQUENZA_LFO_DI_PROVA, fase_lfo=0.0, seme=SEME_DEL_BERSAGLIO)
+def parametri_di_prova():
+    """I parametri di ogni forma nel gruppo delle forme, estratti come nel gioco da un generatore col
+    seme SEME_DEI_PARAMETRI, nell'ordine di FORME_LFO: sempre gli stessi."""
+    rng = random.Random(SEME_DEI_PARAMETRI)
+    return {forma: parametri_a_caso(forma, rng) for forma in FORME_LFO}
+
+
+def rendi_bersaglio(forma, raggio, punto, portante, durata, parametri=None, fs=FS):
+    """Il suono di un bersaglio fermo, come lo suonerebbe il motore del gioco: (campioni, 2) float32.
+    parametri sono quelli della forma; None vuol dire quelli di serie."""
+    bersaglio = Bersaglio(numero=0, forma=forma, raggio=raggio, partenza=punto, frequenza_lfo=FREQUENZA_LFO_DI_PROVA, fase_lfo=0.0, seme=SEME_DEL_BERSAGLIO,
+                          portante=portante, parametri_lfo=parametri)
     campioni = round(durata * fs)
     with banco.in_memoria() as (motore, flusso):
-        motore.aggiungi(banco.entra_ed_esce(VoceTono(bersaglio.parametri_sonori, portante, 0, guadagno=0.0), 0, campioni, fs))
+        motore.aggiungi(banco.entra_ed_esce(VoceTono(bersaglio.parametri_sonori, bersaglio.portante, 0, guadagno=0.0), 0, campioni, fs))
         return flusso.rendi(campioni)
 
 
@@ -82,19 +104,46 @@ def componi(ricetta):
     for punto in ricetta["punti"]:
         if pezzi:
             pezzi.append(np.zeros((round(PAUSA_FRA_I_PUNTI * FS), 2), dtype=np.float32))
-        pezzi.append(rendi_bersaglio(ricetta["forma"], ricetta["raggio"], punto, ricetta["portante"], ricetta["durata"]))
+        pezzi.append(rendi_bersaglio(ricetta["forma"], ricetta["raggio"], punto, ricetta["portante"], ricetta["durata"], ricetta["parametri"]))
     return np.concatenate(pezzi)
 
 
-def _ricetta(forma, raggio, portante, punti, durata):
-    return {"forma": forma, "raggio": raggio, "portante": portante, "punti": tuple(punti), "durata": durata}
+def _ricetta(forma, raggio, portante, punti, durata, parametri=None):
+    return {"forma": forma, "raggio": raggio, "portante": portante, "punti": tuple(punti), "durata": durata, "parametri": parametri}
+
+
+def _valore(valore):
+    if isinstance(valore, int):
+        return str(valore)
+    return numero(valore, 2)
+
+
+def nome_della_forma(forma, parametri):
+    """Il nome che si rivela alla fine: la forma e i suoi parametri, con i numeri all'italiana."""
+    detti = [f"{parametro.nome} {_valore(parametri[parametro.nome])}" for parametro in PARAMETRI_LFO[forma]]
+    # Traduttori: forma è il nome di una forma dell'oscillazione, come trillo; parametri l'elenco dei suoi numeri.
+    return _("la forma {forma} dell'LFO, con {parametri}").format(forma=forma, parametri=elenco(detti))
 
 
 def _forme():
-    candidati = tuple(banco.Candidato(_("la forma {forma} dell'LFO").format(forma=forma),
-                                      _ricetta(forma, RAGGIO_DI_PROVA, BERSAGLIO_FORMA, (PUNTO_DI_PROVA,), DURATA_DEL_BERSAGLIO)) for forma in FORME_LFO)
-    return banco.Gruppo("forme", _("Bersagli, le forme"), _("quanto il suono si distingue dagli altri e quanto è gradevole"),
-                        _("In ogni lettera senti un bersaglio fermo, sempre nello stesso punto e della stessa grandezza."), candidati)
+    """I gruppi delle forme, al massimo VERSIONI_PER_GRUPPO forme ciascuno, nell'ordine di FORME_LFO."""
+    parametri = parametri_di_prova()
+    parti = [FORME_LFO[inizio:inizio + VERSIONI_PER_GRUPPO] for inizio in range(0, len(FORME_LFO), VERSIONI_PER_GRUPPO)]
+    gruppi = []
+    for posto, forme in enumerate(parti, start=1):
+        candidati = tuple(banco.Candidato(nome_della_forma(forma, parametri[forma]),
+                                          _ricetta(forma, RAGGIO_DI_PROVA, BERSAGLIO_FORMA, (PUNTO_DI_PROVA,), DURATA_DEL_BERSAGLIO, parametri[forma]))
+                          for forma in forme)
+        if len(parti) == 1:
+            chiave, titolo = "forme", _("Bersagli, le forme")
+        else:
+            chiave = "forme" if posto == 1 else f"forme_{posto}"
+            # Traduttori: parte e parti sono numeri: le forme sono divise in più gruppi d'ascolto.
+            titolo = _("Bersagli, le forme, parte {parte} di {parti}").format(parte=posto, parti=len(parti))
+        gruppi.append(banco.Gruppo(chiave, titolo, _("quanto il suono si distingue dagli altri e quanto è gradevole"),
+                                   _("In ogni lettera senti un bersaglio fermo, sempre nello stesso punto, della stessa grandezza e con lo stesso timbro; "
+                                     "cambia soltanto il modo in cui il suono oscilla."), candidati))
+    return tuple(gruppi)
 
 
 def _grandezze():
@@ -105,18 +154,14 @@ def _grandezze():
 
 
 def _portanti():
-    candidati = []
-    for portante in PORTANTI_DI_PROVA:
-        attuale = portante == BERSAGLIO_FORMA
-        nome = _("la portante {portante}").format(portante=portante)
-        if attuale:
-            nome = _("{nome}, quella attuale").format(nome=nome)
-        candidati.append(banco.Candidato(nome, _ricetta(FORMA_DI_PROVA, RAGGIO_DI_PROVA, portante, PUNTI_DELLE_PORTANTI, DURATA_DI_UN_PUNTO), attuale))
+    candidati = tuple(banco.Candidato(_("la portante {portante}").format(portante=portante),
+                                      _ricetta(FORMA_DI_PROVA, RAGGIO_DI_PROVA, portante, PUNTI_DELLE_PORTANTI, DURATA_DI_UN_PUNTO))
+                      for portante in PORTANTI_DI_PROVA)
     return banco.Gruppo("portanti", _("Bersagli, la portante"), _("quanto il suono è gradevole e quanto ti fa capire l'altezza del bersaglio"),
-                        _("In ogni lettera senti un bersaglio fermo, prima in basso e poi in alto."), tuple(candidati))
+                        _("In ogni lettera senti un bersaglio fermo, prima in basso e poi in alto."), candidati)
 
 
-GRUPPI = (_forme(), _grandezze(), _portanti())
+GRUPPI = (*_forme(), _grandezze(), _portanti())
 
 
 def prepara(seme, materiali=None):

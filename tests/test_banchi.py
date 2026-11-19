@@ -37,12 +37,13 @@ import banco_bersagli as bb
 import banco_mira as bm
 import banco_volo as bv
 
+import bersagli
 import costanti
 import fisica
 import mira
 import sintesi
 import suoni
-from bersagli import Bersaglio
+from bersagli import PARAMETRI_LFO, Bersaglio
 from costanti import ALZO_FREQUENZE, FS, PARAMETRI, PAUSA_FRA_BARRE, SCIVOLATA_DURATA, TACCA_DB
 from motore_audio import VoceTono
 
@@ -625,11 +626,30 @@ def _centro_in_ottave(mono, centro):
 
 
 def test_i_gruppi_dei_bersagli(materiali_dei_bersagli):
-    forme, grandezze, portanti = bb.GRUPPI
-    assert [c.ricetta["forma"] for c in forme.candidati] == list(costanti.FORME_LFO)
-    assert not any(c.attuale for c in (*forme.candidati, *grandezze.candidati)) and not grandezze.preferenza
+    *forme, grandezze, portanti = bb.GRUPPI
+    # Le forme stanno in più gruppi, ciascuno con una lettera libera per il controllo, nell'ordine di
+    # FORME_LFO: il primo tiene le sette della 0.1.0.
+    assert len(forme) == math.ceil(len(costanti.FORME_LFO) / bb.VERSIONI_PER_GRUPPO) > 1
+    assert all(len(g.candidati) < len(bm.LETTERE) for g in bb.GRUPPI)
+    assert [c.ricetta["forma"] for g in forme for c in g.candidati] == list(costanti.FORME_LFO)
+    assert [c.ricetta["forma"] for c in forme[0].candidati] == ["seno", "sega", "sega_inversa", "triangolo", "quadra", "casuale", "deriva"]
+    assert len({g.chiave for g in bb.GRUPPI}) == len({g.titolo for g in bb.GRUPPI}) == len(bb.GRUPPI) and forme[0].chiave == "forme"
+    # Ogni forma coi suoi parametri a caso, sempre gli stessi, e detti nel nome; grandezze e portanti coi parametri di serie.
+    parametri = bb.parametri_di_prova()
+    assert parametri == bb.parametri_di_prova()
+    assert [c.ricetta["parametri"] for g in forme for c in g.candidati] == [parametri[f] for f in costanti.FORME_LFO]
+    for candidato in (c for g in forme for c in g.candidati):
+        forma = candidato.ricetta["forma"]
+        assert candidato.nome.startswith(f"la forma {forma} dell'LFO, con ")
+        assert all(p.nome in candidato.nome for p in PARAMETRI_LFO[forma])
+    assert bb.nome_della_forma("quadra", {"larghezza": 0.5, "fronte": 0.125}) == "la forma quadra dell'LFO, con larghezza 0,50 e fronte 0,12"
+    assert bb.nome_della_forma("gradini", {"gradini": 4, "verso": -1}) == "la forma gradini dell'LFO, con gradini 4 e verso -1"
+    assert {c.ricetta["portante"] for g in forme for c in g.candidati} == {costanti.BERSAGLIO_FORMA}
+    assert all(c.ricetta["parametri"] is None for c in (*grandezze.candidati, *portanti.candidati))
+    # Nel gioco tutte le forme e tutte le portanti escono a caso: nessuna versione è quella attuale.
+    assert not any(c.attuale for g in bb.GRUPPI for c in g.candidati) and not grandezze.preferenza
     assert [c.ricetta["raggio"] for c in grandezze.candidati] == [5.0, 2.5, 1.0, 0.5]
-    assert [c.ricetta["portante"] for c in portanti.candidati if c.attuale] == [costanti.BERSAGLIO_FORMA]
+    assert [c.ricetta["portante"] for c in portanti.candidati] == list(costanti.BERSAGLIO_PORTANTI)
     for gruppo in bb.GRUPPI:
         materiali = materiali_dei_bersagli[gruppo.chiave]
         assert len({len(m) for m in materiali}) == 1
@@ -640,6 +660,16 @@ def test_i_gruppi_dei_bersagli(materiali_dei_bersagli):
             assert np.allclose(materiale[:, 0], materiale[:, 1], atol=1e-6)
             for altro in materiali[i + 1:]:
                 assert not np.array_equal(materiale, altro), gruppo.chiave
+
+
+def test_i_parametri_della_forma_cambiano_il_suono():
+    """Il banco suona i parametri della ricetta, non quelli di serie: la stessa forma, gli stessi
+    punto e portante, suona diversa."""
+    for forma in ("quadra", "trillo"):
+        scelti = bb.parametri_di_prova()[forma]
+        assert scelti != bersagli.parametri_di_serie(forma)
+        con, senza = (bb.rendi_bersaglio(forma, bb.RAGGIO_DI_PROVA, bb.PUNTO_DI_PROVA, costanti.BERSAGLIO_FORMA, 0.5, parametri) for parametri in (scelti, None))
+        assert con.shape == senza.shape and not np.array_equal(con, senza)
 
 
 def test_la_grandezza_allarga_l_oscillazione(materiali_dei_bersagli):
@@ -691,7 +721,7 @@ def test_la_sessione_dei_bersagli_interrotta(ascolto, materiali_dei_bersagli, mo
 
 
 def test_le_grandezze_si_riepilogano_per_raggio(materiali_dei_bersagli):
-    prova = bb.prepara(SEME, materiali_dei_bersagli)[1]
+    prova = next(p for p in bb.prepara(SEME, materiali_dei_bersagli) if p.gruppo.chiave == "grandezze")
     prova.iniziata = prova.svolta = True
     for lettera in prova.lettere:
         prova.voti[lettera] = 5 - prova.indice(lettera) if prova.indice(lettera) else 1

@@ -217,6 +217,9 @@ class FinestraPrincipale(wx.Frame):
         # Tutti i preset si sintetizzano adesso, così il primo sparo non aspetta la sintesi di un rumore.
         self.suoni.precarica()
         self.partita = (fabbrica_della_partita or _partita_vera)(self.motore, self.suoni, self.statistiche)
+        # La forma del proiettile delle Impostazioni (D17), e la voce del suo esempio, quando suona.
+        self._esempio_del_proiettile = None
+        self._dai_il_proiettile(self.impostazioni["proiettile"])
         self._crea_controlli()
         self._crea_menu()
         dentro_area_utile(self, MISURA)
@@ -272,6 +275,7 @@ class FinestraPrincipale(wx.Frame):
             )),
             (_("&Impostazioni"), (
                 Voce(_("&Volume..."), None, self.cambia_volume),
+                Voce(_("&Proiettile..."), None, self.cambia_proiettile),
                 Voce(_("&Leggi i resoconti con la sintesi"), None, self.cambia_sintesi, True),
                 Voce(_("L&ingua..."), None, self.cambia_lingua),
             )),
@@ -965,6 +969,77 @@ class FinestraPrincipale(wx.Frame):
         if self._salva_le_impostazioni():
             self.suoni.suona("confermato")
         testo = _("Il volume è {volume}.").format(volume=valore)
+        self._in_coda(testo, testo)
+
+    def _dai_il_proiettile(self, forma):
+        """
+        La forma del proiettile alla partita, che la usa dalla partita seguente, o subito se nessuna è in
+        corso (D17). Una partita che non la conosce, come quelle finte delle prove, non la riceve.
+        """
+        scegli = getattr(self.partita, "scegli_proiettile", None)
+        if callable(scegli):
+            scegli(forma)
+
+    def _ferma_l_esempio(self):
+        """Ferma l'esempio del proiettile che sta suonando, se c'è."""
+        voce, self._esempio_del_proiettile = self._esempio_del_proiettile, None
+        if voce is not None:
+            self.motore.ferma(voce)
+
+    def _prova_il_proiettile(self, forma):
+        """L'esempio della forma su cui si è fermato il dialogo del proiettile: quello di prima si ferma, e parte il nuovo."""
+        from partita import esempio_del_proiettile
+
+        self._ferma_l_esempio()
+        self._esempio_del_proiettile = esempio_del_proiettile(self.motore, forma)
+
+    @staticmethod
+    def _proiettile_dalla_prossima(forma, in_gioco):
+        """La frase della vista quando la forma per la prossima partita e quella della partita in corso sono diverse."""
+        # Traduttori: {forma} e {prima} sono nomi di forme d'onda, come «seno» o «sega morbida»: {forma} vale dalla prossima partita, {prima} è quella della partita in corso.
+        return _("Il proiettile suonerà in {forma} dalla prossima partita: quella in corso resta in {prima}.").format(
+            forma=dialoghi.nome_del_proiettile(forma), prima=dialoghi.nome_del_proiettile(in_gioco))
+
+    def cambia_proiettile(self):
+        """
+        Proiettile: il dialogo con le forme d'onda del proiettile (D17), che fa sentire un esempio di
+        ognuna. La forma nuova vale dalla prossima partita: se una partita è in corso, questa tiene la sua
+        fino alla fine, e la vista lo dice; altrimenti vale da subito, per la partita che comincerà.
+        """
+        prima = self.impostazioni["proiettile"]
+        self.suoni.suona("proiettile")
+        dialogo = dialoghi.SceltaProiettile(self, prima, self._prova_il_proiettile, self.suoni.suona)
+        try:
+            codice = self._modale(dialogo)
+            forma = dialogo.scelta
+        finally:
+            dialogo.ferma_la_prova()
+            self._ferma_l_esempio()
+            dialogo.Destroy()
+        # La forma della partita in corso: dopo un primo cambio a partita in corso le impostazioni hanno
+        # già quella nuova, e la partita tiene ancora la sua. Una partita che non la conosce, come
+        # quelle finte delle prove, suona nella forma delle impostazioni.
+        in_corso = self.partita.in_corso()
+        in_gioco = getattr(self.partita, "proiettile", prima) if in_corso else prima
+        if codice != wx.ID_OK or forma is None or forma == prima:
+            self.suoni.suona("annullato" if codice != wx.ID_OK or forma is None else "confermato")
+            if in_gioco != prima:
+                testo = self._proiettile_dalla_prossima(prima, in_gioco)
+            else:
+                # Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega morbida».
+                testo = _("Il proiettile resta in {forma}.").format(forma=dialoghi.nome_del_proiettile(prima))
+            self._in_coda(testo, testo)
+            return
+        self.impostazioni["proiettile"] = forma
+        self._dai_il_proiettile(forma)
+        self.statistiche.conta("proiettile_cambiato")
+        if self._salva_le_impostazioni():
+            self.suoni.suona("confermato")
+        if in_corso:
+            testo = self._proiettile_dalla_prossima(forma, in_gioco)
+        else:
+            # Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega morbida».
+            testo = _("Il proiettile adesso suona in {forma}: lo senti dalla prossima partita.").format(forma=dialoghi.nome_del_proiettile(forma))
         self._in_coda(testo, testo)
 
     def cambia_sintesi(self):

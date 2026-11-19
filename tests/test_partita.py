@@ -22,10 +22,10 @@ from aiuti_audio import motore_finto
 import partita as modulo_partita
 import suoni
 import testi
-from bersagli import Bersaglio, durata_del_bonus, genera, genera_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
+from bersagli import Bersaglio, durata_del_bonus, genera, genera_bonus, portanti_senza, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
     ATTENUAZIONE_IN_MIRA_DB,
-    BERSAGLIO_FORMA,
+    BERSAGLIO_PORTANTI,
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
     COLPI_INIZIALI,
@@ -40,6 +40,7 @@ from costanti import (
     PAUSA_FRA_BARRE,
     PREMIO_PRECISIONE,
     PROIETTILE_FORMA,
+    PROIETTILE_FORME,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     SFUMATURA_STOP,
@@ -81,8 +82,8 @@ class Banco:
         self.contati = []
         self.suoni = Suoni(self.motore, conta=self.contati.append)
 
-    def partita(self, statistiche=None, orologio=None, seme=SEME):
-        return Partita(self.motore, self.suoni, statistiche=statistiche, rng=random.Random(seme), orologio=orologio or Orologio())
+    def partita(self, statistiche=None, orologio=None, seme=SEME, proiettile=None):
+        return Partita(self.motore, self.suoni, statistiche=statistiche, rng=random.Random(seme), orologio=orologio or Orologio(), proiettile=proiettile)
 
 
 @pytest.fixture
@@ -225,7 +226,8 @@ def test_inizio_della_partita_e_voci_dei_bersagli(banco):
     for bersaglio in partita.bersagli:
         voce = partita._voci[bersaglio]
         assert isinstance(voce, VoceTono)
-        assert voce.forma == BERSAGLIO_FORMA and voce.inizio == k
+        # D18: il bersaglio suona nella sua portante, mai in quella del proiettile, che di serie è PROIETTILE_FORMA.
+        assert voce.forma == bersaglio.portante in portanti_senza(PROIETTILE_FORMA) and voce.inizio == k
         assert voce.parametri == bersaglio.parametri_sonori
         assert bersaglio.nato == banco.motore.tempo_di_gioco(k)
     assert banco.motore.tempo_scorre
@@ -234,8 +236,9 @@ def test_inizio_della_partita_e_voci_dei_bersagli(banco):
     assert isinstance(messaggi[0], Messaggio)
     assert messaggi[0].annuncio == "Partita nuova: Spazio per mirare."
     # Lo stesso seme dà gli stessi bersagli.
-    gemello = genera(1, random.Random(SEME), 1, partita.bersagli[0].nato)
+    gemello = genera(1, random.Random(SEME), 1, partita.bersagli[0].nato, portanti=portanti_senza(PROIETTILE_FORMA))
     assert np.allclose(gemello.partenza, partita.bersagli[0].partenza) and gemello.forma == partita.bersagli[0].forma
+    assert gemello.portante == partita.bersagli[0].portante and gemello.parametri_lfo == partita.bersagli[0].parametri_lfo
     # Finito l'effetto della partita nuova, ciò che si sente è la voce del bersaglio.
     uscita = banco.flusso.avanza(20)
     assert not uscita[:k].any()
@@ -285,7 +288,7 @@ def test_impatto_al_campione_esatto(banco, monkeypatch):
     proiettile = partita._voce_proiettile
     evento = partita._evento_impatto
     k = proiettile.inizio
-    assert isinstance(proiettile, VoceTono) and proiettile.forma == PROIETTILE_FORMA
+    assert isinstance(proiettile, VoceTono) and proiettile.forma == PROIETTILE_FORMA == partita.proiettile
     assert evento.tempo == pytest.approx(volo.fine) and volo.partenza == pytest.approx(banco.motore.tempo_di_gioco(k))
     # Lo sparo parte allo stesso campione del proiettile.
     assert any(inizio == k for _buffer, inizio in chiamate)
@@ -769,6 +772,47 @@ def test_gli_avvisi_aspettano_l_effetto_dell_impatto(banco, monkeypatch):
     assert voci[-1][1].inizio == esito.inizio + LUNGHEZZA_FINTA + stacco
 
 
+def test_la_prima_barra_aspetta_gli_avvisi(banco, monkeypatch):
+    """Con gli effetti lunghi di D16 l'avviso del livello nuovo, in fila dopo l'impatto, suona oltre il
+    secondo di silenzio della prima barra: la mira avviata subito dopo la resa allunga la pausa fino
+    alla fine degli avvisi, stacco compreso, così la fanfara non copre i bip; lo spazio nella pausa
+    allungata non conta, e la barra seguente torna al secondo solito."""
+    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
+    lungo = np.full((round(1.5 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: lungo if nome == suoni.EVENTI["livello_su"] else corto)
+    voci = []
+    originale = banco.suoni.suona
+
+    def spia(evento, *argomenti, **opzioni):
+        voce = originale(evento, *argomenti, **opzioni)
+        voci.append((evento, voce))
+        return voce
+
+    monkeypatch.setattr(banco.suoni, "suona", spia)
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
+    pausa = round(PAUSA_FRA_BARRE * FS)
+    partita = banco.partita()
+    partita.nuova()
+    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
+    colpisci(banco, partita)
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert [m.tipo for m in messaggi][:2] == ["resoconto", "livello"]
+    fanfara = next(v for nome, v in voci if nome == "livello_su")
+    fine = fanfara.inizio + len(lungo) + stacco
+    # Lo spazio subito dopo la resa: senza l'attesa i bip comincerebbero sotto la fanfara.
+    k = banco.motore.prossimo_campione()
+    assert k + pausa < fine
+    assert partita.spazio() == [] and partita.fase == "mira" and partita.barra == 0
+    assert partita.inizio_barra == fine
+    porta_udibile_a(banco, fine - 0.2 * FS)
+    assert partita.battito() == [] and partita.sottofase == "pausa"
+    assert partita.spazio() == [] and partita.valori == [] and partita.barra == 0
+    # Preso il primo valore, gli avvisi sono finiti: la seconda barra ha la sua pausa di sempre.
+    porta_udibile_a(banco, campione_del_valore(partita, 0.5))
+    assert partita.spazio() == [] and partita.barra == 1
+    assert partita.inizio_barra - banco.motore.prossimo_campione() == pausa
+
+
 def _bonus_quasi_uscito(banco, partita, anticipo):
     """Un bonus in volo, e il tempo di gioco che corre fino a tanti secondi prima della sua uscita."""
     partita.livello = LIVELLO_DEI_BONUS
@@ -924,10 +968,20 @@ def test_statistiche_aggiornate(banco, cartella_di_prova):
     partita = banco.partita(statistiche=statistiche)
     assert banco.suoni.conta == statistiche.suono
     partita.nuova()
+    primo = partita.bersagli[0]
     colpisci(banco, partita)
     fino_alla_risoluzione(banco, partita)
+    secondo = partita.bersagli[0]
     tiro_a_vuoto(banco, partita)
     partita.abbandona()
+    # I timbri di D18, apparsi e colpiti: il primo bersaglio colpito, il secondo nato al suo posto.
+    timbri = {portante: coppia for portante, coppia in statistiche.dati["portanti"].items() if coppia["apparsi"] or coppia["colpiti"]}
+    attesi = {}
+    for bersaglio, colpiti in ((primo, 1), (secondo, 0)):
+        coppia = attesi.setdefault(bersaglio.portante, {"apparsi": 0, "colpiti": 0})
+        coppia["apparsi"] += 1
+        coppia["colpiti"] += colpiti
+    assert timbri == attesi
     conti = statistiche.dati["conti"]
     assert (conti["partite_iniziate"], conti["mire_avviate"], conti["tiri"], conti["centri"], conti["tiri_a_vuoto"], conti["partite_abbandonate"]) == (1, 2, 2, 1, 1, 1)
     assert conti["punti"] == partita.punti > 0
@@ -941,6 +995,126 @@ def test_statistiche_aggiornate(banco, cartella_di_prova):
     assert statistiche.dati["ultime"][-1]["tiri"] == 2 and statistiche.dati["ultime"][-1]["centri"] == 1
     assert statistiche.dati["somme"]["centri_misurati"] == 1
     assert percorso.exists()
+
+
+# Il proiettile scelto nelle Impostazioni e le portanti dei bersagli (D17 e D18).
+
+def test_la_forma_del_proiettile_vale_dalla_partita_seguente(banco, cartella_di_prova):
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche, proiettile="triangolo")
+    assert partita.proiettile == partita.proiettile_scelto == "triangolo"
+    # Senza partita in corso la forma vale subito, per la partita che comincerà.
+    assert partita.scegli_proiettile("sega_morbida") is True
+    assert partita.proiettile == partita.proiettile_scelto == "sega_morbida"
+    partita.nuova()
+    assert partita.proiettile == "sega_morbida" and all(b.portante in portanti_senza("sega_morbida") for b in partita.bersagli)
+    # Con la partita in corso la forma nuova aspetta: questa tiene la sua dall'inizio alla fine.
+    assert partita.scegli_proiettile("seno") is False
+    assert (partita.proiettile, partita.proiettile_scelto) == ("sega_morbida", "seno")
+    colpisci(banco, partita)
+    assert partita._voce_proiettile.forma == "sega_morbida"
+    fino_alla_risoluzione(banco, partita)
+    # Il bersaglio nato al posto del colpito evita ancora la forma della partita in corso, non quella scelta dopo.
+    assert partita.bersagli and all(b.portante in portanti_senza("sega_morbida") for b in partita.bersagli)
+    # Anche una scelta fatta in pausa aspetta la partita seguente.
+    partita.pausa()
+    assert partita.scegli_proiettile("triangolo") is False
+    partita.pausa()
+    assert (partita.proiettile, partita.proiettile_scelto) == ("sega_morbida", "triangolo")
+    # La partita nuova, anche quella che abbandona la vecchia, prende la forma scelta per ultima.
+    partita.nuova()
+    assert partita.proiettile == "triangolo" and all(b.portante in portanti_senza("triangolo") for b in partita.bersagli)
+    partita.spazio()
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+    assert partita._voce_proiettile.forma == "triangolo"
+    fino_alla_risoluzione(banco, partita)
+    # Le statistiche contano le partite cominciate con ogni forma.
+    conti = statistiche.dati["conti"]
+    assert (conti["partite_con_la_sega_morbida"], conti["partite_col_triangolo"], conti["partite_col_seno"]) == (1, 1, 0)
+    assert conti["partite_iniziate"] == 2
+    # Abbandonata la partita, la forma scelta vale di nuovo subito.
+    partita.abbandona()
+    assert partita.scegli_proiettile("seno") is True and partita.proiettile == "seno"
+
+
+def test_una_forma_del_proiettile_sconosciuta_non_vale(banco):
+    with pytest.raises(ValueError, match="organo"):
+        banco.partita(proiettile="organo")
+    partita = banco.partita()
+    assert partita.proiettile == partita.proiettile_scelto == PROIETTILE_FORMA
+    # L'organo resta ai bersagli; le forme delle LFO e gli altri valori non sono forme del proiettile.
+    for sbagliata in ("organo", "quadra", "Seno", "", None):
+        with pytest.raises(ValueError):
+            partita.scegli_proiettile(sbagliata)
+    assert partita.proiettile == partita.proiettile_scelto == PROIETTILE_FORMA
+    # Ogni forma ha il suo contatore delle partite.
+    assert set(modulo_partita.CONTI_DEL_PROIETTILE) == set(PROIETTILE_FORME)
+    assert len(set(modulo_partita.CONTI_DEL_PROIETTILE.values())) == len(PROIETTILE_FORME)
+
+
+@pytest.mark.parametrize("forma", PROIETTILE_FORME)
+def test_i_bersagli_e_il_bonus_nascono_senza_la_portante_del_proiettile(banco, bonus_sicuro, monkeypatch, forma):
+    """D18: genera e genera_bonus ricevono le portanti di BERSAGLIO_PORTANTI tolta la forma del proiettile, e ogni voce suona nella portante del suo bersaglio."""
+    chieste = []
+    for nome in ("genera", "genera_bonus"):
+        originale = getattr(modulo_partita, nome)
+
+        def spia(*argomenti, _nome=nome, _originale=originale, **opzioni):
+            chieste.append((_nome, opzioni.get("portanti")))
+            return _originale(*argomenti, **opzioni)
+
+        monkeypatch.setattr(modulo_partita, nome, spia)
+    partita = banco.partita(proiettile=forma)
+    partita.nuova()
+    partita.livello = LIVELLO_DEI_BONUS
+    tiro_a_vuoto(banco, partita)
+    bonus = partita.bonus
+    assert bonus is not None
+    attese = portanti_senza(forma)
+    assert set(attese) == set(BERSAGLIO_PORTANTI) - {forma} and len(attese) == len(BERSAGLIO_PORTANTI) - 1
+    # Tanti bersagli nuovi del livello, come quelli che nascono al posto dei colpiti: nessuno ha la portante del
+    # proiettile, e col seme fisso escono tutte le altre.
+    for _volta in range(30):
+        partita._nuovo_bersaglio()
+    assert {nome for nome, _portanti in chieste} == {"genera", "genera_bonus"}
+    assert all(portanti == attese for _nome, portanti in chieste)
+    assert bonus.portante in attese and partita._voci[bonus].forma == bonus.portante
+    for bersaglio in partita.bersagli:
+        assert bersaglio.portante in attese and partita._voci[bersaglio].forma == bersaglio.portante
+    assert {b.portante for b in partita.bersagli} == set(attese)
+
+
+def test_l_esempio_del_proiettile(banco):
+    motore, flusso = banco.motore, banco.flusso
+    durata = round(modulo_partita.DURATA_DELL_ESEMPIO * FS)
+    volo = modulo_partita.volo_d_esempio()
+    # Il volo d'esempio è un tiro verso il centro del cubo, che dura più dell'esempio, e passa da lì.
+    centro = np.array((0.0, 25.0, 55.0))
+    assert volo.colpito is None and volo.durata > modulo_partita.DURATA_DELL_ESEMPIO
+    tempi = np.linspace(0.0, volo.durata, 20001)
+    assert np.min(np.linalg.norm(volo.traiettoria.posizione(tempi) - centro, axis=1)) < 0.01
+    # Il tempo di gioco fermo, come col dialogo aperto, non ferma l'esempio: segue il tempo dell'audio.
+    motore.ferma_tempo()
+    k = motore.prossimo_campione()
+    voce = modulo_partita.esempio_del_proiettile(motore, "triangolo")
+    assert isinstance(voce, VoceTono) and voce.forma == "triangolo" and voce.inizio == k
+    frequenze, pan, _guadagni = voce.parametri(0.0, np.array((k, k + durata // 2, k + durata)) / FS)
+    assert frequenze[0] < frequenze[1] < frequenze[2] and np.allclose(pan, 0.0, atol=1e-9)
+    uscita = flusso.avanza_fino(k + durata + 2 * motore.blocco)
+    assert not uscita[:k].any()
+    # Suona per tutto l'esempio, ogni decimo di secondo, e dopo tace.
+    pezzo = FS // 10
+    assert all(np.abs(uscita[inizio:inizio + pezzo]).max() > 0 for inizio in range(k, k + durata - pezzo, pezzo))
+    assert not uscita[k + durata:].any()
+    assert voce.finita and voce.finita_al == k + durata
+    # Fermato prima, come quando parte l'esempio di un'altra forma, finisce subito, con la sfumatura del motore.
+    seconda = modulo_partita.esempio_del_proiettile(motore, "seno")
+    flusso.avanza_fino(seconda.inizio + motore.blocco)
+    motore.ferma(seconda)
+    flusso.avanza(4)
+    assert seconda.finita and seconda.finita_al < seconda.inizio + durata
+    with pytest.raises(ValueError, match="organo"):
+        modulo_partita.esempio_del_proiettile(motore, "organo")
 
 
 def test_il_primato_della_serie_si_dice_una_volta(banco, cartella_di_prova):

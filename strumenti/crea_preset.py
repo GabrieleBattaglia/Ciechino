@@ -126,43 +126,54 @@ PRESET = {
                         "morbido, e scende, mentre i bip della mira salgono. Va bene per un valore fissato, una scelta presa o un fermo "
                         "che scatta."),
     },
-    # Il tiro e i suoi esiti.
+    # Il tiro e i suoi esiti. Dal banco del volo del 19 novembre 2026 (D16): tutti e quattro più lunghi e più marcati, lo
+    # sparo più grave e con un decadimento più lungo, il tonfo con un rilascio più lungo, e i due colpiti col loro jingle,
+    # di bande strettissime di rumore, tre note il normale e otto il bonus, che resta più brillante.
     "ciechino_sparo": {
-        "score": [["4000-11000", 0.006, 0.0, 0.4], ["700-9000.120-1400", 0.17, 0.0, 0.5]],
+        "score": [["900-6000", 0.008, 0.0, 0.35], ["120-2200.40-200", 0.45, 0.0, 0.5]],
         "kind": 5,
-        "adsr": [1.0, 35.0, 25.0, 50.0],
-        "descrizione": ("Ciechino, dopo il terzo valore della mira parte il colpo dal cannone: uno sparo secco di rumore bianco, uno "
-                        "schiocco acutissimo di 6 ms fra 4000 e 11000 Hz e il corpo del colpo, con la banda che scende da 700-9000 a "
-                        "120-1400 Hz e si spegne, al centro, in 176 ms. Va bene per uno sparo, un lancio o una detonazione breve."),
+        "adsr": [1.0, 40.0, 45.0, 50.0],
+        "descrizione": ("Ciechino, dopo il terzo valore della mira parte il colpo dal cannone: uno sparo pieno di rumore bianco, uno "
+                        "schiocco di 8 ms fra 900 e 6000 Hz e il corpo del colpo, con la banda che scende da 120-2200 a 40-200 Hz e si "
+                        "spegne piano in un rimbombo grave, al centro, in 458 ms. Va bene per uno sparo, un colpo di cannone o una "
+                        "detonazione."),
     },
     "ciechino_colpito": {
-        "score": [["1500-1650", 0.05, 0.0, 0.3], ["250-7000.150-2000", 0.28, 0.0, 0.5]],
+        "score": [["1450-1700", 0.06, 0.0, 0.4], ["150-8000.80-900", 0.4, 0.0, 0.5], ["p", 0.02, 0.0, -0.5],
+                  ["1295-1342", 0.08, 0.0, 0.25], ["1540-1596", 0.08, 0.0, 0.25], ["2056-2131", 0.18, 0.0, 0.3]],
         "kind": 6,
-        "adsr": [1.0, 40.0, 35.0, 45.0],
+        "adsr": [1.0, 30.0, 55.0, 45.0],
         "descrizione": ("Ciechino, il proiettile colpisce un bersaglio: rumore rosa, il tocco metallico dell'impatto, una banda stretta "
-                        "fra 1500 e 1650 Hz che suona quasi come una nota, poi l'esplosione, chiara e larga, con la banda che scende da "
-                        "250-7000 a 150-2000 Hz; 330 ms, al centro, perché il gioco lo colloca nel punto dell'impatto. Va bene per un "
-                        "bersaglio centrato, un colpo andato a segno o un'esplosione."),
+                        "fra 1450 e 1700 Hz che suona quasi come un sol 6, poi l'esplosione, piena e larga, con la banda che scende da "
+                        "150-8000 a 80-900 Hz, e un breve jingle di tre note, bande strettissime attorno al mi 6, al sol 6 e a un do 7 "
+                        "più lungo; 820 ms, al centro, perché il gioco lo colloca nel punto dell'impatto. Il jingle del bonus, in "
+                        "ciechino_colpito_bonus, è più acuto, più rapido e di otto note. Va bene per un bersaglio centrato, un colpo "
+                        "andato a segno o un'esplosione con un premio."),
     },
     "ciechino_colpito_bonus": {
-        "score": [["2000-2200", 0.04, 0.0, 0.3], ["200-9000.300-3000", 0.26, 0.0, 0.5], ["2050-2150", 0.06, 0.0, 0.25],
-                  ["p", 0.02, 0.0, -0.5], ["2580-2700", 0.06, 0.0, 0.25], ["p", 0.02, 0.0, -0.5], ["3080-3220", 0.12, 0.0, 0.3]],
+        "score": [["1900-2300", 0.05, 0.0, 0.35], ["200-10000.250-2500", 0.4, 0.0, 0.5], ["p", 0.02, 0.0, -0.5],
+                  ["2056-2131", 0.045, 0.0, 0.2], ["2590-2685", 0.045, 0.0, 0.2], ["3080-3192", 0.045, 0.0, 0.2], ["4112-4261", 0.07, 0.0, 0.25],
+                  ["p", 0.03, 0.0, -0.5], ["3080-3192", 0.045, 0.0, 0.2], ["3458-3583", 0.045, 0.0, 0.2], ["3881-4022", 0.045, 0.0, 0.2],
+                  ["4112-4261", 0.24, 0.0, 0.3]],
         "kind": 8,
-        "adsr": [1.0, 40.0, 35.0, 45.0],
+        "adsr": [1.0, 30.0, 50.0, 45.0],
         "descrizione": ("Ciechino, il proiettile colpisce un bersaglio bonus: rumore azzurro, più brillante e più ricco del bersaglio "
-                        "normale, il tocco dell'impatto fra 2000 e 2200 Hz, l'esplosione con la banda che scende da 200-9000 a 300-3000 "
-                        "Hz, e tre scintille che salgono come un arpeggio di do maggiore, bande strettissime attorno al do 7, al mi 7 e al "
-                        "sol 7; 580 ms, al centro, perché il gioco lo colloca nel punto dell'impatto. Va bene per un premio colpito, un "
-                        "bersaglio speciale o un festeggiamento."),
+                        "normale, il tocco dell'impatto fra 1900 e 2300 Hz, l'esplosione con la banda che scende da 200-10000 a "
+                        "250-2500 Hz, e un jingle di otto note, bande strettissime un'ottava sopra quelle di ciechino_colpito: "
+                        "l'arpeggio rapido di do maggiore che sale, do 7, mi 7, sol 7 e do 8, e dopo una breve pausa la scala che "
+                        "risale, sol 7, la 7 e si 7, fino a un do 8 lungo; 1080 ms, al centro, perché il gioco lo colloca nel punto "
+                        "dell'impatto. Va bene per un premio colpito, un bersaglio speciale o un festeggiamento."),
     },
     "ciechino_a_terra": {
-        "score": [["50-450.40-180", 0.3, 0.0, 0.5], ["500-2200", 0.07, 0.0, 0.1]],
+        "score": [["60-1100.42-220", 0.52, 0.0, 0.5], ["p", 0.03, 0.0, -0.5], ["400-2400", 0.07, 0.0, 0.0],
+                  ["300-1800.180-1000", 0.16, 0.0, -0.12]],
         "kind": 7,
-        "adsr": [2.0, 40.0, 30.0, 45.0],
-        "descrizione": ("Ciechino, il proiettile arriva a terra senza colpire niente: un tonfo grave di rumore marrone, con la banda che "
-                        "scende da 50-450 a 40-180 Hz, e un poco di terra che ricade, una breve banda fra 500 e 2200 Hz più piano; 370 "
-                        "ms, al centro, perché il gioco lo colloca nel punto dove cade. Va bene per un tiro a vuoto, un oggetto che cade o "
-                        "un colpo nel terreno."),
+        "adsr": [1.0, 30.0, 45.0, 60.0],
+        "descrizione": ("Ciechino, il proiettile arriva a terra senza colpire niente: un tonfo grave e lungo di rumore marrone, con la "
+                        "banda che scende da 60-1100 a 42-220 Hz e una coda che si spegne piano, poi un poco di terra che ricade, due "
+                        "brevi fruscii più piano, uno fra 400 e 2400 Hz e uno con la banda che scende da 300-1800 a 180-1000 Hz; 780 "
+                        "ms, al centro, perché il gioco lo colloca nel punto dove cade. Va bene per un tiro a vuoto, un oggetto pesante "
+                        "che cade o un colpo nel terreno."),
     },
     # I livelli e i bersagli bonus.
     "ciechino_livello_su": {
@@ -315,6 +326,14 @@ PRESET = {
         "descrizione": ("Ciechino, il volume cambiato dal menu Impostazioni: una sola nota di seno, la 5 al centro, che cresce dal "
                         "quasi silenzio al livello pieno, in 220 ms, così si sente il volume scelto. Va bene per provare un volume, un "
                         "livello o un guadagno."),
+    },
+    "ciechino_proiettile": {
+        "score": [["e5.b5", 0.12, -0.6, -0.1], ["b5.f#5", 0.16, 0.6, -0.12]],
+        "kind": 1,
+        "adsr": [5.0, 10.0, 80.0, 25.0],
+        "descrizione": ("Ciechino, si apre la scelta della forma del proiettile, dal menu Impostazioni: una parabola in miniatura, seno, "
+                        "una nota che sale dal mi 5 al si 5 partendo da sinistra e ricade al fa diesis 5 arrivando a destra, come un "
+                        "colpo in volo, in 280 ms. Va bene per una traiettoria, un lancio o la scelta di un'arma."),
     },
     "ciechino_impostazioni": {
         "score": [["f5", 0.03, -0.2, -0.1], ["p", 0.025, 0.0, -0.5], ["c6", 0.03, 0.2, -0.05], ["g5", 0.05, 0.0, -0.08]],

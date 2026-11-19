@@ -26,11 +26,13 @@ import aggiornamento
 import classifica
 import costanti
 import impostazioni
+import partita as modulo_partita
 import percorsi
 import suoni
 from gui import dialoghi
 from gui import finestra as modulo_finestra
 from gui.finestra import FinestraPrincipale, guadagno_del_volume
+from motore_audio import VoceTono
 
 # Il buffer che prende il posto di ogni preset: corto, e non vuoto, così la voce nasce e il suono si annota.
 CAMPIONI_FINTI = 64
@@ -64,9 +66,22 @@ class PartitaFinta:
         # La pausa automatica (D14): se c'è, e le volte in cui la partita si è fermata o ripresa da sola.
         self.automatica = False
         self.automatiche = []
+        # Le forme del proiettile ricevute dalla finestra (D17), in ordine; proiettile è quella della
+        # partita in corso, o di quella che comincerà, come nella partita vera.
+        self.proiettili = []
+        self.proiettile = self._proiettile_scelto = costanti.PROIETTILE_FORMA
 
     def in_corso(self):
         return self.fase not in ("pronta", "finita")
+
+    def scegli_proiettile(self, forma):
+        """Come la partita vera: la forma vale subito senza partita in corso, dalla seguente con una partita in corso."""
+        self.proiettili.append(forma)
+        self._proiettile_scelto = forma
+        if self.in_corso():
+            return False
+        self.proiettile = forma
+        return True
 
     def pausa_automatica(self, attiva):
         """Come la partita vera: si ferma se è in corso e non già in pausa; riprende soltanto la pausa messa così."""
@@ -80,6 +95,7 @@ class PartitaFinta:
 
     def nuova(self):
         self.chiamate.append("nuova")
+        self.proiettile = self._proiettile_scelto
         self.fase = "ascolto"
         self.in_pausa = self.automatica = False
         return [Messaggio("info", "Comincia la partita, livello 1.", "Si comincia.")]
@@ -241,7 +257,7 @@ def test_i_menu_coi_tasti_giusti(finestra):
             tasti[voce.GetItemLabelText()] = rapido.ToString() if rapido is not None else None
     assert tasti == {
         "Nuova partita": "Ctrl+N", "Pausa": "Ctrl+P", "Classifica": "Ctrl+K", "Statistiche": "Ctrl+T", "Esci": "Ctrl+Q",
-        "Volume...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
+        "Volume...": None, "Proiettile...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
         "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
         "Entra al PUB, il gruppo di supporto...": None, "Chiedi aiuto al PUB...": None,
     }
@@ -847,6 +863,164 @@ def test_la_lingua_nuova_offre_di_riaprire(finestra, sentiti, messaggi, monkeypa
     assert finestra.chiusa and riaperture == [True] and finestra.congedo == modulo_finestra.RIAPERTURA and sentiti[-1] == "riavvio"
 
 
+def _spia_del_motore(finestra, monkeypatch):
+    """Le voci calcolate aggiunte al motore e le loro fermate, in ordine: ("aggiungi", voce) e ("ferma", voce, campione).
+    I suoni già pronti degli eventi, che il motore suona come VoceBuffer, non contano."""
+    motore = finestra.motore
+    visti = []
+    aggiungi, ferma = motore.aggiungi, motore.ferma
+
+    def spia_aggiungi(voce):
+        if isinstance(voce, VoceTono):
+            visti.append(("aggiungi", voce))
+        return aggiungi(voce)
+
+    def spia_ferma(voce, campione=None, sfumatura=costanti.SFUMATURA_STOP):
+        if isinstance(voce, VoceTono):
+            visti.append(("ferma", voce, campione))
+        return ferma(voce, campione, sfumatura)
+
+    monkeypatch.setattr(motore, "aggiungi", spia_aggiungi)
+    monkeypatch.setattr(motore, "ferma", spia_ferma)
+    return visti
+
+
+def _scelta_del_proiettile(monkeypatch, indici, conferma=True):
+    """Il dialogo del proiettile al posto di quello vero: si sposta sulle righe indici, fermandosi su ognuna, poi preme OK o Annulla."""
+    aperti = []
+
+    def sceglie(dialogo):
+        aperti.append(dialogo)
+        for indice in indici:
+            dialogo.elenco.SetSelection(indice)
+            dialogo.prova()
+        if conferma:
+            dialogo.conferma()
+            return dialogo.GetReturnCode()
+        return wx.ID_CANCEL
+
+    monkeypatch.setattr(dialoghi.SceltaProiettile, "ShowModal", sceglie)
+    return aperti
+
+
+def test_il_proiettile_si_sceglie_ascoltando_l_esempio(finestra, sentiti, voce_finta, monkeypatch):
+    """D17: senza partita in corso la forma vale subito; ogni riga su cui ci si ferma fa sentire il suo esempio, che si ferma quando parte il seguente e quando il dialogo si chiude."""
+    partita = finestra.partita
+    # All'apertura la partita riceve la forma delle impostazioni.
+    assert partita.proiettili == [costanti.PROIETTILE_FORMA]
+    visti = _spia_del_motore(finestra, monkeypatch)
+    aperti = _scelta_del_proiettile(monkeypatch, (2, 1))
+    finestra._esegui(finestra.cambia_proiettile)
+    assert len(aperti) == 1 and aperti[0].forme == costanti.PROIETTILE_FORME
+    # Due esempi, uno per riga, con la voce del gioco: il primo si ferma prima che parta il secondo, il secondo alla chiusura.
+    voci = [passo[1] for passo in visti if passo[0] == "aggiungi"]
+    assert [voce.forma for voce in voci] == ["sega_morbida", "triangolo"]
+    durata = round(modulo_partita.DURATA_DELL_ESEMPIO * finestra.motore.fs) - round(modulo_partita.SFUMATURA_DELL_ESEMPIO * finestra.motore.fs)
+    primo, secondo = voci
+    assert visti == [("aggiungi", primo), ("ferma", primo, primo.inizio + durata), ("ferma", primo, None),
+                     ("aggiungi", secondo), ("ferma", secondo, secondo.inizio + durata), ("ferma", secondo, None)]
+    assert finestra._esempio_del_proiettile is None
+    assert sentiti == ["proiettile", "confermato"]
+    assert finestra.impostazioni["proiettile"] == "triangolo" and _leggi(costanti.FILE_IMPOSTAZIONI)["proiettile"] == "triangolo"
+    assert partita.proiettili == [costanti.PROIETTILE_FORMA, "triangolo"]
+    assert finestra.statistiche.dati["conti"]["proiettile_cambiato"] == 1
+    testo = "Il proiettile adesso suona in triangolo: lo senti dalla prossima partita."
+    assert finestra.vista.GetValue().endswith("\n" + testo) and voce_finta[-1] == testo
+
+
+def test_il_proiettile_scelto_a_partita_in_corso_vale_dalla_seguente(finestra, sentiti, voce_finta, monkeypatch):
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    durante = []
+    aperti = _scelta_del_proiettile(monkeypatch, (2,))
+    originale = dialoghi.SceltaProiettile.ShowModal
+
+    def guarda_e_sceglie(dialogo):
+        # Col dialogo aperto la partita è ferma, come con ogni dialogo (D14).
+        durante.append((partita.in_pausa, partita.automatica))
+        return originale(dialogo)
+
+    monkeypatch.setattr(dialoghi.SceltaProiettile, "ShowModal", guarda_e_sceglie)
+    finestra._esegui(finestra.cambia_proiettile)
+    assert len(aperti) == 1 and durante == [(True, True)]
+    assert sentiti == ["proiettile", "confermato"]
+    assert partita.proiettili[-1] == "sega_morbida" and _leggi(costanti.FILE_IMPOSTAZIONI)["proiettile"] == "sega_morbida"
+    testo = "Il proiettile suonerà in sega morbida dalla prossima partita: quella in corso resta in seno."
+    assert finestra.vista.GetValue().endswith("\n" + testo) and voce_finta[-1] == testo
+    # Chiuso il dialogo, la partita riprende da sola.
+    wx.Yield()
+    assert not partita.in_pausa
+
+
+def test_due_cambi_nella_stessa_partita_dicono_la_forma_della_partita(finestra, sentiti, voce_finta, monkeypatch):
+    """Dopo un primo cambio a partita in corso le impostazioni hanno già la forma nuova, e la partita
+    tiene la sua: il secondo cambio e l'annullamento dicono la forma della partita, non quella
+    delle impostazioni."""
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    assert partita.proiettile == "seno"
+    _scelta_del_proiettile(monkeypatch, (1,))
+    finestra._esegui(finestra.cambia_proiettile)
+    assert voce_finta[-1] == "Il proiettile suonerà in triangolo dalla prossima partita: quella in corso resta in seno."
+    _scelta_del_proiettile(monkeypatch, (2,))
+    finestra._esegui(finestra.cambia_proiettile)
+    assert partita.proiettile == "seno" and finestra.impostazioni["proiettile"] == "sega_morbida"
+    assert voce_finta[-1] == "Il proiettile suonerà in sega morbida dalla prossima partita: quella in corso resta in seno."
+    _scelta_del_proiettile(monkeypatch, (0,))
+    finestra._esegui(finestra.cambia_proiettile)
+    assert voce_finta[-1] == "Il proiettile suonerà in seno dalla prossima partita: quella in corso resta in seno."
+    # Annulla, con la forma delle impostazioni diversa da quella della partita: si dicono tutte e due.
+    _scelta_del_proiettile(monkeypatch, (1,))
+    finestra._esegui(finestra.cambia_proiettile)
+    _scelta_del_proiettile(monkeypatch, (2,), conferma=False)
+    finestra._esegui(finestra.cambia_proiettile)
+    assert sentiti[-1] == "annullato" and finestra.impostazioni["proiettile"] == "triangolo"
+    assert voce_finta[-1] == "Il proiettile suonerà in triangolo dalla prossima partita: quella in corso resta in seno."
+    # Finita la partita, la forma della prossima è una sola.
+    partita.fase = "finita"
+    _scelta_del_proiettile(monkeypatch, (2,), conferma=False)
+    finestra._esegui(finestra.cambia_proiettile)
+    assert voce_finta[-1] == "Il proiettile resta in triangolo."
+    assert finestra.statistiche.dati["conti"]["proiettile_cambiato"] == 4
+
+
+def test_il_proiettile_annullato_o_uguale_resta(finestra, sentiti, monkeypatch):
+    visti = _spia_del_motore(finestra, monkeypatch)
+    _scelta_del_proiettile(monkeypatch, (1,), conferma=False)
+    finestra._esegui(finestra.cambia_proiettile)
+    # Annulla dopo un esempio: l'esempio si ferma, la forma resta, niente si salva né si conta.
+    assert [passo[0] for passo in visti] == ["aggiungi", "ferma", "ferma"] and visti[-1][2] is None
+    assert sentiti == ["proiettile", "annullato"]
+    assert finestra.impostazioni["proiettile"] == costanti.PROIETTILE_FORMA and finestra.partita.proiettili == [costanti.PROIETTILE_FORMA]
+    assert finestra.vista.GetValue().endswith("\nIl proiettile resta in seno.")
+    # OK sulla forma che c'era già: confermato, e la forma resta, senza un cambio da contare.
+    _scelta_del_proiettile(monkeypatch, ())
+    finestra._esegui(finestra.cambia_proiettile)
+    assert sentiti[2:] == ["proiettile", "confermato"] and finestra.partita.proiettili == [costanti.PROIETTILE_FORMA]
+    assert finestra.vista.GetValue().endswith("\nIl proiettile resta in seno.\nIl proiettile resta in seno.")
+    assert finestra.statistiche.dati["conti"]["proiettile_cambiato"] == 0
+
+
+def test_il_proiettile_non_salvato_vale_fino_all_uscita(finestra, sentiti, monkeypatch):
+    monkeypatch.setattr(impostazioni, "salva", lambda dati, percorso=None: False)
+    _scelta_del_proiettile(monkeypatch, (1,))
+    finestra._esegui(finestra.cambia_proiettile)
+    assert sentiti == ["proiettile", "salvataggio_non_riuscito"]
+    assert finestra.impostazioni["proiettile"] == "triangolo" and finestra.partita.proiettili[-1] == "triangolo"
+    righe = finestra.vista.GetValue().splitlines()
+    assert righe[-2:] == ["Le impostazioni non si sono potute salvare: valgono fino all'uscita.", "Il proiettile adesso suona in triangolo: lo senti dalla prossima partita."]
+
+
+def test_la_forma_salvata_arriva_alla_partita_all_apertura(app_wx, sentiti, messaggi, senza_modali):
+    with open(percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI), "w", encoding="utf-8") as file:
+        json.dump({"proiettile": "sega_morbida"}, file)
+    finestra = _crea()
+    try:
+        assert finestra.impostazioni["proiettile"] == "sega_morbida" and finestra.partita.proiettili == ["sega_morbida"]
+    finally:
+        _chiudi(finestra)
+
+
 # L'aiuto.
 
 def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
@@ -859,6 +1033,8 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
         for voce, tasto in comandi:
             assert (f"{voce}: {tasto}." if tasto else f"{voce}: dal menu, senza tasto rapido.") in righe, voce
     assert "Manuale: Maiusc+F1." in righe and "Volume: dal menu, senza tasto rapido." in righe
+    # La voce nuova del proiettile (D17) entra nella guida da sola, perché la guida nasce dalla tabella dei menu.
+    assert "Il menu Impostazioni, con 4 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
     assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
     assert sentiti == ["guida"]

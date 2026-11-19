@@ -84,6 +84,8 @@ GRUPPI = [
         "classifica": "ciechino_classifica",
         "statistiche": "ciechino_statistiche",
         "volume": "ciechino_volume",
+        # La scelta della forma del proiettile (D17): una piccola parabola, come un colpo in volo.
+        "proiettile": "ciechino_proiettile",
         # La lettura dei resoconti con la sintesi: l'interruttore che si accende e quello che si spegne.
         "impostazioni": "ciechino_impostazioni",
         "sintesi_spenta": "ciechino_sintesi_spenta",
@@ -158,6 +160,7 @@ AZIONI = {
     "classifica": _("si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita"),
     "statistiche": _("si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita"),
     "volume": _("Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo"),
+    "proiettile": _("si apre la scelta della forma del proiettile, con Proiettile del menu Impostazioni"),
     "impostazioni": _("la lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni"),
     "sintesi_spenta": _("la lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni"),
     "lingua": _("si apre la scelta della lingua, con Lingua del menu Impostazioni"),
@@ -172,7 +175,7 @@ AZIONI = {
     "pub": _("Entra al PUB, dal menu Aiuto"),
     "pub_aiuto": _("Chiedi aiuto al PUB, dal menu Aiuto"),
     "domanda": _("una domanda col sì e col no, come Ctrl+N o l'uscita con una partita in corso"),
-    "confermato": _("un dialogo confermato con OK, come il nome in classifica o il volume, o una mail del PUB pronta"),
+    "confermato": _("un dialogo confermato con OK, come il nome in classifica, il volume o il proiettile, o una mail del PUB pronta"),
     "annullato": _("un dialogo chiuso con Annulla o con Esc, o il no a una domanda"),
     "campo_da_correggere": _("OK in un dialogo con un campo da correggere, come un nome vuoto in classifica"),
     "aggiornamento_disponibile": _("all'avvio del programma compilato, su GitHub c'è una versione nuova, e la proposta si apre"),
