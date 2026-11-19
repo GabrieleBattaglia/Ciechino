@@ -99,10 +99,11 @@ CODA = 0.3
 RISERVA_DI_TEMPO = 1.0
 # Nella rassegna soltanto Escape ferma il suono, e la interrompe.
 TASTI_DELLA_RASSEGNA = frozenset("\x1b")
-# I numeri delle versioni da confrontare, dati da Gabriele il 19 novembre 2026: l'alzo esponenziale da
-# 150 a 2400 hertz, la potenza da meno 30 decibel, le tacche più forti di tanti decibel di quelle
-# attuali, i bip del conto di 20 millesimi.
-ALZO_LARGO = (150.0, 2400.0)
+# I numeri delle versioni da confrontare, dati da Gabriele il 19 novembre 2026: la potenza da meno 30
+# decibel, le tacche più forti di tanti decibel di quelle attuali, i bip del conto di 20 millesimi.
+# L'alzo da 150 a 2400 hertz ha vinto il primo banco ed è diventato quello attuale (D19): il
+# confronto è ora con la scala di prima, da 220 a 1760.
+ALZO_DI_PRIMA = (220.0, 1760.0)
 POTENZA_DB_MINIMO_RIDOTTO = -30.0
 TACCHE_PIU_FORTI_DB = 6.0
 BIP_LUNGHI = 0.020
@@ -745,7 +746,7 @@ def _direzione():
 
 def _alzo():
     candidati = []
-    for curva, frequenze in (("esponenziale", ALZO_FREQUENZE), ("esponenziale", ALZO_LARGO), ("lineare", ALZO_FREQUENZE)):
+    for curva, frequenze in (("esponenziale", ALZO_FREQUENZE), ("esponenziale", ALZO_DI_PRIMA), ("lineare", ALZO_FREQUENZE)):
         attuale = curva == sintesi.CURVE["alzo"][0] and tuple(frequenze) == tuple(ALZO_FREQUENZE)
         nome = _("la scala {curva} da {da} a {a} hertz").format(curva=curva, da=intero(frequenze[0]), a=intero(frequenze[1]))
         candidati.append(Candidato(_attuale(nome, attuale), (("alzo", {"curva": curva, "frequenze": tuple(frequenze)}),), attuale))

@@ -87,12 +87,14 @@ BIP_FREQUENZE = {
 # Poi la scivolata, che dura 3 secondi e arriva al massimo se nessuno la ferma.
 SCIVOLATA_DURATA = 3.0
 SCIVOLATA_DB = -9.0
-# Le forme d'onda delle tre scivolate, fra quelle di sintesi.FORME_PORTANTI.
-SCIVOLATA_FORMA = {"direzione": "triangolo", "alzo": "seno", "potenza": "triangolo"}
+# Le forme d'onda delle tre scivolate, fra quelle di sintesi.FORME_PORTANTI. La direzione è in seno
+# dal banco della mira del 19 novembre 2026 (D19); prima era in triangolo.
+SCIVOLATA_FORMA = {"direzione": "seno", "alzo": "seno", "potenza": "triangolo"}
 # La direzione: un suono fisso che va da tutto a sinistra a tutto a destra.
 DIREZIONE_FREQUENZA = 440.0
-# L'alzo: la frequenza sale dal grave all'acuto, su una scala esponenziale.
-ALZO_FREQUENZE = (220.0, 1760.0)
+# L'alzo: la frequenza sale dal grave all'acuto, su una scala esponenziale, da 150 a 2400 hertz,
+# quattro ottave, dal banco della mira del 19 novembre 2026 (D19); prima era da 220 a 1760.
+ALZO_FREQUENZE = (150.0, 2400.0)
 # La potenza: un suono fisso che cresce dal quasi silenzio al massimo, linearmente in decibel;
 # il minimo è in decibel sotto SCIVOLATA_DB.
 POTENZA_FREQUENZA = 330.0
@@ -120,10 +122,19 @@ MARGINE_DOPO_LA_SCIVOLATA = 0.05
 FORME_LFO = ("seno", "sega", "sega_inversa", "triangolo", "quadra", "casuale", "deriva")
 FREQUENZA_LFO = (2.0, 6.0)
 FATTORE_ESCURSIONE = 1.0
+# Ogni bersaglio moltiplica la sua escursione per un numero a caso fra questi due: un po' di varietà,
+# senza confondere la grandezza (D18, 19 novembre 2026).
+ESCURSIONE_A_CASO = (0.85, 1.15)
+# La portante di ogni bersaglio si estrae a caso fra queste (D18), tolta quella che chi gioca ha
+# scelto per il proiettile, perché proiettile e bersagli non si confondano. BERSAGLIO_FORMA resta
+# la portante di serie, dove una sola serve.
+BERSAGLIO_PORTANTI = ("organo", "seno", "triangolo", "sega_morbida")
 BERSAGLIO_FORMA = "organo"
 BERSAGLIO_DB = -3.0
-# Il proiettile in volo.
-PROIETTILE_FORMA = "sega_morbida"
+# Il proiettile in volo: la sua forma d'onda si sceglie nelle Impostazioni fra queste tre (D17,
+# 19 novembre 2026); di serie il seno, che ha vinto nel banco del volo.
+PROIETTILE_FORME = ("seno", "triangolo", "sega_morbida")
+PROIETTILE_FORMA = "seno"
 PROIETTILE_DB = -3.0
 # Il silenzio fra due avvisi in fila, come l'impatto, il livello nuovo e il bonus, in secondi:
 # quanto basta perché l'orecchio li senta due. Da tarare ascoltando, come i suoni stessi.

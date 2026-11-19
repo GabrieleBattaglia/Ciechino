@@ -271,7 +271,7 @@ def test_le_scale_dell_alzo():
         for frazione in (0.25, 0.45, 0.65):
             misurata = _frequenza(scivolata.buffer[:, 0], _nella_scala(scivolata, frazione))
             assert misurata == pytest.approx(attese[impostazioni["curva"]](da, a, frazione), rel=0.005), (candidato.nome, frazione)
-    assert {c.ricetta[0][1]["frequenze"] for c in gruppo.candidati} == {tuple(ALZO_FREQUENZE), bm.ALZO_LARGO}
+    assert {c.ricetta[0][1]["frequenze"] for c in gruppo.candidati} == {tuple(ALZO_FREQUENZE), bm.ALZO_DI_PRIMA}
 
 
 def test_le_scale_della_potenza():
@@ -755,7 +755,9 @@ def test_i_materiali_del_volo(materiali_del_volo):
     tratto = slice(round(0.3 * FS), sparo - round(0.1 * FS))
     distanza = fisica.distanza_dal_cannone(bv.PUNTO_DEL_BERSAGLIO)
     assert _db(vicino[tratto]) - _db(ripido[tratto]) == pytest.approx((bv.DB_PER_METRO_RIPIDO - costanti.DB_PER_METRO) * distanza, abs=0.3)
-    assert np.array_equal(vicino, materiali[0])
+    # La caduta attuale usa il timbro attuale: è lo stesso materiale della sua lettera nel timbro.
+    attuale, = (indice for indice, candidato in enumerate(timbro.candidati) if candidato.attuale)
+    assert np.array_equal(vicino, materiali[attuale])
     # Nel centro il bersaglio tace dall'impatto, finito l'effetto; nel corto continua fino in fondo.
     bersaglio, tiri = bv.tiri_di_prova()
     arrivo = sparo + math.ceil(tiri[0].volo.durata / costanti.VELOCITA_DEL_TEMPO * FS)
