@@ -1,0 +1,28 @@
+Banco del volo, 2026-11-19 16:13, seme 664673.
+Volo, il timbro del proiettile, lettera A: 3.
+Volo, il timbro del proiettile, lettera B: 3.
+Volo, il timbro del proiettile, lettera C: 4.
+Volo, il timbro del proiettile, lettera D: 4.
+Volo, il timbro del proiettile, 2026-11-19 16:16: Io metterei la forma d'onda per la traettoria volo, nelle impostazioni e lascerei scegliere all'utente.
+Volo, la caduta del volume, lettera A: 3.
+Volo, la caduta del volume, lettera B: 3.
+Volo, la caduta del volume, lettera C: 4.
+Volo, la caduta del volume, 2026-11-19 16:18: test superato, nessun commento
+Volo, gli effetti: sparo col preset ciechino_sparo, colpito col preset ciechino_colpito, colpito_bonus col preset ciechino_colpito_bonus e a_terra col preset ciechino_a_terra.
+Volo, gli effetti, 2026-11-19 16:20: L'idea è buona per tutti ma chiedo che siano un po più lunghi e marcati. Lo sparo deve usare frequenze più basse e un decay un po più lungo. Anche l'arrivo a terra deve avere una durata maggiore. Ovviamente il volume dipende dalla distanza a cui è caduto però il release deve essere maggiore. Il jignle del bersaglio colpito deve avere più note.
+Volo, il timbro del proiettile, la lettera A era: la forma triangolo del proiettile.
+Volo, il timbro del proiettile, la lettera B era: la forma sega_morbida del proiettile, quella attuale; è la versione ripetuta per controllo, identica alla lettera C.
+Volo, il timbro del proiettile, la lettera C era: la forma sega_morbida del proiettile, quella attuale; è la versione ripetuta per controllo, identica alla lettera B.
+Volo, il timbro del proiettile, la lettera D era: la forma seno del proiettile.
+Riepilogo, Volo, il timbro del proiettile, la forma seno del proiettile: totale 4 con 1 voto, media 4,0, lettera D.
+Riepilogo, Volo, il timbro del proiettile, la forma sega_morbida del proiettile, quella attuale: totale 7 con 2 voti, media 3,5, lettere B e C.
+Riepilogo, Volo, il timbro del proiettile, la forma triangolo del proiettile: totale 3 con 1 voto, media 3,0, lettera A.
+Controllo, Volo, il timbro del proiettile: le lettere B e C, identiche campione per campione, hanno avuto B 3 e C 4.
+Scelta, Volo, il timbro del proiettile: la forma seno del proiettile.
+Volo, la caduta del volume, la lettera A era: la caduta di 0,4 decibel per metro; è la versione ripetuta per controllo, identica alla lettera B.
+Volo, la caduta del volume, la lettera B era: la caduta di 0,4 decibel per metro; è la versione ripetuta per controllo, identica alla lettera A.
+Volo, la caduta del volume, la lettera C era: la caduta di 0,25 decibel per metro, quella attuale.
+Riepilogo, Volo, la caduta del volume, la caduta di 0,25 decibel per metro, quella attuale: totale 4 con 1 voto, media 4,0, lettera C.
+Riepilogo, Volo, la caduta del volume, la caduta di 0,4 decibel per metro: totale 6 con 2 voti, media 3,0, lettere A e B.
+Controllo, Volo, la caduta del volume: le lettere A e B, identiche campione per campione, hanno avuto A 3 e B 3.
+Scelta, Volo, la caduta del volume: la caduta di 0,25 decibel per metro, quella attuale.

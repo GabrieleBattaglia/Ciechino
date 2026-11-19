@@ -1,0 +1,40 @@
+Banco dei bersagli, 2026-11-19 16:21, seme 513410.
+Bersagli, le forme: nessuna preferenza.
+Bersagli, le forme, 2026-11-19 16:23: Li voglio tutti e anche di più. Nel senso che tutti i parametri degli LFO devono essere scelti random in un certo range così i bersagli appaiono sempre leggermente diversi.
+Bersagli, la grandezza, lettera A: 4.
+Bersagli, la grandezza, lettera B: 2.
+Bersagli, la grandezza, lettera C: 3.
+Bersagli, la grandezza, lettera D: 2.
+Bersagli, la grandezza, lettera E: 1.
+Bersagli, la grandezza, 2026-11-19 16:25: Meno ampio il range di variazione in hz, meno sembra grande il bersaglio.
+Bersagli, la portante: nessuna preferenza.
+Bersagli, la portante, 2026-11-19 16:26: Vanno bene tutte le coppie. Più alto in hz, più alto nello spazio.
+Bersagli, le forme, la lettera A era: la forma sega_inversa dell'LFO.
+Bersagli, le forme, la lettera B era: la forma triangolo dell'LFO.
+Bersagli, le forme, la lettera C era: la forma deriva dell'LFO; è la versione ripetuta per controllo, identica alla lettera E.
+Bersagli, le forme, la lettera D era: la forma sega dell'LFO.
+Bersagli, le forme, la lettera E era: la forma deriva dell'LFO; è la versione ripetuta per controllo, identica alla lettera C.
+Bersagli, le forme, la lettera F era: la forma casuale dell'LFO.
+Bersagli, le forme, la lettera G era: la forma quadra dell'LFO.
+Bersagli, le forme, la lettera H era: la forma seno dell'LFO.
+Riepilogo, Bersagli, le forme: nessuna preferenza fra le lettere.
+Controllo, Bersagli, le forme: le lettere C e E erano identiche campione per campione, e non hai dato preferenze.
+Scelta, Bersagli, le forme: senza voti nessuna versione ha la preferenza.
+Bersagli, la grandezza, la lettera A era: il raggio di 5 metri.
+Bersagli, la grandezza, la lettera B era: il raggio di 0,5 metri; è la versione ripetuta per controllo, identica alla lettera E.
+Bersagli, la grandezza, la lettera C era: il raggio di 2,5 metri.
+Bersagli, la grandezza, la lettera D era: il raggio di 1 metro.
+Bersagli, la grandezza, la lettera E era: il raggio di 0,5 metri; è la versione ripetuta per controllo, identica alla lettera B.
+Riepilogo, Bersagli, la grandezza, il raggio di 5 metri: totale 4 con 1 voto, media 4,0, lettera A.
+Riepilogo, Bersagli, la grandezza, il raggio di 2,5 metri: totale 3 con 1 voto, media 3,0, lettera C.
+Riepilogo, Bersagli, la grandezza, il raggio di 1 metro: totale 2 con 1 voto, media 2,0, lettera D.
+Riepilogo, Bersagli, la grandezza, il raggio di 0,5 metri: totale 3 con 2 voti, media 1,5, lettere B e E.
+Controllo, Bersagli, la grandezza: le lettere B e E, identiche campione per campione, hanno avuto B 2 e E 1.
+Bersagli, la portante, la lettera A era: la portante sega_morbida; è la versione ripetuta per controllo, identica alla lettera B.
+Bersagli, la portante, la lettera B era: la portante sega_morbida; è la versione ripetuta per controllo, identica alla lettera A.
+Bersagli, la portante, la lettera C era: la portante triangolo.
+Bersagli, la portante, la lettera D era: la portante seno.
+Bersagli, la portante, la lettera E era: la portante organo, quella attuale.
+Riepilogo, Bersagli, la portante: nessuna preferenza fra le lettere.
+Controllo, Bersagli, la portante: le lettere A e B erano identiche campione per campione, e non hai dato preferenze.
+Scelta, Bersagli, la portante: senza voti resta la portante organo, quella attuale.
