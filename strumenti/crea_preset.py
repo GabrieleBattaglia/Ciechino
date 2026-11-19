@@ -1,0 +1,558 @@
+"""
+Ciechino, i preset nuovi dei suoni: li aggiunge alla collezione condivisa di GBUtils e li firma.
+Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+Nasce il 2026-11-19 con la 0.1.0, sul modello dei passi dei suoni di MESS, con la decisione D10:
+i preset fatti per Ciechino entrano in Acu_Collection.json col prefisso ciechino_ e con la firma
+ciechino nel campo usato_da, autorizzati da Gabriele il 19 novembre 2026.
+La tabella PRESET ha un preset nuovo per ogni evento di suoni.EVENTI, tranne il caffè, che usa
+donazione come tutto il parco. Le regole di Gabriele sui suoni stanno qui e le controlla
+controlla_tabella prima di ogni scrittura: un preset per evento, mai lo stesso per due eventi;
+niente onda quadra; brevi e morbidi gli eventi che suonano spesso; lo sparo, i bersagli colpiti e il
+colpo a terra fatti di rumore, perché idee.txt li vuole rappresentati da un effetto costituito da
+rumore; esiti diversi riconoscibili a orecchio.
+Lo score sta nella forma del file della collezione: quartine [nota, durata, panorama, volume], dove
+il volume è lo scarto dalla base 0,5 di Acusticator, un numero o la lista dei due capi di una
+scivolata. Per il rumore, kind da 5 a 8, il primo campo è la banda del passabanda.
+La scrittura passa soltanto da Acusticator.aggiorna, che rilegge il file sotto lucchetto e cambia
+soltanto ciò che serve, e da Acusticator.firma: gli altri preset non si toccano. Lo strumento è
+idempotente: un preset che c'è già, uguale alla tabella, non si riscrive, e una firma che c'è già
+non si rimette; se non c'è niente da fare il file non si scrive affatto. Un preset che c'è già ma è
+diverso dalla tabella, per esempio ritoccato da Gabriele con Acu_Maker, resta com'è, e lo strumento
+lo dice: lo sostituisce soltanto con --sostituisci.
+Uso, dalla cartella del programma:
+python strumenti/crea_preset.py --prova dice soltanto che cosa farebbe sulla collezione condivisa;
+python strumenti/crea_preset.py --collezione PERCORSO lavora su un'altra collezione, per esempio
+una copia da provare;
+python strumenti/crea_preset.py lavora sulla collezione condivisa di GBUtils, e dopo ci vuole un
+commit a parte nel repository di GBUtils, con la sua versione alzata.
+"""
+
+import argparse
+import json
+import os
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+RADICE = Path(__file__).resolve().parent.parent
+if str(RADICE) not in sys.path:
+    sys.path.insert(0, str(RADICE))
+
+from GBUtils import Acusticator  # noqa: E402
+
+import suoni  # noqa: E402
+
+# L'identificativo di Ciechino nelle firme usato_da della collezione.
+APP = "ciechino"
+PREFISSO = "ciechino_"
+# Ogni descrizione dei preset nuovi comincia così, come quelle di MESS cominciano con "MESS, ".
+INIZIO_DESCRIZIONE = "Ciechino, "
+# L'evento del caffè usa il preset donazione, l'unica onda quadra ammessa, come in tutto il parco.
+EVENTO_DEL_CAFFE = "caffe"
+PRESET_DEL_CAFFE = "donazione"
+ONDA_QUADRA = 2
+# Gli eventi che suonano spesso, a ogni valore della mira o a ogni F5 e F7: la regola di Gabriele
+# li vuole brevi e morbidi, sotto questa durata in secondi. Non sta in costanti.py perché riguarda
+# il disegno dei preset, non il gioco.
+EVENTI_FREQUENTI = ("valore_preso", "mira_avviata", "vai_alla_vista", "vai_alla_barra")
+DURATA_MASSIMA_FREQUENTI = 0.08
+
+# I preset nuovi, nell'ordine dei gruppi di suoni.GRUPPI. Le note si scrivono col nome inglese, le
+# bande del rumore in hertz, col punto per la scivolata.
+PRESET = {
+    # La partita, l'inizio e la fine.
+    "ciechino_nuova_partita": {
+        "score": [["2500-9000", 0.012, -0.3, 0.35], ["1200-3500.2500-6000", 0.07, -0.1, 0.1], ["p", 0.04, 0.0, -0.5],
+                  ["700-4000", 0.035, 0.2, 0.45]],
+        "kind": 5,
+        "adsr": [3.0, 30.0, 50.0, 40.0],
+        "descrizione": ("Ciechino, comincia una partita nuova: il cannone che si arma, rumore bianco, uno scatto acuto a sinistra fra 2500 e "
+                        "9000 Hz, l'otturatore che scorre con la banda che sale da 1200-3500 a 2500-6000 Hz e, dopo una breve pausa, il colpo "
+                        "secco della chiusura appena a destra, fra 700 e 4000 Hz; 157 ms. Va bene per un'arma che si carica, un meccanismo "
+                        "che si arma o un inizio pronto all'azione."),
+    },
+    "ciechino_ultimo_colpo": {
+        "score": [["e3.c3", 0.07, 0.0, 0.05], ["p", 0.09, 0.0, -0.5], ["d3.a#2", 0.1, 0.0, -0.02]],
+        "kind": 4,
+        "adsr": [1.0, 60.0, 20.0, 39.0],
+        "descrizione": ("Ciechino, nella riserva resta l'ultimo colpo: un battito di cuore, due colpi gravi di dente di sega che cadono, "
+                        "dal mi 3 al do 3 e, dopo una breve pausa, dal re 3 al la diesis 2, al centro, in 260 ms. Va bene per un'ultima "
+                        "possibilità, una tensione che sale o un avvertimento grave."),
+    },
+    "ciechino_partita_finita": {
+        "score": [["d6", 0.09, 0.5, -0.05], ["a5", 0.09, 0.25, -0.05], ["f5", 0.09, 0.0, -0.05], ["d5", 0.11, -0.25, -0.05],
+                  ["a4", 0.42, -0.5, -0.02]],
+        "kind": 1,
+        "adsr": [4.0, 20.0, 65.0, 30.0],
+        "descrizione": ("Ciechino, la riserva è vuota e la partita finisce: una breve frase di seno che scende, re 6, la 5, fa 5 e re 5, "
+                        "l'arpeggio di re minore da destra verso sinistra, e un la 4 lungo che si posa; 800 ms. È lo specchio di "
+                        "ciechino_livello_su, che sale in maggiore. Va bene per una fine, una sconfitta serena o una chiusura."),
+    },
+    "ciechino_in_classifica": {
+        "score": [["g4", 0.09, -0.3, -0.15], ["c5", 0.09, -0.15, -0.15], ["e5", 0.09, 0.0, -0.15], ["g5", 0.2, 0.15, -0.12],
+                  ["p", 0.03, 0.0, -0.5], ["e5", 0.08, 0.0, -0.15], ["g5", 0.42, 0.0, -0.1]],
+        "kind": 4,
+        "adsr": [5.0, 20.0, 70.0, 25.0],
+        "descrizione": ("Ciechino, a partita finita il punteggio entra nella classifica dei migliori: una fanfara di dente di sega, "
+                        "squillante come un ottone, sol 4, do 5, mi 5 e sol 5, poi la risposta, mi 5 e un sol 5 lungo, al centro, in un "
+                        "secondo; suona prima della finestra del nome. Il suo rovescio è ciechino_fuori_classifica. Va bene per un record, "
+                        "un ingresso fra i migliori o una vittoria."),
+    },
+    "ciechino_fuori_classifica": {
+        "score": [["g4", 0.16, 0.0, -0.2], ["f#4", 0.16, 0.0, -0.2], ["f4", 0.16, 0.0, -0.2], ["e4.d#4", 0.45, 0.0, [-0.2, -0.32]]],
+        "kind": 4,
+        "adsr": [8.0, 15.0, 70.0, 30.0],
+        "descrizione": ("Ciechino, a partita finita il punteggio non entra nella classifica dei migliori: un ottone di dente di sega, "
+                        "piano, che scende per semitoni, sol 4, fa diesis 4 e fa 4, e un mi 4 lungo che cede ancora verso il re diesis 4 "
+                        "spegnendosi, al centro, in 930 ms. Un peccato detto con un sorriso. Il suo rovescio è ciechino_in_classifica. Va "
+                        "bene per un tentativo non riuscito, una consolazione o un risultato che non basta."),
+    },
+    # La mira.
+    "ciechino_mira_avviata": {
+        "score": [["200-1200.400-2000", 0.07, 0.0, 0.15]],
+        "kind": 7,
+        "adsr": [55.0, 0.0, 100.0, 40.0],
+        "descrizione": ("Ciechino, lo spazio avvia la mira e il tempo del gioco si ferma: un respiro trattenuto, un soffio breve di rumore "
+                        "marrone che nasce piano e si schiarisce, con la banda che sale da 200-1200 a 400-2000 Hz, al centro, in 70 ms. "
+                        "Suona a ogni tiro, quindi è breve e morbido, e non ha altezza, per non confondersi con i bip e le scivolate della "
+                        "mira. Va bene per un'attenzione che si concentra, una mira o un fiato sospeso."),
+    },
+    "ciechino_valore_preso": {
+        "score": [["a5", 0.016, 0.0, -0.12], ["e5", 0.044, 0.0, -0.08]],
+        "kind": 3,
+        "adsr": [5.0, 45.0, 30.0, 40.0],
+        "descrizione": ("Ciechino, la mira prende un valore, la direzione, l'alzo o la potenza: uno scatto di fermo, onda triangolare, un "
+                        "tocco brevissimo di la 5 che cade sul mi 5, al centro, in 60 ms. Suona tre volte a ogni tiro, quindi è breve e "
+                        "morbido, e scende, mentre i bip della mira salgono. Va bene per un valore fissato, una scelta presa o un fermo "
+                        "che scatta."),
+    },
+    # Il tiro e i suoi esiti.
+    "ciechino_sparo": {
+        "score": [["4000-11000", 0.006, 0.0, 0.4], ["700-9000.120-1400", 0.17, 0.0, 0.5]],
+        "kind": 5,
+        "adsr": [1.0, 35.0, 25.0, 50.0],
+        "descrizione": ("Ciechino, dopo il terzo valore della mira parte il colpo dal cannone: uno sparo secco di rumore bianco, uno "
+                        "schiocco acutissimo di 6 ms fra 4000 e 11000 Hz e il corpo del colpo, con la banda che scende da 700-9000 a "
+                        "120-1400 Hz e si spegne, al centro, in 176 ms. Va bene per uno sparo, un lancio o una detonazione breve."),
+    },
+    "ciechino_colpito": {
+        "score": [["1500-1650", 0.05, 0.0, 0.3], ["250-7000.150-2000", 0.28, 0.0, 0.5]],
+        "kind": 6,
+        "adsr": [1.0, 40.0, 35.0, 45.0],
+        "descrizione": ("Ciechino, il proiettile colpisce un bersaglio: rumore rosa, il tocco metallico dell'impatto, una banda stretta "
+                        "fra 1500 e 1650 Hz che suona quasi come una nota, poi l'esplosione, chiara e larga, con la banda che scende da "
+                        "250-7000 a 150-2000 Hz; 330 ms, al centro, perché il gioco lo colloca nel punto dell'impatto. Va bene per un "
+                        "bersaglio centrato, un colpo andato a segno o un'esplosione."),
+    },
+    "ciechino_colpito_bonus": {
+        "score": [["2000-2200", 0.04, 0.0, 0.3], ["200-9000.300-3000", 0.26, 0.0, 0.5], ["2050-2150", 0.06, 0.0, 0.25],
+                  ["p", 0.02, 0.0, -0.5], ["2580-2700", 0.06, 0.0, 0.25], ["p", 0.02, 0.0, -0.5], ["3080-3220", 0.12, 0.0, 0.3]],
+        "kind": 8,
+        "adsr": [1.0, 40.0, 35.0, 45.0],
+        "descrizione": ("Ciechino, il proiettile colpisce un bersaglio bonus: rumore azzurro, più brillante e più ricco del bersaglio "
+                        "normale, il tocco dell'impatto fra 2000 e 2200 Hz, l'esplosione con la banda che scende da 200-9000 a 300-3000 "
+                        "Hz, e tre scintille che salgono come un arpeggio di do maggiore, bande strettissime attorno al do 7, al mi 7 e al "
+                        "sol 7; 580 ms, al centro, perché il gioco lo colloca nel punto dell'impatto. Va bene per un premio colpito, un "
+                        "bersaglio speciale o un festeggiamento."),
+    },
+    "ciechino_a_terra": {
+        "score": [["50-450.40-180", 0.3, 0.0, 0.5], ["500-2200", 0.07, 0.0, 0.1]],
+        "kind": 7,
+        "adsr": [2.0, 40.0, 30.0, 45.0],
+        "descrizione": ("Ciechino, il proiettile arriva a terra senza colpire niente: un tonfo grave di rumore marrone, con la banda che "
+                        "scende da 50-450 a 40-180 Hz, e un poco di terra che ricade, una breve banda fra 500 e 2200 Hz più piano; 370 "
+                        "ms, al centro, perché il gioco lo colloca nel punto dove cade. Va bene per un tiro a vuoto, un oggetto che cade o "
+                        "un colpo nel terreno."),
+    },
+    # I livelli e i bersagli bonus.
+    "ciechino_livello_su": {
+        "score": [["a4", 0.065, -0.6, -0.05], ["d5", 0.065, -0.3, -0.05], ["f#5", 0.065, 0.0, -0.05], ["a5", 0.065, 0.3, -0.05],
+                  ["d6", 0.32, 0.5, 0.0]],
+        "kind": 3,
+        "adsr": [4.0, 15.0, 70.0, 30.0],
+        "descrizione": ("Ciechino, i centri del livello sono fatti e si sale di livello: una breve frase che sale, onda triangolare, "
+                        "l'arpeggio di re maggiore, la 4, re 5, fa diesis 5 e la 5, da sinistra verso destra, e un re 6 lungo che resta in "
+                        "alto; 580 ms. Lo specchio è ciechino_partita_finita, che scende in minore. Va bene per un livello superato, un "
+                        "traguardo o una promozione."),
+    },
+    "ciechino_bonus_appare": {
+        "score": [["e6", 0.035, -0.5, -0.2], ["g#6", 0.035, -0.25, -0.2], ["e6", 0.035, 0.0, -0.2], ["g#6", 0.035, 0.25, -0.2],
+                  ["b6", 0.11, 0.5, -0.15]],
+        "kind": 1,
+        "adsr": [8.0, 20.0, 70.0, 30.0],
+        "descrizione": ("Ciechino, compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce: uno scintillio di seno, "
+                        "un trillo veloce fra mi 6 e sol diesis 6 che passa da sinistra a destra e si ferma su un si 6, in 250 ms. Il suo "
+                        "seguito, quando il bonus esce senza essere colpito, è ciechino_bonus_uscito. Va bene per un'occasione che si "
+                        "presenta, un oggetto raro o un premio di passaggio."),
+    },
+    "ciechino_bonus_uscito": {
+        "score": [["g#6", 0.035, 0.0, -0.12], ["e6", 0.035, 0.0, -0.15], ["g#6", 0.035, 0.0, -0.18], ["e6", 0.035, 0.0, -0.21],
+                  ["c#6.g#5", 0.16, 0.0, [-0.24, -0.4]]],
+        "kind": 1,
+        "adsr": [8.0, 20.0, 70.0, 30.0],
+        "descrizione": ("Ciechino, il bersaglio bonus esce senza essere stato colpito: il trillo di ciechino_bonus_appare, fra sol diesis "
+                        "6 e mi 6, sempre più piano, che invece di salire scivola giù dal do diesis 6 al sol diesis 5 e svanisce, al "
+                        "centro, in 300 ms. Un'occasione persa. Va bene per un premio che se ne va, un'opportunità sfumata o qualcosa "
+                        "che scompare."),
+    },
+    # La pausa e lo spazio a vuoto.
+    "ciechino_pausa": {
+        "score": [["a5.d5", 0.22, 0.0, [-0.1, -0.35]]],
+        "kind": 3,
+        "adsr": [5.0, 0.0, 100.0, 30.0],
+        "descrizione": ("Ciechino, la partita va in pausa: un nastro che rallenta, onda triangolare che scivola dal la 5 al re 5 e cala "
+                        "di volume, al centro, in 220 ms. Il suo specchio è ciechino_ripresa. Va bene per una pausa, un'attesa o "
+                        "qualcosa che si ferma."),
+    },
+    "ciechino_ripresa": {
+        "score": [["d5.a5", 0.22, 0.0, [-0.35, -0.1]]],
+        "kind": 3,
+        "adsr": [30.0, 0.0, 100.0, 10.0],
+        "descrizione": ("Ciechino, la partita riprende dalla pausa: il nastro che riparte, onda triangolare che sale dal re 5 al la 5 "
+                        "crescendo di volume, al centro, in 220 ms. È lo specchio di ciechino_pausa. Va bene per una ripresa, un "
+                        "riavvio o qualcosa che torna in moto."),
+    },
+    "ciechino_non_ora": {
+        "score": [["d4", 0.045, 0.0, -0.1], ["p", 0.035, 0.0, -0.5], ["d4.b3", 0.08, 0.0, -0.15]],
+        "kind": 3,
+        "adsr": [5.0, 30.0, 50.0, 40.0],
+        "descrizione": ("Ciechino, lo spazio premuto quando non può fare niente, per esempio col proiettile in volo o a partita finita: "
+                        "due tocchi sordi di onda triangolare sul re 4, il secondo più piano, che cede di una terza minore fino al si 3, "
+                        "al centro, in 160 ms. Un garbato non adesso. Va bene per un comando che arriva nel momento sbagliato o un tasto "
+                        "che deve aspettare."),
+    },
+    # La finestra, l'avvio, l'uscita e gli errori.
+    "ciechino_avvio": {
+        "score": [["e5", 0.06, -0.5, -0.1], ["b5", 0.06, -0.3, -0.1], ["a5", 0.08, -0.1, -0.05], ["e6", 0.35, 0.0, -0.05]],
+        "kind": 3,
+        "adsr": [3.0, 12.0, 75.0, 25.0],
+        "descrizione": ("Ciechino, il programma si apre: il motivo di Ciechino, onda triangolare, mi 5, il salto di quinta al si 5, un "
+                        "passo indietro sul la 5 e l'arrivo lungo sul mi 6, come una mira che trova il bersaglio, da sinistra verso il "
+                        "centro, in 550 ms. Lo rovescia ciechino_uscita. Va bene per un benvenuto, un avvio o una presentazione."),
+    },
+    "ciechino_uscita": {
+        "score": [["e6", 0.08, 0.0, -0.05], ["a5", 0.06, -0.1, -0.05], ["b5", 0.06, -0.3, -0.05], ["e5", 0.4, -0.5, -0.05]],
+        "kind": 3,
+        "adsr": [3.0, 12.0, 75.0, 30.0],
+        "descrizione": ("Ciechino, l'uscita dal programma: il motivo di ciechino_avvio al contrario, onda triangolare, mi 6, la 5, si 5 e "
+                        "un mi 5 lungo che si posa, dal centro verso sinistra, in 600 ms. Va bene per un congedo, un'uscita o la fine di "
+                        "una sessione."),
+    },
+    "ciechino_primo_piano": {
+        "score": [["b5", 0.04, 0.0, -0.2], ["p", 0.02, 0.0, -0.5], ["b5.e6", 0.1, 0.0, -0.15]],
+        "kind": 1,
+        "adsr": [3.0, 20.0, 60.0, 30.0],
+        "descrizione": ("Ciechino, si apre Ciechino mentre è già aperto, e la finestra aperta torna in primo piano: un eccomi di seno, un "
+                        "si 5 breve e la scivolata che sale dal si 5 al mi 6, al centro, in 160 ms. Va bene per una finestra che si "
+                        "ripresenta, un richiamo o un ritorno."),
+    },
+    "ciechino_errore": {
+        "score": [["a3.e3", 0.2, 0.0, -0.1], ["p", 0.05, 0.0, -0.5], ["e3.a2", 0.35, 0.0, -0.1]],
+        "kind": 4,
+        "adsr": [3.0, 20.0, 70.0, 30.0],
+        "descrizione": ("Ciechino, un errore imprevisto: dente di sega grave che crolla in due tempi, una scivolata dal la 3 al mi 3 e, "
+                        "dopo una pausa, una più lunga dal mi 3 al la 2, al centro, in 600 ms. Va bene per un errore, un guasto o "
+                        "un'operazione che non riesce."),
+    },
+    # La finestra, i menu.
+    "ciechino_classifica": {
+        "score": [["e5", 0.08, -0.5, -0.05], ["p", 0.03, 0.0, -0.5], ["g5", 0.12, 0.0, 0.0], ["p", 0.03, 0.0, -0.5],
+                  ["c5", 0.1, 0.5, -0.1]],
+        "kind": 3,
+        "adsr": [4.0, 20.0, 65.0, 30.0],
+        "descrizione": ("Ciechino, si apre la classifica dei migliori: un podio, onda triangolare, tre note staccate alte come i tre "
+                        "gradini, il mi 5 del secondo a sinistra, il sol 5 del primo al centro e il do 5 del terzo a destra, più piano, "
+                        "in 360 ms. Va bene per una classifica, un podio o un elenco di primati."),
+    },
+    "ciechino_statistiche": {
+        "score": [["a5", 0.025, -0.6, -0.1], ["p", 0.025, 0.0, -0.5], ["b5", 0.025, -0.3, -0.1], ["p", 0.025, 0.0, -0.5],
+                  ["c#6", 0.025, 0.0, -0.1], ["p", 0.025, 0.0, -0.5], ["e6", 0.07, 0.4, -0.05]],
+        "kind": 1,
+        "adsr": [4.0, 40.0, 30.0, 26.0],
+        "descrizione": ("Ciechino, si aprono le statistiche: un contatore che scatta, tocchi di seno che salgono, la 5, si 5, do diesis "
+                        "6 e un mi 6 più lungo, da sinistra a destra, in 220 ms. Va bene per dei conti, dei numeri che si sommano o un "
+                        "resoconto di dati."),
+    },
+    "ciechino_volume": {
+        "score": [["a5", 0.22, 0.0, [-0.35, 0.05]]],
+        "kind": 1,
+        "adsr": [5.0, 0.0, 100.0, 25.0],
+        "descrizione": ("Ciechino, il volume cambiato dal menu Impostazioni: una sola nota di seno, la 5 al centro, che cresce dal "
+                        "quasi silenzio al livello pieno, in 220 ms, così si sente il volume scelto. Va bene per provare un volume, un "
+                        "livello o un guadagno."),
+    },
+    "ciechino_impostazioni": {
+        "score": [["f5", 0.03, -0.2, -0.1], ["p", 0.025, 0.0, -0.5], ["c6", 0.03, 0.2, -0.05], ["g5", 0.05, 0.0, -0.08]],
+        "kind": 3,
+        "adsr": [3.0, 40.0, 40.0, 30.0],
+        "descrizione": ("Ciechino, un'impostazione cambiata dal menu Impostazioni, come la lettura dei resoconti con la sintesi o la "
+                        "lingua: un interruttore che scatta e si assesta, onda triangolare, un tocco di fa 5 a sinistra, la quinta sopra, "
+                        "do 6, a destra, e un sol 5 al centro, in 135 ms. Va bene per un'opzione cambiata, un interruttore o una "
+                        "preferenza."),
+    },
+    "ciechino_guida": {
+        "score": [["c5.g5", 0.1, -0.2, -0.1], ["p", 0.04, 0.0, -0.5], ["c6", 0.06, 0.2, -0.08], ["g5", 0.14, 0.0, -0.08]],
+        "kind": 1,
+        "adsr": [5.0, 20.0, 65.0, 30.0],
+        "descrizione": ("Ciechino, F1, la guida ai comandi: una domanda e la sua risposta, seno, una scivolata che sale dal do 5 al sol 5 "
+                        "come una domanda, poi un do 6 e un sol 5 che rispondono sicuri, in 340 ms. Va bene per un aiuto, una guida o "
+                        "un elenco di istruzioni."),
+    },
+    "ciechino_manuale": {
+        "score": [["1500-6000.2500-9000", 0.11, -0.4, 0.2], ["p", 0.06, 0.0, -0.5], ["1500-6000.2500-9000", 0.11, 0.4, 0.1]],
+        "kind": 6,
+        "adsr": [45.0, 0.0, 100.0, 50.0],
+        "descrizione": ("Ciechino, Maiusc+F1, il manuale: due fruscii di pagina che si gira, rumore rosa che nasce piano e si schiarisce "
+                        "con la banda da 1500-6000 a 2500-9000 Hz, il primo a sinistra e il secondo, più piano, a destra, in 280 ms. Va "
+                        "bene per un libro, un documento che si apre o una pagina che si volta."),
+    },
+    "ciechino_novita": {
+        "score": [["e5", 0.05, -0.3, -0.05], ["e6", 0.05, 0.0, -0.05], ["b5.f#6", 0.16, 0.3, -0.05]],
+        "kind": 3,
+        "adsr": [4.0, 20.0, 65.0, 30.0],
+        "descrizione": ("Ciechino, F2, le novità della versione: onda triangolare, un salto d'ottava dal mi 5 al mi 6, poi una scivolata "
+                        "che riparte dal si 5 e sale al fa diesis 6, da sinistra a destra, in 260 ms, come qualcosa di nuovo che si "
+                        "affaccia. Va bene per delle novità, un aggiornamento o una scoperta."),
+    },
+    "ciechino_informazioni": {
+        "score": [["e5", 0.04, -0.2, -0.15], ["b5", 0.04, -0.1, -0.15], ["a5", 0.05, 0.0, -0.12], ["e6", 0.14, 0.1, -0.12]],
+        "kind": 1,
+        "adsr": [3.0, 20.0, 60.0, 30.0],
+        "descrizione": ("Ciechino, F3, le informazioni sul programma, con nome, versione e autori: il biglietto da visita, il motivo di "
+                        "ciechino_avvio in miniatura e in seno, mi 5, si 5, la 5 e un mi 6 breve, quasi al centro, in 270 ms. Va bene "
+                        "per dei crediti, una firma o una presentazione."),
+    },
+    "ciechino_pub": {
+        "score": [["c#7", 0.1, -0.3, -0.12], ["p", 0.03, 0.0, -0.5], ["e7", 0.16, 0.3, -0.15]],
+        "kind": 1,
+        "adsr": [1.0, 70.0, 10.0, 29.0],
+        "descrizione": ("Ciechino, Entra al PUB e Chiedi aiuto al PUB, nel menu Aiuto: un brindisi, due bicchieri che si toccano, seno "
+                        "acuto che si spegne subito, do diesis 7 a sinistra e mi 7 a destra, in 290 ms. Va bene per una compagnia, un "
+                        "ritrovo o un saluto fra amici."),
+    },
+    # La finestra, il fuoco.
+    # Come in tutto il parco, F5 è il tasto grave e F7 quello acuto: spostamento_f5 e spostamento_f7.
+    "ciechino_vai_alla_vista": {
+        "score": [["c5.f4", 0.05, 0.0, -0.15]],
+        "kind": 1,
+        "adsr": [20.0, 0.0, 100.0, 40.0],
+        "descrizione": ("Ciechino, F5, il fuoco va nella vista della partita: una scivolata breve e morbida di seno che scende dal do 5 al "
+                        "fa 4, al centro, in 50 ms; grave, come F5 negli altri programmi del parco. Lo specchio è ciechino_vai_alla_barra. "
+                        "Va bene per uno spostamento del fuoco verso l'area principale."),
+    },
+    "ciechino_vai_alla_barra": {
+        "score": [["f5.c6", 0.05, 0.0, -0.25]],
+        "kind": 1,
+        "adsr": [20.0, 0.0, 100.0, 40.0],
+        "descrizione": ("Ciechino, F7, il fuoco va nella barra di stato: una scivolata breve e morbida di seno che sale dal fa 5 al do 6, "
+                        "al centro, in 50 ms; acuta, come F7 negli altri programmi del parco. Lo specchio è ciechino_vai_alla_vista. Va "
+                        "bene per uno spostamento del fuoco verso una barra o un'area secondaria."),
+    },
+}
+
+
+@dataclass
+class Esito:
+    """Che cosa lo strumento ha fatto, o farebbe con --prova, su una collezione."""
+
+    percorso: str
+    prova: bool = False
+    # I preset aggiunti, quelli sostituiti con --sostituisci e quelli già presenti ma diversi dalla
+    # tabella, lasciati come sono.
+    aggiunti: list = field(default_factory=list)
+    sostituiti: list = field(default_factory=list)
+    diversi: list = field(default_factory=list)
+    # I preset di suoni.EVENTI che ricevono la firma di Ciechino, e quelli che non si possono
+    # firmare perché la collezione non li ha.
+    firmati: list = field(default_factory=list)
+    mancanti: list = field(default_factory=list)
+    # I problemi della tabella, che fermano la scrittura, e l'errore che l'ha impedita.
+    problemi: list = field(default_factory=list)
+    errore: str | None = None
+    scritto: bool = False
+
+
+def percorso_condiviso():
+    """La collezione condivisa, accanto a GBUtils.py: è quella che Acusticator usa da sorgente
+    quando un progetto non ne registra una sua, e Ciechino non ne registra."""
+    import GBUtils
+
+    return os.path.join(os.path.dirname(os.path.abspath(GBUtils.__file__)), Acusticator.NOME_COLLEZIONE)
+
+
+def nomi_da_firmare():
+    """Tutti i preset di suoni.EVENTI, donazione compresa, ciascuno una volta, nell'ordine dei gruppi."""
+    return list(dict.fromkeys(suoni.EVENTI.values()))
+
+
+def campi(nome):
+    """Il preset della tabella nella forma del file: descrizione, score a quartine, kind e adsr, nell'ordine dei campi della
+    collezione. Liste nuove a ogni chiamata, così chi le riceve può scriverle senza toccare la tabella."""
+    voce = PRESET[nome]
+    score = [[nota, durata, panorama, list(volume) if isinstance(volume, (list, tuple)) else volume] for nota, durata, panorama, volume in voce["score"]]
+    return {"descrizione": voce["descrizione"], "score": score, "kind": voce["kind"], "adsr": list(voce["adsr"])}
+
+
+def durata(score):
+    """La durata di uno score a quartine, pause comprese, in secondi."""
+    return sum(float(quartina[1]) for quartina in score)
+
+
+def firmato(preset):
+    """Vero se il preset della collezione porta già la firma di Ciechino."""
+    firme = preset.get("usato_da") if isinstance(preset, dict) else None
+    return isinstance(firme, list) and APP in (str(a).strip().lower() for a in firme)
+
+
+def _uguale(preset, nome):
+    """Vero se il preset del file ha già descrizione, score, kind e adsr della tabella; le firme e gli altri campi non contano."""
+    return isinstance(preset, dict) and all(preset.get(chiave) == valore for chiave, valore in campi(nome).items())
+
+
+def controlla_tabella():
+    """I problemi della tabella rispetto alle regole di Gabriele e al contratto degli eventi; vuota se va tutto bene."""
+    problemi = []
+    usati = {}
+    for evento, preset in suoni.EVENTI.items():
+        if preset in usati:
+            problemi.append(f"il preset {preset} serve due eventi, {usati[preset]} e {evento}")
+        usati[preset] = evento
+        if evento == EVENTO_DEL_CAFFE:
+            if preset != PRESET_DEL_CAFFE:
+                problemi.append(f"l'evento {evento} deve usare {PRESET_DEL_CAFFE}, non {preset}")
+        elif preset not in PRESET:
+            problemi.append(f"l'evento {evento} usa {preset}, che non è nella tabella dei preset nuovi")
+    for nome, voce in PRESET.items():
+        if nome not in usati:
+            problemi.append(f"il preset {nome} della tabella non serve nessun evento")
+        if not nome.startswith(PREFISSO):
+            problemi.append(f"il preset {nome} non ha il prefisso {PREFISSO}")
+        if voce["kind"] == ONDA_QUADRA or voce["kind"] not in range(1, 9):
+            problemi.append(f"il preset {nome} ha il kind {voce['kind']}: niente onda quadra, e soltanto da 1 a 8")
+        if not voce["descrizione"].startswith(INIZIO_DESCRIZIONE):
+            problemi.append(f"la descrizione di {nome} non comincia con {INIZIO_DESCRIZIONE!r}")
+        adsr = voce["adsr"]
+        if len(adsr) != 4 or not all(0 <= v <= 100 for v in adsr) or adsr[0] + adsr[1] + adsr[3] > 100:
+            problemi.append(f"il preset {nome} ha un adsr non valido: {adsr}")
+        if not voce["score"] or any(len(quartina) != 4 for quartina in voce["score"]):
+            problemi.append(f"lo score di {nome} non è fatto di quartine")
+    for evento in EVENTI_FREQUENTI:
+        preset = suoni.EVENTI.get(evento)
+        if preset in PRESET and durata(PRESET[preset]["score"]) >= DURATA_MASSIMA_FREQUENTI:
+            problemi.append(f"l'evento frequente {evento} dura {durata(PRESET[preset]['score']):.3f} secondi, oltre {DURATA_MASSIMA_FREQUENTI}")
+    return problemi
+
+
+def _piano(dati, esito, sostituisci):
+    """Riempie l'esito con ciò che c'è da fare sulla collezione dati, e la cambia di conseguenza.
+    Vero se ha cambiato dei preset. Un preset nuovo va in coda; uno sostituito resta al suo posto,
+    con le sue firme e i campi che lo strumento non conosce."""
+    esito.aggiunti.clear()
+    esito.sostituiti.clear()
+    esito.diversi.clear()
+    for nome in PRESET:
+        presente = dati.get(nome)
+        if presente is None:
+            dati[nome] = campi(nome)
+            esito.aggiunti.append(nome)
+        elif not _uguale(presente, nome):
+            if sostituisci and isinstance(presente, dict):
+                presente.update(campi(nome))
+                esito.sostituiti.append(nome)
+            else:
+                esito.diversi.append(nome)
+    esito.firmati = [nome for nome in nomi_da_firmare() if nome in dati and not firmato(dati[nome])]
+    esito.mancanti = [nome for nome in nomi_da_firmare() if nome not in dati]
+    return bool(esito.aggiunti or esito.sostituiti)
+
+
+def crea(percorso=None, prova=False, sostituisci=False):
+    """Aggiunge alla collezione i preset della tabella che non ci sono, poi firma per Ciechino tutti i
+    preset di suoni.EVENTI, donazione compresa. percorso None vuol dire la collezione condivisa di
+    GBUtils. Con prova legge soltanto, e l'esito dice che cosa farebbe; con sostituisci rimette come
+    nella tabella anche i preset che ci sono già ma sono diversi. Non scrive se la tabella ha dei
+    problemi o se la collezione non c'è: aggiorna creerebbe una collezione nuova con i soli preset di
+    Ciechino. Restituisce l'Esito."""
+    percorso = os.path.abspath(percorso_condiviso() if percorso is None else percorso)
+    esito = Esito(percorso=percorso, prova=prova)
+    esito.problemi = controlla_tabella()
+    if esito.problemi:
+        esito.errore = "la tabella dei preset ha dei problemi: non scrivo niente"
+        return esito
+    if not os.path.isfile(percorso):
+        esito.errore = f"la collezione {percorso} non c'è"
+        return esito
+    if prova:
+        try:
+            with open(percorso, encoding="utf-8") as file:
+                dati = json.load(file)
+        except (OSError, ValueError) as errore:
+            esito.errore = f"la collezione non si legge: {errore}"
+            return esito
+        if not isinstance(dati, dict):
+            esito.errore = "la collezione non è un dizionario di preset"
+            return esito
+        _piano(dati, esito, sostituisci)
+        return esito
+    cambiati = []
+
+    def cambia(dati):
+        cambiato = _piano(dati, esito, sostituisci)
+        cambiati.append(cambiato)
+        return cambiato
+
+    if Acusticator.aggiorna(cambia, percorso) is None:
+        esito.errore = "Acusticator.aggiorna non ha potuto scrivere la collezione: il motivo è su stderr"
+        return esito
+    esito.scritto = any(cambiati)
+    if esito.firmati:
+        firmati = Acusticator.firma(esito.firmati, APP, percorso)
+        if firmati is None:
+            esito.errore = "Acusticator.firma non ha potuto scrivere la collezione: il motivo è su stderr"
+            return esito
+        esito.scritto = esito.scritto or firmati > 0
+    return esito
+
+
+def _elenco(titolo, nomi):
+    """Una riga di titolo col conto, poi un nome per riga, che con NVDA si scorre bene."""
+    if not nomi:
+        return []
+    return [f"{titolo}: {len(nomi)}.", *nomi]
+
+
+def righe(esito):
+    """Il resoconto dell'esito, una voce per riga."""
+    uscita = [f"Collezione: {esito.percorso}."]
+    if esito.prova:
+        uscita.append("Prova: non scrivo niente, dico soltanto che cosa farei.")
+    uscita.extend(f"Problema: {problema}." for problema in esito.problemi)
+    if esito.errore:
+        uscita.append(f"Errore: {esito.errore}.")
+        return uscita
+    uscita.extend(_elenco("Preset nuovi da aggiungere" if esito.prova else "Preset nuovi aggiunti", esito.aggiunti))
+    uscita.extend(_elenco("Preset da sostituire" if esito.prova else "Preset sostituiti", esito.sostituiti))
+    uscita.extend(_elenco("Preset già presenti ma diversi dalla tabella, lasciati come sono (--sostituisci li rimette)", esito.diversi))
+    uscita.extend(_elenco("Preset da firmare" if esito.prova else "Preset firmati", esito.firmati))
+    uscita.extend(_elenco("Preset degli eventi che la collezione non ha, e che non si possono firmare", esito.mancanti))
+    if not (esito.aggiunti or esito.sostituiti or esito.firmati):
+        uscita.append("Niente da fare: la collezione ha già tutti i preset di Ciechino, firmati.")
+    elif not esito.prova:
+        uscita.append("Collezione scritta." if esito.scritto else "Collezione non scritta.")
+    return uscita
+
+
+def main(argomenti=None):
+    parser = argparse.ArgumentParser(description="Aggiunge alla collezione dei suoni di GBUtils i preset nuovi di Ciechino e li firma.")
+    parser.add_argument("--collezione", metavar="PERCORSO", help="la collezione su cui lavorare, per esempio una copia; di serie quella condivisa di GBUtils")
+    parser.add_argument("--prova", action="store_true", help="non scrive niente, dice soltanto che cosa farebbe")
+    parser.add_argument("--sostituisci", action="store_true", help="rimette come nella tabella anche i preset che ci sono già ma sono diversi")
+    opzioni = parser.parse_args(argomenti)
+    esito = crea(opzioni.collezione, prova=opzioni.prova, sostituisci=opzioni.sostituisci)
+    for riga in righe(esito):
+        print(riga)
+    return 1 if esito.errore else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

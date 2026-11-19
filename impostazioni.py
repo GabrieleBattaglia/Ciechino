@@ -1,0 +1,74 @@
+"""
+Le impostazioni di Ciechino: il volume, la lettura dei resoconti con la sintesi, l'uscita audio e l'ultimo nome usato in classifica.
+Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+Nasce il 2026-11-19 con la 0.1.0, sul modello di impostazioni.py di MESS.
+Si salvano in «Ciechino - Impostazioni.json», accanto al programma, con la scrittura sicura di
+classifica.py: un file mancante o rovinato non ferma niente, valgono i predefiniti, e il file
+rovinato si mette da parte invece di essere sovrascritto. valide riporta ogni chiave nel suo
+intervallo, invece di buttarla, perché un volume a 120 scritto a mano vuol dire il massimo; e tiene
+le chiavi che questo Ciechino non conosce, perché un Ciechino più nuovo, sulla stessa cartella, non
+perda le sue.
+"""
+
+import math
+
+import costanti
+import percorsi
+from classifica import leggi_dati, pulisci_nome, scrivi_dati
+from lingua import _
+
+# Il volume va da zero, il silenzio, a cento, il pieno: è la scala delle impostazioni, non una
+# taratura del suono.
+VOLUME_MINIMO = 0
+VOLUME_MASSIMO = 100
+# L'uscita audio che lascia la scelta a scegli_dispositivo_audio di GBUtils.
+USCITA_AUTOMATICA = "automatica"
+PREDEFINITE = {"volume": costanti.VOLUME_PREDEFINITO, "sintesi": True, "uscita": USCITA_AUTOMATICA, "ultimo_nome": ""}
+# L'avviso dell'ultimo caricamento, None se è andato tutto bene: carica restituisce soltanto le
+# impostazioni, come vuole il contratto, e la finestra può dire qui perché sono tornate ai predefiniti.
+ultimo_avviso = None
+
+
+def _percorso(percorso):
+    # Calcolato a ogni chiamata, mai all'importazione: da compilato e nelle prove la cartella cambia.
+    return percorso or percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI)
+
+
+def valide(dati):
+    """Le impostazioni ricevute, sistemate: il volume riportato fra VOLUME_MINIMO e VOLUME_MASSIMO,
+    la sintesi vera o falsa, l'uscita un nome non vuoto, l'ultimo nome pulito come in classifica;
+    ciò che manca o ha il tipo sbagliato prende il predefinito, e le chiavi sconosciute restano."""
+    risultato = dict(PREDEFINITE)
+    if not isinstance(dati, dict):
+        return risultato
+    risultato.update({chiave: valore for chiave, valore in dati.items() if chiave not in PREDEFINITE})
+    volume = dati.get("volume")
+    if isinstance(volume, int | float) and not isinstance(volume, bool) and math.isfinite(volume):
+        risultato["volume"] = min(VOLUME_MASSIMO, max(VOLUME_MINIMO, round(volume)))
+    if isinstance(dati.get("sintesi"), bool):
+        risultato["sintesi"] = dati["sintesi"]
+    uscita = dati.get("uscita")
+    if isinstance(uscita, str) and uscita.strip():
+        risultato["uscita"] = uscita.strip()
+    if isinstance(dati.get("ultimo_nome"), str):
+        risultato["ultimo_nome"] = pulisci_nome(dati["ultimo_nome"])
+    return risultato
+
+
+def _controlla(grezzi):
+    if not isinstance(grezzi, dict):
+        raise ValueError(_("il file non contiene le impostazioni"))
+    return valide(grezzi)
+
+
+def carica(percorso=None):
+    """Le impostazioni salvate, o i predefiniti se il file manca o non si legge. Non solleva mai;
+    il perché di un ripiego resta in ultimo_avviso."""
+    global ultimo_avviso
+    dati, ultimo_avviso = leggi_dati(_percorso(percorso), _controlla)
+    return dati if dati is not None else valide(None)
+
+
+def salva(dati, percorso=None):
+    """Salva le impostazioni, sistemate da valide; vero se è riuscito."""
+    return scrivi_dati(valide(dati), _percorso(percorso))

@@ -1,0 +1,15 @@
+# Ciechino, le librerie di terze parti, con le versioni minime: quelle installate il 19 novembre 2026, con Python 3.14.
+# GBUtils non viene da PyPI: è la libreria di Gabriele, nella path, e porta GBwx e GBsintesi.
+# Le prove, il validatore, il pacchetto e le traduzioni stanno in requirements-dev.txt.
+# La finestra.
+wxPython>=4.3.2
+# Il motore audio di Ciechino e la sintesi dei suoni, con Acusticator di GBUtils.
+numpy>=2.5.4
+scipy>=1.18.1
+sounddevice>=0.5.6
+# La sintesi e il braille dei resoconti, con GBsintesi di GBUtils; pywin32 per la voce di Windows.
+accessible-output2>=0.17
+pywin32>=312
+# L'aggiornamento automatico, con gestisci_aggiornamento di GBUtils.
+requests>=2.34.2
+certifi>=2026.10.23

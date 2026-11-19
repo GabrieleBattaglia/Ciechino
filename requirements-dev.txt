@@ -1,0 +1,11 @@
+# Ciechino, i pacchetti per lo sviluppo, oltre a requirements.txt, con le versioni installate il 19 novembre 2026.
+-r requirements.txt
+# Le prove.
+pytest>=9.2.0
+# Il pacchetto, con Ciechino.spec.
+pyinstaller>=6.22.3
+# Il catalogo dei testi, con babel.cfg, e le traduzioni: dopo pybabel update si traduce con polib.
+Babel>=2.18.0
+polib>=1.2.0
+# Il validatore: solo ruff check, mai ruff format.
+ruff>=0.17.5

@@ -1,0 +1,43 @@
+I suoni di Ciechino e i loro preset nella collezione di GBUtils, da ritoccare con Acu_Maker: 33 suoni in 8 gruppi.
+Ogni riga dice l'azione che fa suonare il preset e, dopo i due punti, il suo nome. Il file lo scrive strumenti/elenco_suoni.py dalle tabelle di suoni.py: non va modificato a mano.
+La partita, l'inizio e la fine, 5 suoni.
+Comincia una partita nuova, con Ctrl+N o con Nuova partita del menu Partita: ciechino_nuova_partita.
+Nella riserva resta l'ultimo colpo: ciechino_ultimo_colpo.
+La riserva è vuota e la partita finisce: ciechino_partita_finita.
+A partita finita il punteggio entra nella classifica dei migliori, prima della finestra del nome: ciechino_in_classifica.
+A partita finita il punteggio non entra nella classifica dei migliori: ciechino_fuori_classifica.
+La mira, 2 suoni.
+Lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del gioco si ferma e i bersagli si sentono più piano: ciechino_mira_avviata.
+La mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio o alla fine della scivolata: ciechino_valore_preso.
+Il tiro e i suoi esiti, 4 suoni.
+Dopo il terzo valore della mira parte il colpo dal cannone: ciechino_sparo.
+Il proiettile colpisce un bersaglio, e il suono viene dal punto dell'impatto: ciechino_colpito.
+Il proiettile colpisce un bersaglio bonus, e il suono viene dal punto dell'impatto: ciechino_colpito_bonus.
+Il proiettile arriva a terra senza aver colpito niente, e il suono viene dal punto dove cade: ciechino_a_terra.
+I livelli e i bersagli bonus, 3 suoni.
+I centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi: ciechino_livello_su.
+Compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce: ciechino_bonus_appare.
+Il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito: ciechino_bonus_uscito.
+La pausa e lo spazio a vuoto, 3 suoni.
+La partita va in pausa, con Ctrl+P o con Pausa del menu Partita: ciechino_pausa.
+La partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita: ciechino_ripresa.
+Lo spazio premuto quando non può fare niente, per esempio col proiettile in volo o a partita finita: ciechino_non_ora.
+La finestra, l'avvio, l'uscita e gli errori, 4 suoni.
+Il programma si apre: ciechino_avvio.
+L'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra: ciechino_uscita.
+Si apre Ciechino mentre è già aperto, e la finestra aperta torna in primo piano: ciechino_primo_piano.
+Un errore imprevisto: ciechino_errore.
+La finestra, i menu, 10 suoni.
+Si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita: ciechino_classifica.
+Si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita: ciechino_statistiche.
+Il volume cambiato con Volume del menu Impostazioni: ciechino_volume.
+Un'impostazione cambiata dal menu Impostazioni, come la lettura dei resoconti con la sintesi o la lingua: ciechino_impostazioni.
+F1, la guida ai comandi, dal menu Aiuto: ciechino_guida.
+Maiusc+F1, il manuale, dal menu Aiuto: ciechino_manuale.
+F2, le novità della versione, dal menu Aiuto: ciechino_novita.
+F3, le informazioni sul programma, dal menu Aiuto: ciechino_informazioni.
+Offrimi un caffè, dal menu Aiuto: donazione.
+Entra al PUB o Chiedi aiuto al PUB, dal menu Aiuto: ciechino_pub.
+La finestra, il fuoco, 2 suoni.
+F5, il fuoco va nella vista della partita: ciechino_vai_alla_vista.
+F7, il fuoco va nella barra di stato: ciechino_vai_alla_barra.

@@ -1,0 +1,270 @@
+"""
+Le prove di statistiche.py: i conti, i primati, le ultime partite, il file con le sue copie e la pagina.
+Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
+Nasce il 2026-11-19 con la 0.1.0. Il conftest dirotta la cartella del programma in una cartella
+temporanea; l'orologio delle statistiche è finto, così le date delle righe sono note.
+"""
+
+import json
+import re
+from datetime import datetime
+
+import costanti
+import statistiche
+
+
+class Orologio:
+    """Un orologio che va avanti a mano."""
+
+    def __init__(self, quando=datetime(2026, 11, 19, 18, 3)):
+        self.quando = quando
+
+    def __call__(self):
+        return self.quando
+
+
+def esito(colpito=True, **altro):
+    base = {"colpito": colpito, "bonus": False, "forma": "seno", "mobile": False, "precisione": 0.5 if colpito else None, "punti": 150 if colpito else 0,
+            "distanza_dal_vicino": 1.25, "serie": 1 if colpito else 0}
+    return {**base, **altro}
+
+
+def nuove():
+    return statistiche.Statistiche(ora=Orologio())
+
+
+def test_nuove_statistiche_a_zero():
+    s = nuove()
+    assert s.dati["formato"] == costanti.FORMATO_STATISTICHE
+    assert all(v == 0 for v in s.dati["conti"].values())
+    assert set(s.dati["mira"]) == set(costanti.PARAMETRI)
+    assert set(s.dati["forme"]) == set(costanti.FORME_LFO)
+    assert s.dati["dal"] == "2026-11-19T18:03:00"
+
+
+def test_conta_e_suono():
+    s = nuove()
+    s.conta("partite_iniziate")
+    s.conta("colpi_guadagnati", 10)
+    s.conta("chiave_nuova", 2)
+    s.conta("secondi_strani", 0.25)
+    s.suono("sparo")
+    s.suono("sparo")
+    s.suono("colpito")
+    assert s.dati["conti"]["partite_iniziate"] == 1
+    assert s.dati["conti"]["colpi_guadagnati"] == 10
+    assert s.dati["conti"]["chiave_nuova"] == 2
+    assert s.dati["conti"]["secondi_strani"] == 0.25
+    assert s.dati["suoni"] == {"sparo": 2, "colpito": 1}
+
+
+def test_tiri_e_primati():
+    s = nuove()
+    assert s.tiro((0.5, 0.4, 0.8), esito(serie=1, precisione=0.5)) == []
+    assert s.tiro((0.6, 0.4, 0.8), esito(serie=2, precisione=0.9, punti=300, forma="quadra", mobile=True, distanza_dal_vicino=0.3)) == [
+        "precisione", "punti_in_un_tiro", "vicino", "serie"]
+    battuti = s.tiro((0.1, 0.1, 0.1), esito(colpito=False, distanza_dal_vicino=2.0))
+    assert battuti == []
+    assert s.tiro(None, esito(colpito=False, distanza_dal_vicino=0.8)) == ["mancato"]
+    conti = s.dati["conti"]
+    assert (conti["tiri"], conti["centri"], conti["tiri_a_vuoto"], conti["punti"]) == (4, 2, 2, 450)
+    assert s.dati["forme"]["seno"]["colpiti"] == 1 and s.dati["forme"]["quadra"]["colpiti"] == 1
+    assert s.dati["moto"]["fermi"]["colpiti"] == 1 and s.dati["moto"]["mobili"]["colpiti"] == 1
+    assert s.dati["primati"]["serie"]["valore"] == 2
+    assert s.dati["primati"]["precisione"]["valore"] == 0.9
+    assert s.dati["primati"]["vicino"]["valore"] == 0.3
+    assert s.dati["primati"]["mancato"]["valore"] == 0.8
+    assert s.dati["somme"]["centri_misurati"] == 2
+    assert s.dati["mira"]["direzione"]["nei_centri"] == 2
+    assert abs(s.dati["mira"]["direzione"]["somma_nei_centri"] - 1.1) < 1e-9
+
+
+def test_tiro_bonus_e_valori_per_parametro():
+    s = nuove()
+    s.tiro({"alzo": 0.25}, esito(bonus=True))
+    assert s.dati["conti"]["bonus_colpiti"] == 1
+    assert s.dati["mira"]["alzo"]["nei_centri"] == 1
+    assert s.dati["mira"]["direzione"]["nei_centri"] == 0
+
+
+def test_tiro_con_esito_sbagliato_non_solleva():
+    s = nuove()
+    s.tiro("niente", "niente")
+    s.tiro((1, 2), {"colpito": True, "precisione": "alta", "punti": None, "distanza_dal_vicino": float("nan"), "serie": -1})
+    assert s.dati["conti"]["tiri"] == 2
+    assert s.dati["conti"]["centri"] == 1
+
+
+def test_mira_istogramma_e_media():
+    s = nuove()
+    s.mira("direzione", 0.0, "minimo")
+    s.mira("direzione", 0.55, "scelto")
+    s.mira("direzione", 0.58, "scelto")
+    s.mira("direzione", 1.0, "massimo")
+    s.mira("direzione", None, "pausa")
+    s.mira("potenza", 1.7, "scelto")
+    m = s.dati["mira"]["direzione"]
+    assert (m["minimo"], m["scelto"], m["massimo"]) == (1, 2, 1)
+    assert m["classi"] == [1, 0, 0, 0, 0, 2, 0, 0, 0, 1]
+    assert abs(m["somma"] - 2.13) < 1e-9
+    assert s.dati["mira"]["potenza"]["classi"][-1] == 1
+
+
+def test_bersagli_apparsi():
+    s = nuove()
+    s.bersaglio_apparso("seno", False, False)
+    s.bersaglio_apparso("deriva", True, True)
+    s.bersaglio_apparso("forma_futura", True, False)
+    assert s.dati["forme"]["seno"]["apparsi"] == 1
+    assert s.dati["forme"]["forma_futura"]["apparsi"] == 1
+    assert s.dati["moto"]["mobili"]["apparsi"] == 2
+    assert s.dati["conti"]["bonus_apparsi"] == 1
+
+
+def test_partita_finita_e_ultime_partite():
+    orologio = Orologio()
+    s = statistiche.Statistiche(ora=orologio)
+    assert s.partita_finita({"punteggio": 1230, "livello": 3, "tiri": 20, "centri": 12, "durata_s": 252.0, "motivo": "abbandonata"}) == []
+    assert s.partita_finita({"punteggio": 2000, "livello": 2, "tiri": 30, "centri": 11, "durata_s": 100.0, "motivo": "riserva_vuota"}) == ["punteggio"]
+    assert s.dati["conti"]["partite_abbandonate"] == 1 and s.dati["conti"]["partite_finite"] == 1
+    assert s.dati["tempo_di_gioco"] == 352.0
+    assert s.dati["primati"]["livello"]["valore"] == 3
+    for i in range(costanti.ULTIME_PARTITE + 3):
+        s.partita_finita({"punteggio": i, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 1.0, "motivo": "riserva_vuota"})
+    assert len(s.dati["ultime"]) == costanti.ULTIME_PARTITE
+    assert s.dati["ultime"][-1]["punteggio"] == costanti.ULTIME_PARTITE + 2
+    s.partita_finita(None)
+    assert s.dati["ultime"][-1]["motivo"] == "riserva_vuota"
+
+
+def test_salva_e_carica(cartella_di_prova):
+    s, avviso = statistiche.Statistiche.carica(ora=Orologio())
+    assert avviso is None
+    assert s.dati["conti"]["avvii"] == 1
+    s.tiro((0.5, 0.5, 0.5), esito())
+    s.partita_finita({"punteggio": 150, "livello": 1, "tiri": 1, "centri": 1, "durata_s": 30.0, "motivo": "abbandonata"})
+    s.suono("sparo")
+    assert s.salva()
+    file = cartella_di_prova / costanti.FILE_STATISTICHE
+    assert json.loads(file.read_text(encoding="utf-8"))["salvato"] == "2026-11-19T18:03:00"
+    di_nuovo, avviso = statistiche.carica()
+    assert avviso is None
+    assert di_nuovo.dati["conti"]["avvii"] == 2
+    assert di_nuovo.dati["conti"]["tiri"] == 1
+    assert di_nuovo.dati["suoni"] == {"sparo": 1}
+    assert di_nuovo.dati["ultime"] == s.dati["ultime"]
+    senza_avvio, _avviso = statistiche.Statistiche.carica(avvio=False)
+    assert senza_avvio.dati["conti"]["avvii"] == 1
+
+
+def test_file_rovinato_ripiega_sulla_copia(cartella_di_prova):
+    s, _avviso = statistiche.carica()
+    s.conta("tiri", 7)
+    assert s.salva()
+    assert s.salva()
+    file = cartella_di_prova / costanti.FILE_STATISTICHE
+    file.write_text("[rotto", encoding="utf-8")
+    letto, avviso = statistiche.carica(avvio=False)
+    assert letto.dati["conti"]["tiri"] == 7
+    assert "copia di riserva" in avviso
+    assert (cartella_di_prova / (costanti.FILE_STATISTICHE + ".illeggibile")).read_text(encoding="utf-8") == "[rotto"
+
+
+def test_file_e_copia_rovinati_ripartono_da_zero(cartella_di_prova):
+    file = cartella_di_prova / costanti.FILE_STATISTICHE
+    file.write_text(json.dumps("non un dizionario"), encoding="utf-8")
+    (cartella_di_prova / (costanti.FILE_STATISTICHE + ".bak")).write_text("rotta", encoding="utf-8")
+    letto, avviso = statistiche.carica()
+    assert letto.dati["conti"]["avvii"] == 1
+    assert letto.dati["conti"]["tiri"] == 0
+    assert "non contiene le statistiche" in avviso and "Riparto da zero" in avviso
+
+
+def test_completa_risana_i_tipi_sbagliati():
+    grezzi = {
+        "dal": "non una data",
+        "conti": {"tiri": 5, "centri": -1, "avvii": "tre", "chiave_futura": 4, "falso": True},
+        "tempo_di_gioco": "molto",
+        "somme": [],
+        "mira": {"alzo": {"minimo": 2, "classi": [1, 2]}, "direzione": "rotta"},
+        "forme": {"seno": {"apparsi": 3, "colpiti": "x"}, "nuova": {"apparsi": 1}},
+        "moto": {"fermi": None},
+        "primati": {"punteggio": {"valore": 10, "quando": "2026-11-18T10:00:00"}, "rotto": {"valore": 1, "quando": "ieri"}},
+        "ultime": [{"quando": "2026-11-18T10:00:00", "punteggio": 10, "motivo": "boh"}, {"quando": "no"}, 3],
+        "suoni": {"sparo": 2.0, "rotto": "x"},
+    }
+    dati = statistiche.completa(grezzi, "2026-11-19T18:03:00")
+    assert dati["dal"] == "2026-11-19T18:03:00"
+    assert dati["conti"]["tiri"] == 5 and dati["conti"]["centri"] == 0 and dati["conti"]["avvii"] == 0
+    assert dati["conti"]["chiave_futura"] == 4 and "falso" not in dati["conti"]
+    assert dati["tempo_di_gioco"] == 0.0
+    assert dati["mira"]["alzo"]["minimo"] == 2 and dati["mira"]["alzo"]["classi"] == [0] * statistiche.CLASSI
+    assert dati["mira"]["direzione"]["minimo"] == 0
+    assert dati["forme"]["seno"] == {"apparsi": 3, "colpiti": 0}
+    assert dati["forme"]["nuova"] == {"apparsi": 1, "colpiti": 0}
+    assert list(dati["primati"]) == ["punteggio"]
+    assert len(dati["ultime"]) == 1 and dati["ultime"][0]["motivo"] == "riserva_vuota"
+    assert dati["suoni"] == {"sparo": 2}
+    assert statistiche.completa("rotto", "2026-11-19T18:03:00")["conti"]["tiri"] == 0
+
+
+def test_righe_vuote():
+    righe = nuove().righe()
+    assert righe[0] == f"Statistiche di Ciechino {costanti.VERSIONE}, raccolte da giovedì 19 novembre 2026: 1 giorno, oggi compreso."
+    assert righe[1].startswith("Le sezioni: 1 In breve; 2 Le partite;")
+    titoli = [r for r in righe if r.startswith("Sezione ")]
+    assert titoli[0] == "Sezione 1 di 8, in breve."
+    assert len(titoli) == 8
+    assert "Ancora niente da dire." in righe
+
+
+def test_righe_piene():
+    orologio = Orologio()
+    s = statistiche.Statistiche(ora=orologio)
+    s.conta("avvii")
+    s.conta("partite_iniziate", 2)
+    s.conta("mire_avviate", 3)
+    s.conta("caratteristica_nuova", 4)
+    s.bersaglio_apparso("seno", False, False)
+    s.bersaglio_apparso("sega_inversa", True, True)
+    s.mira("direzione", 0.55, "scelto")
+    s.mira("alzo", 0.0, "minimo")
+    s.mira("potenza", 1.0, "massimo")
+    s.tiro((0.55, 0.0, 1.0), esito(precisione=0.64, punti=12340, distanza_dal_vicino=0.05, serie=1))
+    s.tiro((0.2, 0.2, 0.2), esito(colpito=False, distanza_dal_vicino=3.2))
+    s.suono("sparo")
+    s.suono("sparo")
+    s.suono("colpito")
+    orologio.quando = datetime(2026, 11, 21, 9, 5)
+    s.partita_finita({"punteggio": 12340, "livello": 1, "tiri": 2, "centri": 1, "durata_s": 192.0, "motivo": "abbandonata"})
+    righe = s.righe(nomi_dei_suoni={"sparo": "lo sparo del cannone"})
+    testo = "\n".join(righe)
+    assert righe[0].endswith("raccolte da giovedì 19 novembre 2026: 3 giorni, oggi compreso.")
+    assert "Sezione 9 di 9, gli altri conti." in righe
+    assert "Caratteristica nuova: 4." in righe
+    assert "Centri: 1, 50% dei tiri." in righe
+    assert "Precisione media dei centri: 64%." in righe
+    assert "Punti fatti: 12.340." in righe
+    assert "Partite abbandonate: 1." in righe
+    assert "Partite iniziate e non concluse, perché sono in corso o il programma si è chiuso: 1." in righe
+    assert "Durata media di una partita: 3 minuti e 12 secondi." in righe
+    assert "Direzione, valori presi: 1." in righe
+    assert "Direzione, scelti con lo spazio nella scivolata: 1, 100%." in righe
+    assert "Alzo, fermati al minimo nei bip: 1, 100%." in righe
+    assert "Potenza, arrivati al massimo senza lo spazio: 1, 100%." in righe
+    assert "Direzione, valore medio: 55% della scala." in righe
+    assert "Direzione, valori per fasce della scala: da 50 a 60%: 1." in righe
+    assert "Bersagli mobili: 1 apparso, 0 colpiti, 0%." in righe
+    assert "Forma dente di sega inverso: 1 apparso, 0 colpiti, 0%." in righe
+    assert "Forma seno: 1 apparso, 1 colpito, 100%." in righe
+    assert "Punteggio più alto in una partita: 12.340 punti, sabato 21 novembre 2026." in righe
+    assert "Il tiro passato più vicino al centro di un bersaglio: 0,05 metri dal centro, giovedì 19 novembre 2026." in righe
+    assert "Il tiro a vuoto passato più vicino al centro di un bersaglio: 3,20 metri dal centro, giovedì 19 novembre 2026." in righe
+    assert "Sabato 21 novembre 2026 alle 9:05: 12.340 punti, livello 1, 1 centro su 2 tiri, 3 minuti e 12 secondi, abbandonata." in righe
+    assert "Eventi sonori in tutto: 3." in righe
+    assert "Lo sparo del cannone: 2." in righe
+    assert "Colpito: 1." in righe
+    # Niente righe vuote, niente separatori grafici, nessun segnaposto rimasto.
+    assert all(r.strip() for r in righe)
+    assert not re.search(r"[-_=]{3,}", testo)
+    assert "{" not in testo and "}" not in testo
