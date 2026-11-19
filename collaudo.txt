@@ -1,34 +1,12 @@
 Collaudo di Ciechino 0.1.0, la prima partita: cancella le righe superate, annota dopo i due punti quelle con problemi.
 Prima: cuffie in testa, NVDA acceso; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. I dati che scrive restano fuori da git.
-Passo 1: all'apertura leggi la vista con le frecce, poi F7 per la barra di stato e F5 per tornare alla vista.
-Domanda 1: la vista dice nome, versione, autori, record e scheda audio con la latenza, una frase per riga, e la barra si legge bene anche in braille?
-Passo 2: apri Proiettile dal menu Impostazioni, scorri le tre forme fermandoti su ognuna e scegline una con OK; poi riaprilo e chiudilo con Esc.
-Domanda 2: NVDA legge spiegazione, elenco e righe, l'esempio parte quando ti fermi su una riga, anche se all'apertura tace, si ferma alla chiusura, e le parole sulle tre forme ti sembrano giuste?
-Passo 3: la barra spaziatrice comincia la partita; ascolta il primo bersaglio finché credi di sapere dove sta.
-Domanda 3: panoramica, nota e volume ti fanno capire direzione, altezza e distanza del bersaglio?
-Passo 4: la barra spaziatrice avvia la mira; ferma le tre scivolate, direzione, alzo e potenza, provando anche il minimo nei bip e il massimo lasciandola andare.
-Domanda 4: premendo la barra spaziatrice NVDA tace, senza dire spazio, e il braille resta pulito?
-Domanda 5: bip, tacche e scivolata si capiscono, la direzione in seno e l'alzo da 150 a 2.400 hertz si seguono bene, il secondo di silenzio basta per prepararsi alla barra seguente, e la barra ferma il valore dove volevi?
-Domanda 6: lo sparo, il proiettile che vola, nella forma scelta e distinto dai bersagli, e l'impatto, o il tonfo a terra, ora più lunghi e marcati, si seguono nello spazio, e gli avvisi dopo l'impatto arrivano in fila, senza sovrapporsi?
-Domanda 7: il resoconto del tiro arriva da solo alla voce e al braille, e nei primi livelli l'aiuto sul mancato, in metri, ti dice come correggere?
-Passo 5: durante l'ascolto e poi durante la mira premi Ctrl+P, aspetta, e premi di nuovo Ctrl+P; poi, nella mira, apri Volume dal menu Impostazioni e chiudilo, e fai Alt+Tab avanti e indietro.
-Domanda 8: la pausa ferma tutto e tace, quella automatica senza suono, e al ritorno la barra in corso riparte da capo con i valori già scelti?
 Domanda 9: nella mira, aprendo un menu con Alt, la scivolata continua e arriva al massimo: vuoi che anche il menu aperto metta in pausa?
+* Sì.
+
 Passo 6: gioca fino a vuotare la riserva, entrando in classifica e colpendo almeno un bonus, dal terzo livello, e dopo il centro sul bonus premi subito la barra spaziatrice; a partita finita Ctrl+K e Ctrl+T.
 Domanda 10: i bersagli che si susseguono suonano ognuno un po' diverso, nel timbro e nell'oscillazione, e nota e larghezza della vibrazione ti dicono ancora altezza e grandezza?
 Domanda 11: il jingle del centro, tre note, e quello del bonus, otto più acute, si distinguono, anche mentre la voce legge il resoconto, e la coda del bonus lascia sentire i bip della mira?
-Domanda 12: dopo il suono della fine e quello della classifica si apre il dialogo del nome, che NVDA legge, e dopo Invio la vista mette il cursore sulla tua voce?
+* Sarebbe meglio se il testo comparisse dopo che il jingle di successo ha suonato, diamogli un po di ritardo e di silenzio prima che compaia il nuovo bersaglio, lasciamo che l'utente lo chiami con un tasto, così a modo di andare a leggersi il report del tiro.
+ 
 Domanda 13: classifica e statistiche si aprono massimizzate, si leggono riga per riga e Esc le chiude?
-Passo 7: con la partita in corso stacca le cuffie, se sono USB o Bluetooth; quando la vista lo dice, ricollegale e premi Ctrl+Maiusc+X.
-Domanda 14: la vista e la sintesi dicono una volta sola che la scheda non risponde, il gioco va avanti senza suono, e con Ctrl+Maiusc+X il suono torna già prima che l'elenco si apra?
-Passo 8: durante l'ascolto premi Ctrl+Maiusc+X, scorri l'elenco e scegli le cuffie con OK.
-Domanda 15: NVDA legge spiegazione, notizie ed elenco, la scheda in uso è già scelta e il vivavoce delle cuffie si riconosce?
-Domanda 16: dopo OK il suono passa subito nelle cuffie, la vista dice dove esce con la latenza, e la partita riprende senza intoppi?
-Passo 9: esci con Ctrl+Q e riapri Ciechino con le cuffie accese.
-Domanda 17: suona nelle cuffie scelte?
-Passo 10: esci, spegni le cuffie e riapri Ciechino; quando la vista dice che mancano, accendile, aspetta che Windows le colleghi, premi Ctrl+Maiusc+X e chiudi l'elenco con Esc.
-Domanda 18: all'avvio un suono e la vista dicono che le cuffie non ci sono, con Ctrl+Maiusc+X il suono torna nelle cuffie prima che l'elenco si apra, e dopo Esc la vista lo dice bene?
-Passo 11: con Ciechino aperto lancia di nuovo python Ciechino.py.
-Domanda 19: la finestra già aperta torna in primo piano, col fuoco dove NVDA lo legge?
-Domanda 20: fra i 57 suoni degli eventi ce n'è qualcuno che si confonde con un altro o che non ti piace? L'elenco con i preset è suoni_di_ciechino.txt.
-Esito:
+* No. Esc non ha nulla da chiudere: la classifica è nellaarea di testo principale.
