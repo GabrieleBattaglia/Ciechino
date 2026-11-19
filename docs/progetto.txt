@@ -58,6 +58,7 @@ fisica.py, senza wx e senza audio, tutto vettorizzabile con numpy (le funzioni a
 
 bersagli.py, senza wx e senza audio.
   @dataclass class Bersaglio: numero, forma, raggio, partenza (array 3), velocita (array 3), nato (tempo di gioco), bonus, frequenza_lfo, fase_lfo, seme. Proprietà mobile e velocita_scalare. posizione(t) per t di gioco scalare o array. vivo(t) vero o array di booleani. tempo_di_uscita: per il bonus il tempo di gioco dell'uscita, per gli altri None. lfo(t_audio) array fra meno 1 e 1. mezza_escursione_ottave(). parametri_sonori(tempi_di_gioco, tempi_audio) restituisce (frequenze, pan, guadagni lineari) per la voce del motore, BERSAGLIO_DB compreso.
+  lfo(forma, tempi, frequenza, fase=0.0, seme=0) array fra meno 1 e 1, per le forme di FORME_LFO: il metodo Bersaglio.lfo la chiama coi suoi dati, e il banco dei bersagli la usa da sola.
   raggio_del_livello(n), velocita_del_livello(n), quanti_bersagli(n), durata_del_bonus(n).
   genera(livello, rng, numero, tempo) un bersaglio normale del livello, posizione a caso uniforme nella zona permessa, direzione del moto a caso sulla sfera se mobile, forma a caso fra FORME_LFO. genera_bonus(livello, rng, numero, tempo).
   rng è un random.Random.
@@ -70,7 +71,6 @@ volo.py, senza wx e senza audio.
 sintesi.py, solo numpy.
   FORME_PORTANTI = ("seno", "triangolo", "sega_morbida", "organo"): sintesi additiva con poche armoniche, ognuna tolta dove supererebbe 18.000 hertz, così niente aliasing; triangolo armoniche dispari a 1/n², sega_morbida tutte a 1/n con una caduta, organo fondamentale con seconda e terza deboli.
   class Oscillatore(forma): rendi(frequenze) restituisce un blocco mono dalle frequenze di ogni campione, con la fase che prosegue da un blocco all'altro.
-  lfo(forma, tempi, frequenza, fase=0.0, seme=0) array fra meno 1 e 1, forme di FORME_LFO.
   panoramica(mono, pan) restituisce (N, 2) float32, pan scalare o array, a potenza costante come Acusticator.
   db_in_lineare(db), lineare_in_db(x).
   bip(frequenza, durata, db, forma="seno") con rampe di un millesimo contro i click.

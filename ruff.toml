@@ -7,7 +7,6 @@ line-length = 200
 
 [lint]
 select = ["E", "F", "W", "B", "SIM", "UP", "I", "C4", "RET", "BLE", "S", "RUF", "DTZ"]
-builtins = ["_"]
 ignore = [
     # Righe lunghe: i messaggi del gioco stanno su una riga sola, spesso con la format di seguito,
     # e spezzarli renderebbe più difficile ritrovarli.

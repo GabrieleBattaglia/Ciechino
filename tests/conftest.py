@@ -90,7 +90,7 @@ def casse_mute(monkeypatch):
     Finché motore_audio non esiste ancora, la fissatura non fa niente."""
     try:
         import motore_audio
-    except ImportError:
+    except Exception:  # noqa: BLE001 - un modulo ancora in scrittura non deve fermare le prove degli altri
         return
     monkeypatch.setattr(motore_audio, "apri_flusso", lambda *argomenti, **opzioni: None)
 
