@@ -223,6 +223,21 @@ RAGGIO_BONUS_FATTORE = 0.8
 # Fino a questo livello il resoconto di un tiro a vuoto dice di quanto e dove si è mancato il
 # bersaglio più vicino (scelta di Gabriele: solo nei livelli bassi, poi si deciderà).
 AIUTO_MANCATO_FINO_AL_LIVELLO = 3
+# Il sommario in testa al resoconto di ogni tiro, centri compresi (D21, chiesto da Gabriele il 19
+# novembre 2026): dove il proiettile è passato rispetto al centro del bersaglio, nel suo passaggio
+# più vicino, di lato, in altezza e in profondità, e con quale inclinazione. I primi livelli sono una
+# palestra: fino a SOMMARIO_NUMERI_FINO_AL_LIVELLO il sommario dà i numeri, in metri e in gradi con
+# un decimale e il segno; fino a SOMMARIO_PAROLE_FINO_AL_LIVELLO soltanto le parole, come «a destra,
+# sotto, lungo, in discesa»; dopo, niente sommario. Da ritoccare giocando.
+SOMMARIO_NUMERI_FINO_AL_LIVELLO = 3
+SOMMARIO_PAROLE_FINO_AL_LIVELLO = 6
+# Le soglie delle parole del sommario (D21): uno scarto, in metri, più piccolo della sua soglia si
+# dice giusto, «in linea», «all'altezza giusta», «alla distanza giusta»; un'inclinazione, in gradi,
+# più piccola della sua soglia, in su o in giù, è il tratto quasi piano vicino alla cima, «in cima».
+SOMMARIO_SOGLIA_LATERALE = 0.5
+SOMMARIO_SOGLIA_VERTICALE = 0.5
+SOMMARIO_SOGLIA_PROFONDITA = 0.5
+SOMMARIO_SOGLIA_INCLINAZIONE = 5.0
 
 # I punti di un centro: PUNTI_BASE, per il rapporto fra RAGGIO_DI_RIFERIMENTO e il raggio alla
 # ESPONENTE_DEL_RAGGIO, per 1 più la velocità del bersaglio divisa per VELOCITA_DI_RIFERIMENTO, per 1

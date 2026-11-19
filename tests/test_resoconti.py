@@ -1,6 +1,7 @@
 """
 Le prove di resoconti.py: le frasi dei tiri, dei livelli, dei bonus, dei primati e della fine, i segni
-delle direzioni e degli scarti, i singolari e i plurali, le righe della barra, e nessun separatore
+delle direzioni e degli scarti, i singolari e i plurali, le righe della barra, il sommario di D21 ai
+tre gradi della palestra, coi segni, le soglie e i confini fra i livelli, e nessun separatore
 grafico.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
@@ -17,10 +18,20 @@ import pytest
 
 import resoconti
 from bersagli import Bersaglio
-from costanti import AIUTO_MANCATO_FINO_AL_LIVELLO, CENTRI_PER_LIVELLO, COLPI_BONUS
+from costanti import (
+    AIUTO_MANCATO_FINO_AL_LIVELLO,
+    CENTRI_PER_LIVELLO,
+    COLPI_BONUS,
+    SOMMARIO_NUMERI_FINO_AL_LIVELLO,
+    SOMMARIO_PAROLE_FINO_AL_LIVELLO,
+    SOMMARIO_SOGLIA_INCLINAZIONE,
+    SOMMARIO_SOGLIA_LATERALE,
+    SOMMARIO_SOGLIA_PROFONDITA,
+    SOMMARIO_SOGLIA_VERTICALE,
+)
 from fisica import Traiettoria
 from resoconti import Messaggio
-from volo import Volo
+from volo import Passaggio, Volo
 
 # Le righe fatte di soli simboli ripetuti, o tre simboli uguali di fila: separatori grafici.
 SEPARATORE = re.compile(r"([-=_*~#+.])\1{2,}")
@@ -53,7 +64,16 @@ def mancato(scarto=(1.2, -0.8, 1.7), distanza=2.3, **campi):
     return volo(vicino=bersaglio(), distanza_dal_vicino=distanza, scarto=scarto, **campi)
 
 
+def passaggio(laterale=13.2, verticale=-2.4, profondita=1.0, inclinazione=-31.4):
+    """Il passaggio più vicino di D21, dato nell'ordine del sommario; lo scarto del Passaggio è invece
+    nell'ordine di fisica.scomponi, (radiale, laterale, verticale), e il radiale è la profondità."""
+    return Passaggio(tempo=2.0, scarto=(profondita, laterale, verticale), inclinazione=inclinazione)
+
+
 VALORI = (0.64, 0.45, 0.5)
+# Il sommario coi numeri del passaggio di serie, e quello a parole.
+NUMERI = "Laterale +13,2 metri, verticale -2,4, profondità +1,0, inclinazione -31,4 gradi."
+PAROLE = "A destra, sotto, lungo, in discesa."
 
 
 def test_resoconto_di_un_centro():
@@ -131,6 +151,100 @@ def test_tiro_a_vuoto_senza_aiuto_e_a_riserva_vuota():
     # Un tiro senza bersagli vivi vicini non ha la riga del mancato.
     solo = raccogli(resoconti.resoconto_del_tiro(2, 1, volo(), VALORI, riserva=5))
     assert len(solo.testo.split("\n")) == 3 and solo.annuncio == "A vuoto, riserva 5."
+
+
+def test_sommario_coi_numeri_in_testa_al_resoconto():
+    """D21, i primi livelli: il sommario coi numeri è la prima riga del resoconto e apre l'annuncio; la
+    parte verbosa che segue resta quella di prima, riga per riga, e i dati non cambiano."""
+    for livello in range(1, SOMMARIO_NUMERI_FINO_AL_LIVELLO + 1):
+        senza = resoconti.resoconto_del_tiro(4, livello, mancato(), VALORI, riserva=8)
+        con = raccogli(resoconti.resoconto_del_tiro(4, livello, mancato(passaggio=passaggio()), VALORI, riserva=8))
+        assert con.testo.split("\n") == [NUMERI, *senza.testo.split("\n")]
+        assert con.annuncio == f"{NUMERI} {senza.annuncio}"
+        assert con.dati == senza.dati
+    # Anche nei centri: di quanto il proiettile è passato lontano dal centro del bersaglio colpito.
+    centro = raccogli(resoconti.resoconto_del_tiro(12, 1, volo(bersaglio(), passaggio=passaggio(0.3, 0.04, -0.06, 12.0)), VALORI, punti=230, totale=1230, riserva=8))
+    righe = centro.testo.split("\n")
+    assert righe[0] == "Laterale +0,3 metri, verticale 0,0, profondità -0,1, inclinazione +12,0 gradi."
+    assert righe[1].startswith("Tiro 12, livello 1: colpito un bersaglio, ") and len(righe) == 5
+    assert centro.annuncio == f"{righe[0]} Colpito, 230 punti."
+    # E nel bonus, dove l'annuncio ha le sue parole.
+    bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0))
+    preso = raccogli(resoconti.resoconto_del_tiro(7, 2, volo(bonus, passaggio=passaggio()), VALORI, punti=1150, totale=2380, riserva=12))
+    assert preso.testo.split("\n")[:2] == [NUMERI, f"Tiro 7, livello 2: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 64%, "
+                                                  f"{COLPI_BONUS} colpi in più, totale 2.380 punti."]
+    assert preso.annuncio == f"{NUMERI} Colpito il bonus, 1.150 punti."
+
+
+def test_segni_del_sommario():
+    """D21: i numeri del sommario hanno sempre un decimale e il segno, + o il trattino; quelli che si
+    arrotondano a zero si scrivono 0,0, senza segno."""
+    assert resoconti.con_segno(13.24) == "+13,2"
+    assert resoconti.con_segno(-2.4) == "-2,4"
+    assert resoconti.con_segno(1.0) == "+1,0"
+    assert resoconti.con_segno(0.04) == resoconti.con_segno(-0.04) == resoconti.con_segno(0.0) == "0,0"
+    assert resoconti.con_segno(-0.06) == "-0,1" and resoconti.con_segno(0.06) == "+0,1"
+    assert resoconti.con_segno(1234.56) == "+1.234,6"
+    riga = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(passaggio=passaggio(-7.0, 0.0, -0.04, 0.0)), VALORI, riserva=9)).testo.split("\n")[0]
+    assert riga == "Laterale -7,0 metri, verticale 0,0, profondità 0,0, inclinazione 0,0 gradi."
+    assert resoconti.riga_del_sommario(volo(passaggio=passaggio(0.0, 25.5, -40.3, 87.2)), "numeri") == (
+        "Laterale 0,0 metri, verticale +25,5, profondità -40,3, inclinazione +87,2 gradi.")
+    # Il meno è il trattino, che NVDA legge meno e il braille mostra in una cella: niente meno tipografico.
+    assert chr(0x2212) not in riga and riga.count("-") == 1
+
+
+def test_sommario_a_parole_e_le_soglie(monkeypatch):
+    """D21, i livelli di mezzo: soltanto le parole, nell'ordine laterale, verticale, profondità e
+    inclinazione; sotto la sua soglia un asse va bene, dalla soglia in su ha la sua direzione."""
+    def parole(*valori):
+        return raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(passaggio=passaggio(*valori)), VALORI, riserva=9, palestra="parole")).testo.split("\n")[0]
+
+    laterale, verticale, profondita, inclinazione = SOMMARIO_SOGLIA_LATERALE, SOMMARIO_SOGLIA_VERTICALE, SOMMARIO_SOGLIA_PROFONDITA, SOMMARIO_SOGLIA_INCLINAZIONE
+    assert parole() == PAROLE
+    assert parole(-2 * laterale, 2 * verticale, -2 * profondita, 2 * inclinazione) == "A sinistra, sopra, corto, in salita."
+    assert parole(0.99 * laterale, -0.99 * verticale, 0.99 * profondita, -0.99 * inclinazione) == "In linea, all'altezza giusta, alla distanza giusta, in cima."
+    assert parole(0.0, 0.0, 0.0, 0.0) == "In linea, all'altezza giusta, alla distanza giusta, in cima."
+    # Sulla soglia l'asse non va più bene.
+    assert parole(laterale, -verticale, profondita, -inclinazione) == PAROLE
+    assert parole(-laterale, verticale, -profondita, inclinazione) == "A sinistra, sopra, corto, in salita."
+    assert resoconti.parole_del_passaggio(passaggio()) == ["a destra", "sotto", "lungo", "in discesa"]
+    # Le soglie sono quelle di costanti.py: alzate, i numeri di prima vanno bene; a zero, ogni scarto ha la sua direzione.
+    monkeypatch.setattr(resoconti, "SOMMARIO_SOGLIA_LATERALE", 20.0)
+    monkeypatch.setattr(resoconti, "SOMMARIO_SOGLIA_INCLINAZIONE", 45.0)
+    assert parole() == "In linea, sotto, lungo, in cima."
+    for nome in ("SOMMARIO_SOGLIA_LATERALE", "SOMMARIO_SOGLIA_VERTICALE", "SOMMARIO_SOGLIA_PROFONDITA", "SOMMARIO_SOGLIA_INCLINAZIONE"):
+        monkeypatch.setattr(resoconti, nome, 0.0)
+    assert parole(0.01, -0.01, 0.01, -0.01) == PAROLE
+    assert parole(0.0, 0.0, 0.0, 0.0) == "In linea, all'altezza giusta, alla distanza giusta, in cima."
+
+
+def test_la_palestra_ai_confini_dei_livelli():
+    """D21: i numeri fino a SOMMARIO_NUMERI_FINO_AL_LIVELLO, le parole fino a
+    SOMMARIO_PAROLE_FINO_AL_LIVELLO, poi niente sommario; palestra lo sceglie a mano."""
+    numeri, parole = SOMMARIO_NUMERI_FINO_AL_LIVELLO, SOMMARIO_PAROLE_FINO_AL_LIVELLO
+    assert 1 <= numeri < parole
+    assert [resoconti.grado_della_palestra(n) for n in (1, numeri, numeri + 1, parole, parole + 1, 100)] == ["numeri", "numeri", "parole", "parole", "niente", "niente"]
+    tiro = mancato(passaggio=passaggio())
+
+    def resoconto(livello, **altro):
+        return raccogli(resoconti.resoconto_del_tiro(5, livello, tiro, VALORI, riserva=8, **altro))
+
+    assert resoconto(numeri).testo.split("\n")[0] == NUMERI
+    for livello in (numeri + 1, parole):
+        messaggio = resoconto(livello)
+        assert messaggio.testo.split("\n")[:2] == [PAROLE, f"Tiro 5, livello {livello}: a vuoto; nella riserva restano 8 colpi."]
+        assert messaggio.annuncio.startswith(f"{PAROLE} A vuoto, riserva 8")
+    oltre = resoconto(parole + 1)
+    assert oltre.testo.split("\n")[0] == f"Tiro 5, livello {parole + 1}: a vuoto; nella riserva restano 8 colpi."
+    assert oltre.annuncio.startswith("A vuoto, riserva 8") and "Laterale" not in oltre.testo and PAROLE not in oltre.testo
+    # palestra vince sul livello, in tutti e due i versi.
+    assert resoconto(parole + 10, palestra="numeri").testo.split("\n")[0] == NUMERI
+    assert resoconto(1, palestra="niente").testo.split("\n")[0].startswith("Tiro 5, livello 1: ")
+    with pytest.raises(ValueError):
+        resoconti.riga_del_sommario(tiro, "tanti")
+    # Senza un bersaglio vivo vicino il volo non ha passaggio, e nessun grado ha il sommario.
+    assert all(resoconti.riga_del_sommario(volo(), grado) == "" for grado in resoconti.GRADI_DELLA_PALESTRA)
+    assert resoconto(1).testo.split("\n")[0] == NUMERI and raccogli(resoconti.resoconto_del_tiro(5, 1, volo(), VALORI, riserva=8)).testo.startswith("Tiro 5, ")
 
 
 def test_livello_e_inizio(monkeypatch):
@@ -258,6 +372,9 @@ def _campionario():
         resoconti.resoconto_del_tiro(2, 20, volo(bonus), VALORI, punti=9999, totale=1234567, riserva=3),
         resoconti.resoconto_del_tiro(3, 1, mancato(), VALORI, riserva=9),
         resoconti.resoconto_del_tiro(4, 1, mancato(scarto=(-30.0, 12.0, -0.01)), VALORI, riserva=0),
+        resoconti.resoconto_del_tiro(5, 1, mancato(passaggio=passaggio(-1234.5, 0.0, 0.04, -89.9)), VALORI, riserva=7),
+        resoconti.resoconto_del_tiro(6, SOMMARIO_PAROLE_FINO_AL_LIVELLO, volo(bersaglio(), passaggio=passaggio(0.0, 0.0, 0.0, 0.0)), VALORI, punti=200, totale=400, riserva=7),
+        resoconti.resoconto_del_tiro(7, SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, mancato(passaggio=passaggio()), VALORI, riserva=6),
         resoconti.inizio_partita(1, 10), resoconti.livello_nuovo(16, 10, 40), resoconti.bonus_apparso(bonus, 20), resoconti.bonus_uscito(),
         resoconti.primati_battuti(["precisione", "vicino", "mancato", "serie", "punti_in_un_tiro"], {"precisione": 1.0, "vicino": 0.0, "mancato": 0.2,
                                                                                                      "serie": 12, "punti_in_un_tiro": 9999}),

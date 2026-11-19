@@ -819,6 +819,8 @@ class Partita:
             self.riserva = max(0, self.riserva - 1)
             self.serie = 0
             self._serie_detta = False
+        # Il livello del tiro decide anche il grado del sommario (D21), bonus compreso: conta il livello
+        # in cui si spara, non quello in cui il bonus è nato; il passaggio lo porta il volo.
         messaggi = [resoconti.resoconto_del_tiro(self.tiri, livello_del_tiro, volo, self.valori, punti=punti, totale=self.punti, riserva=self.riserva,
                                                  colpi_bonus=colpi_bonus)]
         battuti = self._statistiche_del_tiro(volo, punti)
