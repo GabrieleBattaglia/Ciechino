@@ -6,7 +6,7 @@ ibrida. Il gioco lo lasciamo così ma nelle impostazioni aggiungiamo la voce asc
 raccontato da un testo, si sentono il test stereo, il bersaglio al centro del cubo con la tratta orizzontale,
 l'altezza e la distanza, tre punti a caso, la grandezza, le forme dell'oscillazione, i timbri, le tre
 scivolate della mira, il proiettile in volo, i colpi a segno e il bonus che attraversa il cubo. Il dialogo
-che li mostra sta in gui/dialoghi.py, e la finestra lo apre dal menu Impostazioni e dal menu Aiuto.
+che li mostra sta in gui/dialoghi.py, e la finestra lo apre dal menu Aiuto, l'unica voce dalla 0.11.10.
 I suoni passano dal motore del gioco con le sue voci, VoceTono per i bersagli e il proiettile, VoceBuffer per
 le scivolate e i preset, e con le stesse regole dello spazio sonoro: fisica.suono_di per panoramica, nota e
 volume, l'LFO, la grandezza e il timbro dei bersagli di bersagli.py, la forma del proiettile scelta nelle
@@ -270,7 +270,7 @@ def _testo_distanza():
         _("La nota e la panoramica restano quelle: cambia soltanto il volume, di circa {decibel} decibel fra il vicino e il lontano. Sono i due capi "
           "della scala della distanza, al centro del cubo.").format(decibel=testi.intero(decibel)),
         _("Il volume che senti dipende anche dal volume del computer, da quello di Ciechino e dalle cuffie o dagli altoparlanti: quando ne cambi "
-          "uno, l'orecchio perde la sua misura della distanza. Per ritararlo torna qui, dal menu Impostazioni o dal menu Aiuto, e riascolta questo "
+          "uno, l'orecchio perde la sua misura della distanza. Per ritararlo torna qui, dal menu Aiuto, e riascolta questo "
           "passo, il vicino e il lontano, prima di giocare."),
     )
 
@@ -398,7 +398,7 @@ def _testo_bonus():
         _("Nel gioco il bonus entra da un lato preso a caso, a un'altezza e a una distanza prese a caso, e più si sale di livello più è svelto, "
           "fino a {minima}. Un centro sul bonus vale {volte} volte un bersaglio normale del suo livello, e regala {colpi} colpi.").format(
             minima=testi.durata(DURATA_BONUS_MINIMA), volte=MOLTIPLICATORE_BONUS, colpi=COLPI_BONUS),
-        _("È l'ultimo passo: gli Ascolti si ritrovano quando vuoi, nel menu Impostazioni e nel menu Aiuto."),
+        _("È l'ultimo passo: gli Ascolti si ritrovano quando vuoi, nel menu Aiuto."),
     )
 
 

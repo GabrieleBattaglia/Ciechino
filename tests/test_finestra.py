@@ -265,8 +265,8 @@ def test_i_menu_coi_tasti_giusti(finestra):
             tasti[voce.GetItemLabelText()] = rapido.ToString() if rapido is not None else None
     assert tasti == {
         "Nuova partita": "Ctrl+N", "Pausa": "Ctrl+P", "Classifica": "Ctrl+K", "Statistiche": "Ctrl+T", "Esci": "Ctrl+Q",
-        "Volume...": None, "Scheda audio...": "Ctrl+Shift+X", "Ascolti...": None, "Proiettile...": None, "Leggi i resoconti con la sintesi": None,
-        "Lingua...": None, "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
+        "Volume...": None, "Scheda audio...": "Ctrl+Shift+X", "Proiettile...": None, "Leggi i resoconti con la sintesi": None,
+        "Lingua...": None, "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Ascolti...": None, "Offrimi un caffè...": None,
         "Entra al PUB, il gruppo di supporto...": None, "Chiedi aiuto al PUB...": None,
     }
     sintesi = finestra.voci_del_menu[finestra.cambia_sintesi]
@@ -1238,11 +1238,15 @@ def _voci_del_menu(finestra, etichetta):
     return trovate
 
 
-def test_gli_ascolti_dai_due_menu_fermano_la_partita_e_alla_chiusura_tacciono(finestra, sentiti, monkeypatch):
+def test_gli_ascolti_dal_menu_aiuto_fermano_la_partita_e_alla_chiusura_tacciono(finestra, sentiti, monkeypatch):
     finestra._esegui(finestra.nuova_partita)
     partita = finestra.partita
+    # Dal terzo collaudo, il 20 novembre 2026, la voce Ascolti sta soltanto nel menu Aiuto, con la sua a; qui si apre due volte di fila.
     voci = _voci_del_menu(finestra, "Ascolti...")
-    assert [menu for menu, _identificativo in voci] == ["Impostazioni", "Aiuto"]
+    assert [menu for menu, _identificativo in voci] == ["Aiuto"]
+    aiuto = finestra.GetMenuBar().GetMenu(finestra.GetMenuBar().FindMenu("Aiuto"))
+    assert aiuto.FindItemById(voci[0][1]).GetItemLabel() == "&Ascolti..."
+    voci = voci * 2
     motore = finestra.motore
     fermate = []
     ferma = motore.ferma
@@ -1697,10 +1701,12 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
             assert (f"{voce}: {tasto}." if tasto else f"{voce}: dal menu, senza tasto rapido.") in righe, voce
     assert "Manuale: Maiusc+F1." in righe and "Volume: dal menu, senza tasto rapido." in righe
     # Le voci nuove del proiettile (D17) e della scheda audio (D20) entrano nella guida da sole, perché la guida nasce dalla tabella dei menu.
-    assert "Il menu Impostazioni, con 6 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
+    assert "Il menu Impostazioni, con 5 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
     assert "Scheda audio: Ctrl+Maiusc+X." in righe
-    # Gli Ascolti (D23) stanno nel menu Impostazioni e nel menu Aiuto, e la guida li dice tutte e due le volte.
-    assert "Il menu Aiuto, con 8 comandi:" in righe and righe.count("Ascolti: dal menu, senza tasto rapido.") == 2
+    # Gli Ascolti (D23), dal terzo collaudo, stanno soltanto nel menu Aiuto, e la guida li dice una volta, fra le sue voci.
+    assert "Il menu Aiuto, con 8 comandi:" in righe and righe.count("Ascolti: dal menu, senza tasto rapido.") == 1
+    aiuto = righe.index("Il menu Aiuto, con 8 comandi:")
+    assert righe.index("Ascolti: dal menu, senza tasto rapido.") > aiuto > righe.index("Il menu Impostazioni, con 5 comandi:")
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
     # Esc nella mira (D25) sta fra i tasti fuori dai menu.
     assert any(riga.startswith("Esc: durante la mira annulla il tiro") for riga in righe)

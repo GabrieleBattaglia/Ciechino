@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [0.11.10] - 2026-11-20
+
+La precisione globale ha una misura nuova, voluta da Gabriele nel terzo collaudo: non più la diagonale del cubo, ma la retta che va dal centro del bersaglio al punto più lontano del cubo, il suo angolo più lontano, da confrontare con la distanza a cui il proiettile è passato dal centro. Per un bersaglio nel centro del cubo quella retta è lunga 43,3 metri, per uno in un angolo 86,6: un tiro passato a 10 metri dal centro del bersaglio vale il 76,9% nel primo caso e l'88,5% nel secondo, e uno passato a 47 metri, che prima valeva ancora il 45,6%, vale lo 0% nel centro del cubo e il 45,7% in un angolo. Un centro al primo livello vale sempre più dell'88,2%. Le precisioni globali già scritte nelle statistiche restano quelle della misura di prima, e un primato nato allora può essere più alto di quanto la misura nuova darebbe allo stesso tiro.
+
+La voce Ascolti sta soltanto nel menu Aiuto, con la sua lettera a: quella del menu Impostazioni, che la doppiava, non c'è più.
+
 ## [0.11.8] - 2026-11-20
 
 La riga del sommario coi numeri non ha più lo spazio dopo i due punti, come L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%: così i valori e la precisione globale stanno tutti nei primi 40 caratteri, e la legenda comincia dal quarantunesimo. Dal quarto al sesto livello le parole hanno la loro riga, e la precisione globale col punto di vista va sempre sulla riga sotto.

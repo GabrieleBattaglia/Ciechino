@@ -158,6 +158,22 @@ def zona_del_centro(raggio):
     return np.where(rovesciati, mezzo, minimi), np.where(rovesciati, mezzo, massimi)
 
 
+def distanza_dall_angolo_piu_lontano(posizioni):
+    """La distanza fra un punto e il più lontano degli otto angoli del cubo dei bersagli: è la misura
+    della precisione globale di D26, scelta da Gabriele il 20 novembre 2026, la retta che va dal centro
+    del bersaglio al punto più lontano dello spazio colpibile. Asse per asse l'angolo più lontano sta
+    sulla parete più distante dal punto, quindi la distanza è la radice della somma dei quadrati di
+    quelle tre lontananze. Vale anche per un punto fuori dal cubo, come il centro di un bonus appena
+    fuori da una parete. Nel centro del cubo è mezza diagonale, circa 43,3 metri, la più piccola
+    possibile; in un angolo la diagonale intera, circa 86,6. Uno scalare per un punto (3,), un array di
+    N per posizioni (N, 3)."""
+    posizioni = _array(posizioni)
+    minimi = np.array((CUBO_X[0], CUBO_Y[0], CUBO_Z[0]))
+    massimi = np.array((CUBO_X[1], CUBO_Y[1], CUBO_Z[1]))
+    lontananze = np.maximum(np.abs(posizioni - minimi), np.abs(posizioni - massimi))
+    return scalare_o_array(np.sqrt(np.sum(lontananze * lontananze, axis=-1)))
+
+
 def pan_di(x, z):
     """La panoramica di un punto, da meno 1 a sinistra a 1 a destra: il suo azimut visto dal cannone
     diviso AZIMUT_DEL_PAN, così la panoramica di un bersaglio coincide con la direzione che lo mira.

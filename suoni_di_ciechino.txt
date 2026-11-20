@@ -39,7 +39,7 @@ Si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita
 Si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita: ciechino_statistiche.
 Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo: ciechino_volume.
 Si apre la scelta della scheda audio, con Ctrl+Maiusc+X o con Scheda audio del menu Impostazioni, appena Ciechino ha riletto le schede: ciechino_scheda_audio.
-Si aprono gli Ascolti, il tutorial audio, con Ascolti del menu Impostazioni o del menu Aiuto, o da soli all'avvio finché non si è giocata una partita: ciechino_ascolti.
+Si aprono gli Ascolti, il tutorial audio, con Ascolti del menu Aiuto, o da soli all'avvio finché non si è giocata una partita: ciechino_ascolti.
 Si apre la scelta della forma del proiettile, con Proiettile del menu Impostazioni: ciechino_proiettile.
 La lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_impostazioni.
 La lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_sintesi_spenta.

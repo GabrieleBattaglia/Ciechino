@@ -35,7 +35,7 @@ nasce con la scheda delle impostazioni, e se quella non c'è o non si apre la vi
 dicono, e Ciechino suona su quella automatica, senza cancellare la scelta, perché le cuffie possono
 tornare. Ctrl+Maiusc+X, Scheda audio del menu Impostazioni, fa rileggere le schede al motore, così
 compaiono anche le cuffie Bluetooth accese dopo l'avvio, e il suono perso torna; poi apre l'elenco.
-Gli Ascolti, il tutorial audio (D23), si aprono da Ascolti del menu Impostazioni e del menu Aiuto, e da soli
+Gli Ascolti, il tutorial audio (D23), si aprono da Ascolti del menu Aiuto, l'unica voce dalla 0.11.10, e da soli
 all'avvio, una volta, finché le statistiche non contano una partita cominciata: dopo i suoni dell'avvio, a
 finestra attiva e senza altri dialoghi; la proposta dell'aggiornamento li aspetta.
 """
@@ -188,7 +188,7 @@ def menu_di_windows():
 def frase_della_prima_apertura():
     """La riga della vista quando gli Ascolti si aprono da soli all'avvio (D23): che è la prima volta, che Esc li chiude e dove si ritrovano."""
     return _("Sembra la prima volta che apri Ciechino: ti porto negli Ascolti, la sala briefing dei suoni, che Esc chiude e che ritrovi quando vuoi nel "
-             "menu Impostazioni e nel menu Aiuto.")
+             "menu Aiuto.")
 
 
 def _senza_tasto(testo):
@@ -366,8 +366,6 @@ class FinestraPrincipale(wx.Frame):
                 Voce(_("&Volume..."), None, self.cambia_volume),
                 # Il tasto di MeTeOra per la stessa scelta (D20): il gancio dei tasti lo lascia ai menu, perché ha i modificatori.
                 Voce(_("Scheda &audio..."), "Ctrl+Shift+X", self.scegli_la_scheda),
-                # Gli Ascolti (D23), anche nel menu Aiuto: qui la lettera è la s, perché la a è già di Scheda audio.
-                Voce(_("A&scolti..."), None, self.ascolti),
                 Voce(_("&Proiettile..."), None, self.cambia_proiettile),
                 Voce(_("&Leggi i resoconti con la sintesi"), None, self.cambia_sintesi, True),
                 Voce(_("L&ingua..."), None, self.cambia_lingua),
@@ -377,6 +375,7 @@ class FinestraPrincipale(wx.Frame):
                 Voce(_("&Manuale"), "Shift+F1", self.manuale),
                 Voce(_("&Novità"), "F2", self.novita),
                 Voce(_("&Informazioni"), "F3", self.informazioni),
+                # Gli Ascolti (D23): dal terzo collaudo, il 20 novembre 2026, soltanto qui, come ha chiesto Gabriele.
                 Voce(_("&Ascolti..."), None, self.ascolti),
                 None,
                 Voce(_("&Offrimi un caffè..."), None, self.caffe),
@@ -1492,7 +1491,7 @@ class FinestraPrincipale(wx.Frame):
 
     def ascolti(self):
         """
-        Ascolti, nel menu Impostazioni e nel menu Aiuto (D23): il tutorial audio, un passo alla volta. Suona
+        Ascolti, nel menu Aiuto (D23): il tutorial audio, un passo alla volta. Suona
         ascolti, conta ascolti_aperti, e apre dialoghi.Ascolti con la Regia di ascolti.py, sul motore del gioco,
         coi suoni della finestra e la forma del proiettile delle impostazioni; la regia conta passi_ascoltati,
         e dici è quella della vista, che legge soltanto se l'impostazione lo vuole. La partita in corso si

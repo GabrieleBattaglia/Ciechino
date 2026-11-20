@@ -34,7 +34,7 @@ from costanti import (
     SOMMARIO_SOGLIA_PROFONDITA,
     SOMMARIO_SOGLIA_VERTICALE,
 )
-from fisica import Traiettoria
+from fisica import Traiettoria, distanza_dall_angolo_piu_lontano
 from resoconti import Messaggio
 from volo import Misure, Volo
 
@@ -95,9 +95,13 @@ LEGENDA = "L laterale, V verticale, P profondità, in metri; I inclinazione, in 
 LEGENDA_CON_G = f"{LEGENDA}; G precisione globale"
 DAL_BERSAGLIO = "Dal bersaglio: lato, altezza, profondità, inclinazione."
 # Le precisioni globali dei voli costruiti a mano (D26): il centro a mezzo metro dal centro del bersaglio, il tiro a vuoto a 2,3 metri
-# dalla superficie del bersaglio di 3,6 metri, sulla diagonale del cubo di 86,6 metri.
-G_DEL_CENTRO = "99,4%"
-G_DEL_MANCATO = "93,2%"
+# dalla superficie del bersaglio di 3,6 metri; dal terzo collaudo sulla distanza fra DOVE_STAVA e il più lontano degli angoli del cubo,
+# 52,1 metri.
+G_DEL_CENTRO = "99,0%"
+G_DEL_MANCATO = "88,7%"
+# Il bonus dei voli costruiti a mano nasce alla loro fine, a 12,8 secondi di gioco: in quell'istante, quello del passaggio di un volo
+# senza tempo_del_passaggio, sta in DOVE_STAVA, come il bersaglio fermo, e la precisione globale è la stessa.
+NATO_DEL_BONUS = 12.8
 # Il sommario coi numeri delle misure di serie, e quello a parole, nel tiro a vuoto: la riga e l'annuncio. Dalla 0.11.8 i valori non hanno
 # lo spazio dopo i due punti, e coi numeri G sta con loro nel primo blocco; a parole la precisione globale e il punto di vista vanno sulla
 # seconda riga.
@@ -125,11 +129,11 @@ def test_resoconto_di_un_centro():
     ]
     assert messaggio.annuncio == f"Colpito, 230 punti. Precisione globale {G_DEL_CENTRO}."
     assert messaggio.dati == {"tiro": 12, "livello": 3, "colpito": True, "bonus": False, "punti": 230, "totale": 1230, "riserva": 8, "precisione": 0.64,
-                              "precisione_globale": pytest.approx(1 - 0.5 / (50 * 3 ** 0.5))}
+                              "precisione_globale": pytest.approx(1 - 0.5 / distanza_dall_angolo_piu_lontano(DOVE_STAVA))}
 
 
 def test_resoconto_di_un_bonus_e_di_un_mobile():
-    bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0))
+    bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0), nato=NATO_DEL_BONUS)
     messaggio = raccogli(resoconti.resoconto_del_tiro(7, 4, volo(bonus, precisione=0.5), VALORI, punti=1150, totale=2380, riserva=12))
     assert messaggio.testo.split("\n")[0] == (f"Tiro 7, livello 4: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 50%, "
                                               f"precisione globale {G_DEL_CENTRO}, {COLPI_BONUS} colpi in più, totale 2.380 punti.")
@@ -157,12 +161,12 @@ def test_resoconto_di_un_tiro_a_vuoto_con_l_aiuto():
 def test_segni_opposti_e_singolari():
     messaggio = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(scarto=(-3.4, 0.5, -0.2), distanza=1.0, azimut=-7.0, laterale_finale=-1.0), VALORI, riserva=1))
     righe = messaggio.testo.split("\n")
-    assert righe[0] == "Tiro 1, livello 1: a vuoto, precisione globale 94,7%; nella riserva resta 1 colpo."
+    assert righe[0] == "Tiro 1, livello 1: a vuoto, precisione globale 91,2%; nella riserva resta 1 colpo."
     assert righe[1].startswith("Mira: direzione 7 gradi a sinistra, 64% della scala;")
     assert ", 1 metro a sinistra del centro," in righe[2]
     assert righe[3] == ("Il bersaglio più vicino è stato mancato di 1 metro: rispetto al suo centro il tiro è passato a destra di 0,5 metri, sotto di 0,2 metri "
                         "e corto di 3,4 metri.")
-    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri. Precisione globale 94,7%."
+    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri. Precisione globale 91,2%."
     assert resoconti.scarti((0.04, -0.03, 2.0)) == ["sopra di 2 metri"]
     # Lo scarto arriva nell'ordine di fisica.scomponi, e si dice in quello del sommario (D21); le
     # misure che mancano non si dicono.
@@ -238,7 +242,7 @@ def test_sommario_coi_numeri_in_testa_al_resoconto():
     assert pieno.testo.split("\n")[0] == blocchi(f"L:0,0 V:0,0 P:0,0 I:-45,8 G:{G_DEL_CENTRO}", f"{LEGENDA_CON_G}.")
     assert pieno.annuncio == f"Colpito, 230 punti. L:0,0 V:0,0 P:0,0 I:-45,8 G:{G_DEL_CENTRO}"
     # E nel bonus, dove l'annuncio ha le sue parole.
-    bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0))
+    bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0), nato=NATO_DEL_BONUS)
     preso = raccogli(resoconti.resoconto_del_tiro(7, 2, volo(bonus, misure=misure()), VALORI, punti=1150, totale=2380, riserva=12))
     assert preso.testo.split("\n")[:2] == [blocchi(f"{VALORI_NUMERI} G:{G_DEL_CENTRO}", f"{LEGENDA_CON_G}."),
                                             f"Tiro 7, livello 2: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 64%, "
@@ -271,7 +275,7 @@ def test_i_valori_e_la_g_nel_primo_blocco():
     punti, e stanno tutti nel primo blocco, G compresa, come «L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%»; poi spazi fino al carattere
     40 compreso, e dal 41 la legenda. La riga eccezionale che non ci sta con almeno uno spazio dopo di sé tiene il ripiego di prima:
     G apre il secondo blocco. Gli esempi coi numeri delle docstring di resoconti stanno anche loro nel primo blocco."""
-    esempio = resoconti.sommario_del_tiro(mancato(misure=misure(2.5, 7.7, 12.1, -23.2), distanza=3.85), "numeri")
+    esempio = resoconti.sommario_del_tiro(mancato(misure=misure(2.5, 7.7, 12.1, -23.2), distanza=0.88), "numeri")
     assert esempio.primo == "L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%" and esempio.annuncio == esempio.primo
     assert esempio.riga == esempio.primo.ljust(BLOCCO_DEL_BRAILLE) + f"{LEGENDA_CON_G}." and esempio.riga.index("L laterale") == BLOCCO_DEL_BRAILLE
     # Con due cifre prima della virgola in ogni valore la riga ci sta ancora, con uno spazio prima della legenda.

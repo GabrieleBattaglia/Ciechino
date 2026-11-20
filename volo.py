@@ -17,7 +17,7 @@ import numpy as np
 
 import fisica
 from bersagli import Bersaglio
-from costanti import DIAGONALE_DEL_CUBO, PASSO_DEL_VOLO, PROIETTILE_DB, RAGGIO_PROIETTILE
+from costanti import PASSO_DEL_VOLO, PROIETTILE_DB, RAGGIO_PROIETTILE
 
 # Le misure dell'artigliere si cercano prima sui passi del volo, poi fra i due passi che contengono
 # l'istante giusto, per bisezione, fino a questa finezza in secondi. Non è una taratura del gioco:
@@ -94,8 +94,11 @@ class Volo:
     centri meno il raggio) e scarto (radiale, laterale, verticale) nel punto più vicino, se un
     bersaglio vivo c'era. misure, in fondo e di serie None, così i Volo costruiti senza restano
     validi, sono le Misure dell'artigliere rispetto al bersaglio colpito o al vicino (D21); senza
-    bersagli vivi restano None. Le proprietà distanza_dal_centro e precisione_globale, di D26, si
-    ricavano dai campi."""
+    bersagli vivi restano None. tempo_del_passaggio, dalla 0.11.10 e anch'esso di serie None, è il
+    tempo di volo, contato dallo sparo, del passaggio più vicino fra il centro del proiettile e quello
+    del bersaglio colpito o del vicino, l'istante di distanza_dal_centro: in un centro può venire dopo
+    il contatto, come la precisione, che guarda tutto il tratto dentro il bersaglio. Le proprietà
+    distanza_dal_centro, centro_nel_passaggio e precisione_globale, di D26, si ricavano dai campi."""
 
     traiettoria: fisica.Traiettoria
     partenza: float
@@ -111,6 +114,7 @@ class Volo:
     gittata: float
     laterale_finale: float
     misure: Misure | None = None
+    tempo_del_passaggio: float | None = None
 
     @property
     def fine(self):
@@ -130,14 +134,33 @@ class Volo:
         return None
 
     @property
-    def precisione_globale(self):
-        """La precisione globale di D26, da 0 a 1: 1 meno distanza_dal_centro divisa per DIAGONALE_DEL_CUBO,
-        mai sotto zero; quanto il proiettile si è avvicinato al bersaglio considerando l'intero cubo. Un
-        centro sta sopra 1 meno raggio più RAGGIO_PROIETTILE diviso la diagonale. None senza la distanza."""
-        distanza = self.distanza_dal_centro
-        if distanza is None:
+    def centro_nel_passaggio(self):
+        """Il centro del bersaglio colpito o del vicino nell'istante del passaggio più vicino, un array di 3,
+        anche fuori dal cubo, come per un bonus appena uscito da una parete; None senza bersaglio. Un Volo
+        costruito senza tempo_del_passaggio prende il bersaglio alla fine del volo, che per uno fermo è lo
+        stesso punto."""
+        bersaglio = self.colpito if self.colpito is not None else self.vicino
+        if bersaglio is None:
             return None
-        return min(1.0, max(0.0, 1.0 - distanza / DIAGONALE_DEL_CUBO))
+        tempo = self.durata if self.tempo_del_passaggio is None else self.tempo_del_passaggio
+        return np.asarray(bersaglio.posizione(self.partenza + tempo), dtype=float)
+
+    @property
+    def precisione_globale(self):
+        """La precisione globale di D26, da 0 a 1, quanto il proiettile si è avvicinato al bersaglio
+        considerando l'intero cubo, con la misura che Gabriele ha scelto nel terzo collaudo, il 20
+        novembre 2026: 1 meno distanza_dal_centro divisa per la distanza fra centro_nel_passaggio e il più
+        lontano degli otto angoli del cubo, fisica.distanza_dall_angolo_piu_lontano, mai sotto zero,
+        perché un tiro sparato lontano può passare più lontano di quell'angolo. Quella distanza va da
+        mezza diagonale, circa 43,3 metri, per un bersaglio nel centro del cubo, alla diagonale intera,
+        circa 86,6, in un angolo; un centro sta quindi sempre sopra 1 meno raggio più RAGGIO_PROIETTILE
+        diviso mezza diagonale. None senza la distanza."""
+        distanza = self.distanza_dal_centro
+        centro = self.centro_nel_passaggio
+        if distanza is None or centro is None:
+            return None
+        lontananza = fisica.distanza_dall_angolo_piu_lontano(centro)
+        return min(1.0, max(0.0, 1.0 - distanza / lontananza))
 
 
 def _contatto(distanze, vivi, soglia, tempi):
@@ -174,13 +197,16 @@ def _minimo_raffinato(distanze, indice):
 
 def _minimo_nel_tratto(distanze, ammessi, inizio):
     """Il minimo della distanza nel tratto che comincia a inizio e prosegue finché ammessi resta
-    vero, raffinato quando il minimo non cade su un capo del tratto."""
+    vero, raffinato quando il minimo non cade su un capo del tratto. Restituisce (minimo, indice,
+    frazione): il passo del minimo e, come in _minimo_raffinato, dove sta il vertice della parabola,
+    zero sui capi del tratto; _tempo_fra_i_passi ne fa l'istante del passaggio più vicino."""
     usciti = np.flatnonzero(~ammessi[inizio:])
     fine = inizio + (int(usciti[0]) if usciti.size else len(ammessi) - inizio)
     indice = inizio + int(np.argmin(distanze[inizio:fine]))
     if inizio < indice < fine - 1:
-        return _minimo_raffinato(distanze, indice)[0]
-    return float(distanze[indice])
+        minimo, frazione = _minimo_raffinato(distanze, indice)
+        return minimo, indice, frazione
+    return float(distanze[indice]), indice, 0.0
 
 
 def _tempo_fra_i_passi(tempi, indice, frazione):
@@ -308,12 +334,13 @@ def calcola_volo(traiettoria, bersagli, partenza):
     if toccati:
         _, ordine = min(toccati)
         bersaglio, centri, distanze, vivi, soglia, (durata, indice) = esami[ordine]
-        distanza_al_centro = _minimo_nel_tratto(distanze, vivi & (distanze <= soglia), indice)
+        distanza_al_centro, piu_vicino, frazione = _minimo_nel_tratto(distanze, vivi & (distanze <= soglia), indice)
         precisione = min(max(1.0 - distanza_al_centro / soglia, 0.0), 1.0)
         punto_finale = traiettoria.posizione(durata)
         misure = _misure(traiettoria, bersaglio, partenza, tempi, posizioni, centri)
-        return _volo(traiettoria, partenza, durata, punto_finale, colpito=bersaglio, precisione=precisione, distanza_al_centro=distanza_al_centro, misure=misure)
-    vicino = distanza_dal_vicino = scarto = misure = centri_del_vicino = None
+        return _volo(traiettoria, partenza, durata, punto_finale, colpito=bersaglio, precisione=precisione, distanza_al_centro=distanza_al_centro, misure=misure,
+                     tempo_del_passaggio=_tempo_fra_i_passi(tempi, piu_vicino, frazione))
+    vicino = distanza_dal_vicino = scarto = misure = centri_del_vicino = tempo_del_passaggio = None
     # Il confronto fra i bersagli si fa sui passi, uguale per tutti; il raffinamento viene dopo.
     migliore = math.inf
     for bersaglio, centri, distanze, vivi, _soglia, _toccato in esami:
@@ -324,29 +351,32 @@ def calcola_volo(traiettoria, bersagli, partenza):
         if dalla_superficie[indice] < migliore:
             migliore = float(dalla_superficie[indice])
             # Il minimo si raffina come nei centri, ma soltanto se anche i passi accanto sono vivi;
-            # lo scarto si prende nello stesso punto, il vertice della parabola, non sul passo.
+            # lo scarto si prende nello stesso punto, il vertice della parabola, non sul passo, e lì
+            # sta anche l'istante del passaggio più vicino della precisione globale (D26).
             minimo, frazione = float(distanze[indice]), 0.0
             if 0 < indice < len(vivi) - 1 and vivi[indice - 1] and vivi[indice + 1]:
                 minimo, frazione = _minimo_raffinato(distanze, indice)
             vicino = bersaglio
             distanza_dal_vicino = minimo - bersaglio.raggio
-            scarto = _scarto(traiettoria, bersaglio, partenza, _tempo_fra_i_passi(tempi, indice, frazione))
+            tempo_del_passaggio = _tempo_fra_i_passi(tempi, indice, frazione)
+            scarto = _scarto(traiettoria, bersaglio, partenza, tempo_del_passaggio)
             centri_del_vicino = centri
     # Le misure dell'artigliere si cercano una volta sola, per il vicino scelto.
     if vicino is not None:
         misure = _misure(traiettoria, vicino, partenza, tempi, posizioni, centri_del_vicino)
     return _volo(traiettoria, partenza, tempo_a_terra, traiettoria.punto_a_terra(), vicino=vicino, distanza_dal_vicino=distanza_dal_vicino, scarto=scarto,
-                 misure=misure)
+                 misure=misure, tempo_del_passaggio=tempo_del_passaggio)
 
 
 def _volo(traiettoria, partenza, durata, punto_finale, colpito=None, precisione=None, distanza_al_centro=None, vicino=None, distanza_dal_vicino=None, scarto=None,
-          misure=None):
+          misure=None, tempo_del_passaggio=None):
     """Compone il Volo, con le misure del tragitto che valgono per i centri e per i tiri a vuoto."""
     origine = traiettoria.origine
     gittata = math.hypot(float(punto_finale[0] - origine[0]), float(punto_finale[2] - origine[2]))
     return Volo(traiettoria=traiettoria, partenza=partenza, durata=float(durata), colpito=colpito, punto_finale=np.asarray(punto_finale, dtype=float),
                 precisione=precisione, distanza_al_centro=distanza_al_centro, vicino=vicino, distanza_dal_vicino=distanza_dal_vicino, scarto=scarto,
-                altezza_massima=_altezza_massima(traiettoria, durata), gittata=gittata, laterale_finale=float(punto_finale[0]), misure=misure)
+                altezza_massima=_altezza_massima(traiettoria, durata), gittata=gittata, laterale_finale=float(punto_finale[0]), misure=misure,
+                tempo_del_passaggio=tempo_del_passaggio)
 
 
 def parametri_del_proiettile(volo):

@@ -1,12 +1,14 @@
 """
 Le prove di fisica.py: il tiro e la sua inversa, la parabola, il suono dello spazio, la distanza
-orizzontale delle misure dell'artigliere (D21), la scomposizione dello scarto e la copertura del cubo.
+orizzontale delle misure dell'artigliere (D21), la scomposizione dello scarto, la copertura del cubo e,
+dal terzo collaudo, la distanza dall'angolo più lontano del cubo, la misura della precisione globale (D26).
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 La prova della copertura è quella che il progetto vuole: ogni punto dove può stare il centro di un
 bersaglio si raggiunge con i tre valori dentro i margini, e il tiro trovato ci passa davvero.
 """
 
+import itertools
 import math
 
 import numpy as np
@@ -237,6 +239,32 @@ def test_zona_del_centro():
         assert np.allclose(massimi, (CUBO_X[1] - raggio, CUBO_Y[1] - raggio, CUBO_Z[1] - raggio))
     minimi, massimi = fisica.zona_del_centro(1000.0)
     assert np.all(minimi <= massimi)
+
+
+def test_distanza_dall_angolo_piu_lontano():
+    """D26, dal terzo collaudo: la distanza fra un punto e il più lontano degli otto angoli del cubo, contata qui angolo per angolo.
+    Mezza diagonale nel centro del cubo, la più piccola, la diagonale intera in un angolo, e vale anche fuori dal cubo, per il bonus
+    appena oltre una parete; scalari e array come ogni funzione di mappatura."""
+    angoli = np.array(list(itertools.product(CUBO_X, CUBO_Y, CUBO_Z)))
+    lato = CUBO_X[1] - CUBO_X[0]
+
+    def piu_lontano(punto):
+        return float(np.max(np.linalg.norm(angoli - np.asarray(punto, dtype=float), axis=1)))
+
+    centro = ((CUBO_X[0] + CUBO_X[1]) / 2, (CUBO_Y[0] + CUBO_Y[1]) / 2, (CUBO_Z[0] + CUBO_Z[1]) / 2)
+    assert fisica.distanza_dall_angolo_piu_lontano(centro) == pytest.approx(lato * math.sqrt(3) / 2)
+    assert fisica.distanza_dall_angolo_piu_lontano(angoli[0]) == pytest.approx(lato * math.sqrt(3))
+    punti = np.array([(3.7, 12.5, 61.0), (-20.0, 5.0, 35.0), (CUBO_X[1] + 2.0, 30.0, 70.0), (0.0, 20.0, 50.0), angoli[5]])
+    distanze = fisica.distanza_dall_angolo_piu_lontano(punti)
+    assert isinstance(distanze, np.ndarray) and distanze.shape == (len(punti),)
+    for punto, distanza in zip(punti, distanze, strict=True):
+        assert distanza == pytest.approx(piu_lontano(punto))
+        assert isinstance(fisica.distanza_dall_angolo_piu_lontano(punto), float)
+    # Nessun punto, dentro o fuori dal cubo, sta a meno di mezza diagonale dal suo angolo più lontano.
+    generatore = np.random.default_rng(26)
+    casuali = generatore.uniform((CUBO_X[0] - 5.0, CUBO_Y[0], CUBO_Z[0] - 5.0), (CUBO_X[1] + 5.0, CUBO_Y[1], CUBO_Z[1] + 5.0), size=(200, 3))
+    assert np.all(fisica.distanza_dall_angolo_piu_lontano(casuali) >= lato * math.sqrt(3) / 2 - 1e-9)
+    assert np.allclose(fisica.distanza_dall_angolo_piu_lontano(casuali), [piu_lontano(p) for p in casuali])
 
 
 def test_velocita_per_passa_dal_punto():

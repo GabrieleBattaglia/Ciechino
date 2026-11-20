@@ -20,9 +20,11 @@ numeri, le parole, le attese e la pausa di Ctrl+P, con le soglie del sommario e 
 questi si confrontano con costanti.py, e l'avviso di Ctrl+P fuori dalla palestra con quello di resoconti.py.
 Dal secondo collaudo (D24, D25 e D26) il manuale dice il secondo di silenzio prima del resoconto, i blocchi di
 40 caratteri del sommario con la sua legenda, i passaggi delle barre, Esc nella mira col suo messaggio e la
-precisione globale con la diagonale del cubo; e ogni versione ha il suo blocco nel CHANGELOG. Dalla 0.11.8 anche il
+precisione globale; e ogni versione ha il suo blocco nel CHANGELOG. Dalla 0.11.8 anche il
 margine dopo la scivolata, la seconda riga del sommario a parole, il primato della media dai dieci tiri e il proiettile
-perduto nelle medie.
+perduto nelle medie. Dal terzo collaudo, la 0.11.10, la precisione globale con la retta fino all'angolo più lontano del
+cubo, con gli esempi calcolati da volo.py per un bersaglio nel centro del cubo e uno in un angolo, e la voce Ascolti
+soltanto nel menu Aiuto.
 """
 
 import re
@@ -30,6 +32,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
+import fisica
 import resoconti
 import suoni
 import testi
@@ -38,7 +41,9 @@ from costanti import (
     ALZO_FREQUENZE,
     BLOCCO_DEL_BRAILLE,
     COLPI_INIZIALI,
-    DIAGONALE_DEL_CUBO,
+    CUBO_X,
+    CUBO_Y,
+    CUBO_Z,
     ESCURSIONE_A_CASO,
     FORME_LFO,
     GRAZIA_DELL_ATTESA,
@@ -87,6 +92,34 @@ VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "me
 
 def _leggi(nome):
     return (RADICE / nome).read_text(encoding="utf-8")
+
+
+# Il centro del cubo e uno dei suoi angoli, per gli esempi della precisione globale del terzo collaudo (D26).
+CENTRO_DEL_CUBO = ((CUBO_X[0] + CUBO_X[1]) / 2, (CUBO_Y[0] + CUBO_Y[1]) / 2, (CUBO_Z[0] + CUBO_Z[1]) / 2)
+ANGOLO_DEL_CUBO = (CUBO_X[0], CUBO_Y[0], CUBO_Z[0])
+
+
+def _globale(punto, distanza):
+    """La precisione globale, scritta come la scrive il gioco, di un tiro a vuoto costruito a mano, passato a distanza metri dal centro
+    di un bersaglio fermo in punto: la calcola volo.Volo, come in partita."""
+    from bersagli import Bersaglio
+    from fisica import Traiettoria
+    from volo import Volo
+
+    bersaglio = Bersaglio(numero=1, forma="seno", raggio=RAGGIO_INIZIALE, partenza=punto)
+    volo = Volo(traiettoria=Traiettoria(0.0, 40.0, 30.0), partenza=0.0, durata=3.0, colpito=None, punto_finale=(0.0, 0.0, 70.0), precisione=None,
+                distanza_al_centro=None, vicino=bersaglio, distanza_dal_vicino=distanza - RAGGIO_INIZIALE, scarto=None, altezza_massima=25.0, gittata=70.0,
+                laterale_finale=0.0, tempo_del_passaggio=0.0)
+    return testi.percento(volo.precisione_globale, 1)
+
+
+def _con_articolo(percentuale):
+    """La percentuale con l'articolo che vuole davanti: «l'88,2%», «l'11,0%», «il 98,6%», «lo 0%»."""
+    if percentuale.startswith(("8", "11,", "1,")):
+        return f"l'{percentuale}"
+    if percentuale == "0,0%":
+        return "lo 0%"
+    return f"il {percentuale}"
 
 
 def _blocco_della_versione(changelog, versione):
@@ -268,14 +301,17 @@ def test_il_manuale_dice_i_livelli_della_palestra_e_del_sommario():
 
 
 def test_il_manuale_e_il_changelog_dicono_gli_ascolti():
-    """D23: il capitolo degli Ascolti, le loro voci nei due menu, con un passo per ogni passo vero, e la riga della prima apertura con le
-    parole della vista; il blocco della versione nel CHANGELOG ne parla, e il manuale ha la versione vera."""
+    """D23: il capitolo degli Ascolti, la loro voce, dal terzo collaudo soltanto nel menu Aiuto, con un passo per ogni passo vero, e la
+    riga della prima apertura con le parole della vista; il blocco della versione nel CHANGELOG ne parla, e il manuale ha la versione vera."""
     from ascolti import passi
     from gui.finestra import frase_della_prima_apertura
 
     manuale = _leggi("manuale.html")
     assert f"<p>Versione {VERSIONE}," in manuale
-    assert '<h2 id="ascolti">Gli Ascolti</h2>' in manuale and manuale.count("<li>Ascolti: ") == 2
+    assert '<h2 id="ascolti">Gli Ascolti</h2>' in manuale and manuale.count("<li>Ascolti: ") == 1
+    impostazioni = re.search(r'<h3 id="menu-impostazioni">.*?<ul>(.*?)</ul>', manuale, re.DOTALL)
+    aiuto = re.search(r'<h3 id="menu-aiuto">.*?<ul>(.*?)</ul>', manuale, re.DOTALL)
+    assert impostazioni and aiuto and "<li>Ascolti: " not in impostazioni.group(1) and "<li>Ascolti: " in aiuto.group(1)
     sezione = re.search(r'<h3 id="ascolti-passi">.*?<ul>(.*?)</ul>', manuale, re.DOTALL)
     assert sezione, "nel manuale manca l'elenco dei passi degli Ascolti"
     # Le forme dell'oscillazione stanno in due passi veri e in una voce sola dell'elenco.
@@ -283,15 +319,16 @@ def test_il_manuale_e_il_changelog_dicono_gli_ascolti():
     assert sezione.group(1).count("<li>") == len(elenco) - (sum(passo.nome.startswith("forme") for passo in elenco) - 1)
     assert f"I passi sono {A_PAROLE[len(elenco)]}" in manuale
     frase = frase_della_prima_apertura()
-    assert frase in manuale and "Esc" in frase and "Impostazioni" in frase and "Aiuto" in frase
+    assert frase in manuale and "Esc" in frase and "Impostazioni" not in frase and "menu Aiuto" in frase
     assert "sala briefing dei suoni" in manuale
     assert "Ascolti" in _blocco_della_versione(_leggi("CHANGELOG.md"), "0.9.0") and "Ascolti" in _leggi("README.md")
 
 
 def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
     """D24, D25 e D26 nel manuale coi valori veri: il ritardo del resoconto, i blocchi del display braille con la legenda di
-    resoconti.py, i passaggi delle barre, Esc nella mira col messaggio della vista, la diagonale del cubo e le precisioni globali
-    minime dei centri al primo livello e coi bersagli più piccoli; e un blocco del CHANGELOG per ogni versione del collaudo."""
+    resoconti.py, i passaggi delle barre, Esc nella mira col messaggio della vista e le precisioni globali minime dei centri al primo
+    livello e coi bersagli più piccoli, dalla 0.11.10 col bersaglio nel centro del cubo, il caso peggiore; e un blocco del CHANGELOG per
+    ogni versione del collaudo."""
     import resoconti
     from bersagli import Bersaglio
     from fisica import Traiettoria
@@ -301,7 +338,8 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
     assert RITARDO_DEL_RESOCONTO in RITARDI_A_PAROLE, f"il ritardo di {RITARDO_DEL_RESOCONTO} secondi va detto nel manuale, e in RITARDI_A_PAROLE"
 
     def minima(raggio):
-        return testi.percento(1 - (raggio + RAGGIO_PROIETTILE) / DIAGONALE_DEL_CUBO, 1)
+        """Il centro nel caso peggiore, dal terzo collaudo: il bersaglio nel centro del cubo, sfiorato sul bordo (D26)."""
+        return _con_articolo(testi.percento(1 - (raggio + RAGGIO_PROIETTILE) / fisica.distanza_dall_angolo_piu_lontano(CENTRO_DEL_CUBO), 1))
 
     # La legenda vera, da un tiro a vuoto costruito a mano con un bersaglio vicino, così c'è anche la G.
     bersaglio = Bersaglio(numero=1, forma="seno", raggio=2.0, partenza=(0.0, 20.0, 50.0))
@@ -311,7 +349,7 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
                 misure=misure)
     sommario = resoconti.sommario_del_tiro(volo, "numeri")
     # Dalla 0.11.8 la G sta coi valori nel primo blocco, e il secondo è la legenda sola.
-    assert sommario.primo.endswith(" G:82,7%") and len(sommario.primo) < BLOCCO_DEL_BRAILLE
+    assert sommario.primo.endswith(" G:69,5%") and len(sommario.primo) < BLOCCO_DEL_BRAILLE
     legenda = sommario.secondo.rstrip(".")
     frasi = [
         RITARDI_A_PAROLE[RITARDO_DEL_RESOCONTO],
@@ -322,9 +360,8 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
         f"Se anche il {ORDINALI[PASSAGGI_DELLA_BARRA]} passaggio finisce senza spazio",
         resoconti.mira_annullata(COLPI_INIZIALI).testo,
         '<li><kbd>Esc</kbd>: durante la mira annulla il tiro',
-        f"sulla diagonale del cubo, {testi.numero(DIAGONALE_DEL_CUBO)} metri",
-        f"sopra il {minima(RAGGIO_INIZIALE)}",
-        f"sopra il {minima(RAGGIO_MINIMO)}",
+        f"con bersagli di 5 metri, sopra {minima(RAGGIO_INIZIALE)}",
+        f"coi bersagli di mezzo metro sopra {minima(RAGGIO_MINIMO)}",
         '<h3 id="precisione-globale">La precisione globale</h3>',
     ]
     mancanti = [frase for frase in frasi if frase not in manuale]
@@ -367,6 +404,40 @@ def test_le_correzioni_della_0_11_8_nei_documenti():
         assert "tranne quello del proiettile perduto" in testo, f"{nome} non dice che il proiettile perduto non ha la precisione globale"
     blocco = _blocco_della_versione(changelog, "0.11.8")
     assert "L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%" in blocco and margine in blocco and f"almeno {A_PAROLE[COLPI_INIZIALI]} tiri" in blocco
+
+
+def test_le_correzioni_della_0_11_10_nei_documenti():
+    """Il terzo collaudo di Gabriele, del 20 novembre 2026: la precisione globale con la retta che va dal centro del bersaglio all'angolo
+    più lontano del cubo, con gli esempi veri, calcolati da volo.Volo, per un bersaglio nel centro del cubo e uno in un angolo, nel
+    manuale, nel README e nel blocco della 0.11.10 del CHANGELOG; nessuno dice più la diagonale come misura di oggi, e il blocco dice
+    anche la voce Ascolti soltanto nel menu Aiuto."""
+    manuale, readme, changelog = _leggi("manuale.html"), _leggi("README.md"), _leggi("CHANGELOG.md")
+    blocco = _blocco_della_versione(changelog, "0.11.10")
+    corta = testi.numero(fisica.distanza_dall_angolo_piu_lontano(CENTRO_DEL_CUBO))
+    lunga = testi.numero(fisica.distanza_dall_angolo_piu_lontano(ANGOLO_DEL_CUBO))
+    assert (corta, lunga) == ("43,3", "86,6")
+
+    def coppia(distanza):
+        return _con_articolo(_globale(CENTRO_DEL_CUBO, distanza)), _con_articolo(_globale(ANGOLO_DEL_CUBO, distanza))
+
+    cinque, dieci, venti, quarantasette = (coppia(distanza) for distanza in (5.0, 10.0, 20.0, 47.0))
+    assert quarantasette[0] == "lo 0%"
+    frasi = [
+        f"La retta è lunga {corta} metri per un bersaglio nel centro del cubo, la più corta, e {lunga} metri, la diagonale del cubo, per uno in un angolo",
+        f"un tiro passato a 5 metri dal centro del bersaglio vale {cinque[0]} con un bersaglio nel centro del cubo, e {cinque[1]} con uno in un angolo",
+        f"a 10 metri {dieci[0]} e {dieci[1]}; a 20 metri {venti[0]} e {venti[1]}; a 47 metri {quarantasette[0]}, perché passa più lontano dell'angolo, e "
+        f"{quarantasette[1]}",
+        "per il bonus anche quando è appena fuori da una parete",
+    ]
+    mancanti = [frase for frase in frasi if frase not in manuale]
+    assert not mancanti, f"frasi della 0.11.10 che il manuale non dice: {mancanti}"
+    sezione = re.search(r'<h3 id="precisione-globale">.*?</p>', manuale, re.DOTALL)
+    assert sezione and "sulla diagonale del cubo" not in sezione.group(0)
+    for nome, testo in (("README.md", readme), ("CHANGELOG.md", blocco)):
+        assert f"lunga {corta} metri" in testo and (f"{lunga} per uno in un angolo" in testo or f"per uno in un angolo {lunga}" in testo), nome
+        assert f"vale {dieci[0]} nel primo caso e {dieci[1]} nel secondo" in testo, nome
+    assert f"lo 0% e {quarantasette[1]}" in readme and f"vale lo 0% nel centro del cubo e {quarantasette[1]} in un angolo" in blocco
+    assert "menu Aiuto" in blocco and "Impostazioni" in blocco
 
 
 def test_niente_separatori_grafici_nei_documenti():

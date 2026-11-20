@@ -531,7 +531,7 @@ class Pagina:
             self._voce(_("Cambi della scheda audio: {n}."), self.c("scheda_cambiata")),
             # Traduttori: le volte in cui la scheda audio scelta non c'era, o non si apriva, all'avvio o appena scelta.
             self._voce(_("Schede audio scelte che non si sono aperte: {n}."), self.c("scheda_non_aperta")),
-            # Traduttori: da qui, gli Ascolti, il tutorial audio di Ciechino, nel menu Impostazioni e nel menu Aiuto: le volte in cui si sono aperti,
+            # Traduttori: da qui, gli Ascolti, il tutorial audio di Ciechino, nel menu Aiuto: le volte in cui si sono aperti,
             # quelle in cui si sono aperti da soli all'avvio, prima della prima partita, i passi fatti suonare e le volte in cui si è arrivati fino all'ultimo.
             self._voce(_("Aperture degli Ascolti: {n}."), self.c("ascolti_aperti")),
             self._voce(_("Ascolti aperti da soli all'avvio, prima della prima partita: {n}."), self.c("ascolti_d_avvio")),

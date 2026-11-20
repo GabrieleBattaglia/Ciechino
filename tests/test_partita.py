@@ -42,7 +42,6 @@ from costanti import (
     COLPI_INIZIALI,
     COLPI_PER_LIVELLO,
     COMPENSAZIONE_DEL_TASTO,
-    DIAGONALE_DEL_CUBO,
     ESPONENTE_DEL_RAGGIO,
     FS,
     GRAZIA_DELL_ATTESA,
@@ -67,7 +66,7 @@ from costanti import (
     VELOCITA_DEL_TEMPO,
     VELOCITA_DI_RIFERIMENTO,
 )
-from fisica import Traiettoria, parametri_del_tiro, soluzione
+from fisica import Traiettoria, distanza_dall_angolo_piu_lontano, parametri_del_tiro, soluzione
 from motore_audio import VoceTono
 from partita import Messaggio, Partita, punti_del_centro
 from sintesi import db_in_lineare
@@ -412,22 +411,25 @@ def test_spazio_nei_bip_vale_il_minimo(banco):
 
 
 def test_la_precisione_globale_nelle_statistiche(banco, cartella_di_prova):
-    """D26: ogni tiro con un bersaglio vicino ha la sua precisione globale, 1 meno la distanza più piccola dal centro del bersaglio
-    divisa per la diagonale del cubo: il centro sta sopra 1 meno raggio più RAGGIO_PROIETTILE diviso la diagonale. La partita la dà
-    alle statistiche, tiro per tiro, e alla fine la sua media, che va fra le ultime partite."""
+    """D26: ogni tiro con un bersaglio vicino ha la sua precisione globale, dal terzo collaudo 1 meno la distanza più piccola dal
+    centro del bersaglio divisa per la distanza fra quel centro e il più lontano degli angoli del cubo: il centro sta sopra 1 meno
+    raggio più RAGGIO_PROIETTILE diviso quella distanza. La partita la dà alle statistiche, tiro per tiro, e alla fine la sua media,
+    che va fra le ultime partite."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     partita.nuova()
     bersaglio = partita.bersagli[0]
+    # Il bersaglio del primo livello è fermo: l'angolo più lontano si misura da dove sta.
+    lontananza = distanza_dall_angolo_piu_lontano(bersaglio.partenza)
     colpisci(banco, partita)
     centro = partita.ultimo_volo
     messaggi = fino_alla_risoluzione(banco, partita)
-    assert centro.precisione_globale == pytest.approx(1.0 - centro.distanza_al_centro / DIAGONALE_DEL_CUBO)
-    assert centro.precisione_globale > 1.0 - (bersaglio.raggio + RAGGIO_PROIETTILE) / DIAGONALE_DEL_CUBO
+    assert centro.precisione_globale == pytest.approx(1.0 - centro.distanza_al_centro / lontananza)
+    assert centro.precisione_globale > 1.0 - (bersaglio.raggio + RAGGIO_PROIETTILE) / lontananza
     assert messaggi[0].dati["precisione_globale"] == centro.precisione_globale
     tiro_a_vuoto(banco, partita)
     vuoto = partita.ultimo_volo
-    assert vuoto.precisione_globale == pytest.approx(1.0 - (vuoto.distanza_dal_vicino + vuoto.vicino.raggio) / DIAGONALE_DEL_CUBO)
+    assert vuoto.precisione_globale == pytest.approx(max(0.0, 1.0 - (vuoto.distanza_dal_vicino + vuoto.vicino.raggio) / lontananza))
     assert vuoto.precisione_globale < centro.precisione_globale
     somme = statistiche.dati["somme"]
     assert somme["tiri_col_globale"] == 2 and somme["precisione_globale"] == pytest.approx(centro.precisione_globale + vuoto.precisione_globale, abs=1e-5)

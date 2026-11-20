@@ -29,10 +29,6 @@ CUBO_DISTANZA = 30.0
 CUBO_X = (-CUBO_LATO / 2, CUBO_LATO / 2)
 CUBO_Y = (0.0, CUBO_LATO)
 CUBO_Z = (CUBO_DISTANZA, CUBO_DISTANZA + CUBO_LATO)
-# La diagonale del cubo, il lato per la radice di tre, circa 86,6 metri: la misura della precisione
-# globale di D26, scelta da Gabriele il 20 novembre 2026, che dice quanto il proiettile si è avvicinato
-# al bersaglio considerando l'intero cubo di spazio.
-DIAGONALE_DEL_CUBO = CUBO_LATO * 3 ** 0.5
 # Il centro di un bersaglio sta almeno a questa altezza, e sempre col bersaglio tutto dentro il cubo.
 ALTEZZA_MINIMA_BERSAGLIO = 3.0
 # Il raggio del proiettile, che conta nel contatto col bersaglio.
@@ -273,8 +269,8 @@ RITARDO_DEL_RESOCONTO = 1.0
 # stesso col passaggio della barra.
 BLOCCO_DEL_BRAILLE = 40
 
-# Gli Ascolti, il tutorial audio chiesto da Gabriele il 20 novembre 2026 (D23): nel menu Impostazioni e nel menu
-# Aiuto, un passo alla volta, il test stereo, il bersaglio che si muove nel cubo, i punti a caso, la grandezza, le
+# Gli Ascolti, il tutorial audio chiesto da Gabriele il 20 novembre 2026 (D23): nel menu Aiuto, dalla 0.11.10
+# soltanto lì, un passo alla volta, il test stereo, il bersaglio che si muove nel cubo, i punti a caso, la grandezza, le
 # forme, i timbri, la mira, il volo e gli effetti, con le regole dello spazio sonoro del gioco. Tutti da tarare
 # ascoltando. Ogni suono degli Ascolti entra ed esce con una rampa di tanti secondi, contro i click.
 ASCOLTI_RAMPA = 0.05

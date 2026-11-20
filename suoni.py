@@ -94,7 +94,7 @@ GRUPPI = [
         # La scelta della scheda audio (D20): un selettore che gira e si ferma. La scheda cambiata con
         # successo suona confermato, come ogni dialogo confermato con OK.
         "scheda_audio": "ciechino_scheda_audio",
-        # Gli Ascolti, il tutorial audio (D23), dal menu Impostazioni, dal menu Aiuto o da soli all'avvio: le cuffie
+        # Gli Ascolti, il tutorial audio (D23), dal menu Aiuto o da soli all'avvio: le cuffie
         # che si provano, un orecchio, l'altro e il centro.
         "ascolti": "ciechino_ascolti",
         # La scelta della forma del proiettile (D17): una piccola parabola, come un colpo in volo.
@@ -184,8 +184,7 @@ AZIONI = {
     "volume": _("Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo"),
     "scheda_audio": _("si apre la scelta della scheda audio, con Ctrl+Maiusc+X o con Scheda audio del menu Impostazioni, appena Ciechino ha "
                       "riletto le schede"),
-    "ascolti": _("si aprono gli Ascolti, il tutorial audio, con Ascolti del menu Impostazioni o del menu Aiuto, o da soli all'avvio finché non si è "
-                 "giocata una partita"),
+    "ascolti": _("si aprono gli Ascolti, il tutorial audio, con Ascolti del menu Aiuto, o da soli all'avvio finché non si è giocata una partita"),
     "proiettile": _("si apre la scelta della forma del proiettile, con Proiettile del menu Impostazioni"),
     "impostazioni": _("la lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni"),
     "sintesi_spenta": _("la lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni"),

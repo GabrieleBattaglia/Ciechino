@@ -574,6 +574,12 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             # Al livello 2 il sommario c'è ancora, coi numeri (D21); il tiro rasoterra cade prima della
             # distanza del bersaglio e sotto la sua altezza, e il sommario lo dice senza numeri.
             assert resoconto.testo.splitlines()[0] == resoconti.riga_del_sommario(partita.ultimo_volo, "numeri") and resoconto.testo.startswith(f"{VUOTO} G:")
+            # Dal terzo collaudo la G è 1 meno la distanza del passaggio più vicino sulla distanza fra il centro del bersaglio in
+            # quell'istante e il più lontano degli angoli del cubo, mai sotto zero (D26).
+            volo = partita.ultimo_volo
+            lontananza = fisica.distanza_dall_angolo_piu_lontano(volo.vicino.posizione(volo.partenza + volo.tempo_del_passaggio))
+            globale = max(0.0, 1.0 - volo.distanza_dal_centro / lontananza)
+            assert resoconto.dati["precisione_globale"] == pytest.approx(globale) and resoconto.testo.startswith(f"{VUOTO} G:{testi.percento(globale, 1)}")
             # Anche il livello 2 è della palestra (D22): dopo il tiro a vuoto lo spazio riporta all'ascolto.
             if partita.riserva > 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "info"] and partita.fase == "attesa"
