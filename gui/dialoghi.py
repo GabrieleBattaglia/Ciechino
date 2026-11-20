@@ -1,5 +1,5 @@
 """
-I dialoghi di Ciechino: il testo da leggere, il nome per la classifica, il volume, la forma del
+I dialoghi di Ciechino: il testo da leggere, gli Ascolti, il nome per la classifica, il volume, la forma del
 proiettile, la scheda audio, la lingua, l'invito al caffè e la proposta dell'aggiornamento automatico.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di gui/dialoghi.py di MESS. Ogni dialogo segue lo schema
@@ -50,6 +50,9 @@ BORDO = 8
 SPAZIO_FRA_I_PULSANTI = 4
 TASTI_INVIO = (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER)
 MILLESIMI = 1000
+# Ogni quanti millesimi il dialogo degli Ascolti guarda se il suono del passo è finito, per aggiungere il testo
+# che si rivela dopo l'ascolto, come i punti a caso (D23): abbastanza spesso perché arrivi appena il suono tace.
+INTERVALLO_DEGLI_ASCOLTI = 100
 # Le forme d'onda del proiettile (D17), una per ogni voce di costanti.PROIETTILE_FORME: il nome, come lo
 # dicono i messaggi, «il proiettile suona in seno», e il carattere, poche parole sul suo timbro.
 NOMI_DEI_PROIETTILI = {
@@ -372,6 +375,154 @@ class Aggiornamento(Lettura):
         if self and self.IsModal():
             self.scaduta = True
             self.EndModal(wx.ID_NO)
+
+
+def intestazione_del_passo(passo, numero, totale):
+    """La prima riga di un passo degli Ascolti (D23): «Passo 2 di 13. Il centro del cubo e la tratta orizzontale.»"""
+    # Traduttori: numero e totale sono numeri, titolo è il titolo del passo, senza il punto.
+    return _("Passo {numero} di {totale}. {titolo}.").format(numero=numero, totale=totale, titolo=passo.titolo)
+
+
+def tasti_del_passo(ultimo=False):
+    """Le righe in fondo a ogni passo degli Ascolti, che dicono che cosa fanno Spazio, Invio ed Esc."""
+    return [
+        _("Spazio: fa sentire il passo, e lo rifà sentire quante volte vuoi."),
+        _("Invio: ferma il suono e chiude gli Ascolti.") if ultimo else _("Invio: ferma il suono e passa al passo seguente."),
+        _("Esc: chiude gli Ascolti in ogni momento."),
+    ]
+
+
+def testo_del_passo(passo, numero, totale):
+    """Il testo dell'area degli Ascolti per un passo, una riga per voce: l'intestazione, il testo e i tasti."""
+    righe = [intestazione_del_passo(passo, numero, totale), *passo.testo.splitlines(), *tasti_del_passo(numero >= totale)]
+    return "\n".join(riga for riga in righe if riga.strip())
+
+
+def annuncio_del_passo(passo, numero, totale):
+    """Quel che la sintesi legge quando si passa a un passo: l'intestazione e il testo, senza i tasti, che restano in fondo all'area."""
+    righe = [intestazione_del_passo(passo, numero, totale), *passo.testo.splitlines()]
+    return " ".join(riga.strip() for riga in righe if riga.strip())
+
+
+class Ascolti(Lettura):
+    """
+    Gli Ascolti, il tutorial audio di D23: l'area in sola lettura «Ascolti» dice il passo, «Passo N di M», col
+    titolo, il testo e in fondo che cosa fanno Spazio, Invio ed Esc; sotto, i pulsanti Ascolta, Passo seguente,
+    il predefinito, e Chiudi, che vale anche per Esc. regia è la Regia di ascolti.py, o una che le somigli: ha
+    passi, coi titoli e i testi, suona(indice), ferma() e rivelazione(). dici è la funzione della finestra che
+    manda un testo alla sintesi, se l'impostazione lo vuole.
+    Lo spazio e Invio li prende il gancio dei tasti del dialogo, quando il fuoco non è su un pulsante, così non
+    arrivano all'area di testo e NVDA non li ripete: lo spazio ferma il suono di prima e fa partire quello del
+    passo; Invio ferma il suono e passa al seguente, col testo nuovo e il cursore in cima, e la sintesi lo
+    legge; all'ultimo passo Invio chiude. Esc chiude in ogni momento e ferma il suono. Come nell'invito al
+    caffè, l'apertura conta come un Invio, e un Invio entro GRAZIA_INVIO da quello di prima non conta: NVDA,
+    nell'area di testo, manda ogni ripetizione del tasto tenuto giù come una pressione nuova. Lo stesso vale
+    per lo spazio, perché il suono non riparta da capo a ogni ripetizione.
+    Quando il suono di un passo è finito, un timer guarda se c'è un testo che si rivela dopo l'ascolto, come
+    i punti a caso: va in fondo all'area, col cursore sul suo inizio, e alla sintesi, una volta per passo.
+    Attributi: regia, passi, indice, il passo mostrato, da zero, e finiti, vero se gli Ascolti si sono chiusi
+    con Invio all'ultimo passo.
+    """
+
+    def __init__(self, genitore, regia, dici=None, suona=None):
+        self.regia = regia
+        self.passi = tuple(regia.passi)
+        self.indice = 0
+        self.finiti = False
+        self._dici = dici if dici is not None else _muto
+        self._rivelato = False
+        self.ultimo_spazio = float("-inf")
+        super().__init__(genitore, _("Ascolti"), testo_del_passo(self.passi[0], 1, len(self.passi)),
+                         ((wx.ID_ANY, _("&Ascolta")), (wx.ID_ANY, _("Passo &seguente")), (wx.ID_OK, _("&Chiudi"))), suona)
+        ascolta, seguente, _chiudi = self.bottoni
+        ascolta.Bind(wx.EVT_BUTTON, lambda event: self.ascolta())
+        seguente.Bind(wx.EVT_BUTTON, lambda event: self.seguente())
+        seguente.SetDefault()
+        self._etichetta_del_seguente()
+        # L'apertura conta come un Invio: quello tenuto giù dalla voce del menu non salta il primo passo.
+        self.ultimo_invio = _adesso()
+        self._timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, lambda event: self.controlla(), self._timer)
+        self._timer.Start(INTERVALLO_DEGLI_ASCOLTI)
+
+    def _tasto(self, event):
+        codice = event.GetKeyCode()
+        sui_pulsanti = isinstance(event.GetEventObject(), wx.Button)
+        if not event.HasAnyModifiers() and not sui_pulsanti:
+            if codice == wx.WXK_SPACE:
+                if not self._spazio_da_ignorare(event):
+                    self.ascolta()
+                return
+            if codice in TASTI_INVIO:
+                if not invio_da_ignorare(self, event):
+                    self.seguente()
+                return
+        if codice == wx.WXK_ESCAPE:
+            self.chiudi(wx.ID_OK)
+            return
+        event.Skip()
+
+    def _spazio_da_ignorare(self, event):
+        """Vero per lo spazio tenuto giù, o che arriva entro GRAZIA_INVIO dallo spazio di prima."""
+        adesso = _adesso()
+        precedente, self.ultimo_spazio = self.ultimo_spazio, adesso
+        return event.IsAutoRepeat() or adesso - precedente < GRAZIA_INVIO
+
+    def ascolta(self):
+        """Lo spazio: il suono di prima si ferma, e parte quello del passo mostrato. Restituisce ciò che la regia restituisce."""
+        return self.regia.suona(self.indice)
+
+    def seguente(self):
+        """Invio: il suono si ferma; all'ultimo passo gli Ascolti si chiudono, altrimenti il passo seguente, col cursore in cima e la sintesi."""
+        self.regia.ferma()
+        if self.indice + 1 >= len(self.passi):
+            self.finiti = True
+            self.chiudi(wx.ID_OK)
+            return
+        self.indice += 1
+        self._rivelato = False
+        numero, totale = self.indice + 1, len(self.passi)
+        passo = self.passi[self.indice]
+        self.testo.ChangeValue(testo_del_passo(passo, numero, totale))
+        self.testo.SetInsertionPoint(0)
+        self.testo.ShowPosition(0)
+        self._etichetta_del_seguente()
+        self._dici(annuncio_del_passo(passo, numero, totale))
+
+    def controlla(self):
+        """Il testo che si rivela dopo l'ascolto, se la regia ne ha uno e il suono è finito: in fondo all'area, col cursore sul suo inizio, e alla sintesi."""
+        if self._rivelato or not self:
+            return
+        testo = self.regia.rivelazione()
+        if not testo:
+            return
+        self._rivelato = True
+        self.testo.AppendText("\n")
+        inizio = self.testo.GetLastPosition()
+        self.testo.AppendText(testo)
+        self.testo.SetInsertionPoint(inizio)
+        self.testo.ShowPosition(inizio)
+        self._dici(testo.replace("\n", " "))
+
+    def ferma(self):
+        """Il timer si ferma e il suono tace: la finestra la chiama alla chiusura, e la chiama anche Destroy."""
+        timer = getattr(self, "_timer", None)
+        if timer is not None and timer.IsRunning():
+            timer.Stop()
+        self.regia.ferma()
+
+    def chiudi(self, codice):
+        self.ferma()
+        super().chiudi(codice)
+
+    def Destroy(self):
+        self.ferma()
+        return super().Destroy()
+
+    def _etichetta_del_seguente(self):
+        """All'ultimo passo il pulsante Passo seguente diventa Fine, perché lì chiude, come Invio."""
+        if self.indice + 1 >= len(self.passi):
+            self.bottoni[1].SetLabel(_("&Fine"))
 
 
 class Nome(_Dialogo):

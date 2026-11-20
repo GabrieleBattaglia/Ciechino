@@ -2,6 +2,14 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [0.9.0] - 2026-11-20
+
+Arrivano gli Ascolti, il tutorial audio chiesto da Gabriele: nel menu Impostazioni e nel menu Aiuto, una finestra racconta un passo alla volta come suona lo spazio di Ciechino, e la barra spaziatrice fa sentire il passo, quante volte vuoi, Invio passa al seguente, Esc chiude. Si comincia col test stereo, che ti dice se cuffie o altoparlanti sono nel verso giusto; poi un bersaglio al centro del cubo va a sinistra e a destra, scende a terra e sale al soffitto, viene vicino al massimo e va lontano al massimo, e salta in tre punti a caso, che dopo l'ascolto il testo ti dice in metri, così controlli l'orecchio.
+
+Seguono un bersaglio che cresce da piccolissimo a gigantesco, le dodici forme dell'oscillazione e i timbri dei bersagli, ognuno col suo nome, le tre scivolate della mira come in partita, il proiettile in volo dallo sparo al tonfo, il jingle del centro e quello del bonus, vicino e lontano, e un bonus che attraversa il cubo. Il passo del vicino e del lontano serve anche a ritarare l'orecchio sulla distanza quando cambi il volume del computer o le cuffie.
+
+Finché non hai giocato la prima partita, Ciechino apre gli Ascolti da solo all'avvio, la sala briefing dei suoni di Gabriele, dopo i suoni dell'apertura e prima della proposta di un aggiornamento. L'apertura degli Ascolti ha il suo suono, e i suoni sono adesso 58 in tutto, in 10 gruppi; le statistiche contano le aperture degli Ascolti, quelle all'avvio, i passi ascoltati e gli Ascolti seguiti fino in fondo.
+
 ## [0.8.0] - 2026-11-20
 
 Ciechino non è ancora pubblicato: la prima versione pubblica sarà la 1.0.0, e fino ad allora il numero sale a ogni novità e a ogni correzione. La 0.8.0 raccoglie il gioco nato il 19 novembre 2026 e le sette novità venute dai banchi d'ascolto e dal primo collaudo di Gabriele: i suoni del colpo, la forma del proiettile, i bersagli sempre diversi, la mira ritoccata, la scelta della scheda audio, il sommario del tiro e la palestra. Questo blocco racconta il gioco intero, com'è oggi, per chi lo prova per la prima volta. Il nome è un gioco di parole fra cieco e cecchino, e l'idea è di Gabriele, che voleva un gioco di mira in cui l'orecchio facesse tutto il lavoro degli occhi.

@@ -117,6 +117,33 @@ def test_dall_eseguibile_chiama_i_metodi_giusti(gestione_finta):
     assert len(_subito.fili) == 4 and threading.main_thread().name not in _subito.fili
 
 
+class FinestraCongliAscolti(FinestraFinta):
+    """Una finestra con gli Ascolti della prima apertura aperti (D23): il filo aspetta in aspetta_i_dialoghi_d_avvio finché libera non è acceso."""
+
+    def __init__(self):
+        super().__init__()
+        self.libera = threading.Event()
+        self.attese = 0
+
+    def aspetta_i_dialoghi_d_avvio(self, attesa=None):
+        self.attese += 1
+        return self.libera.wait(attesa)
+
+
+def test_la_proposta_aspetta_i_dialoghi_d_avvio(gestione_finta):
+    """D23: la proposta non si apre sopra gli Ascolti della prima apertura: il filo aspetta che la finestra dica che la strada è libera."""
+    finestra = FinestraCongliAscolti()
+    filo = aggiornamento.controlla(finestra, chiama_dopo=_subito)
+    filo.join(0.3)
+    assert filo.is_alive() and finestra.chiamate == [] and finestra.attese == 1
+    finestra.libera.set()
+    filo.join(ATTESA)
+    assert not filo.is_alive()
+    assert [chiamata[0] for chiamata in finestra.chiamate] == ["proponi", "avanzamento", "avvisa", "chiudi"]
+    # Anche ogni avviso passa dalla stessa attesa.
+    assert finestra.attese == 2
+
+
 def test_non_adesso_non_chiude(gestione_finta):
     finestra = FinestraFinta(risposta=False)
     aggiornamento.controlla(finestra, chiama_dopo=_subito).join(ATTESA)

@@ -1,4 +1,4 @@
-I suoni di Ciechino e i loro preset nella collezione di GBUtils, da ritoccare con Acu_Maker: 57 suoni in 10 gruppi.
+I suoni di Ciechino e i loro preset nella collezione di GBUtils, da ritoccare con Acu_Maker: 58 suoni in 10 gruppi.
 Ogni riga dice l'azione che fa suonare il preset e, dopo i due punti, il suo nome. Il file lo scrive strumenti/elenco_suoni.py dalle tabelle di suoni.py: non va modificato a mano.
 La partita, l'inizio e la fine, 5 suoni.
 Comincia una partita nuova, con lo spazio quando nessuna partita è in corso, con Ctrl+N o con Nuova partita del menu Partita: ciechino_nuova_partita.
@@ -32,11 +32,12 @@ All'avvio, dopo il suono d'apertura: la volta scorsa Ciechino si è chiuso per u
 Un file dei dati, la classifica, le statistiche o le impostazioni, non si leggeva: Ciechino lo mette da parte e riparte dalla copia o da zero: ciechino_dati_rovinati.
 La classifica, le statistiche o le impostazioni non si sono potute salvare: ciechino_salvataggio_non_riuscito.
 La scheda audio scelta non c'è o non si apre, all'avvio o appena scelta con Ctrl+Maiusc+X, e Ciechino suona su quella automatica, se si apre: ciechino_scheda_non_aperta.
-La finestra, i menu, 18 suoni.
+La finestra, i menu, 19 suoni.
 Si apre la classifica dei migliori, con Ctrl+K o con Classifica del menu Partita: ciechino_classifica.
 Si aprono le statistiche, con Ctrl+T o con Statistiche del menu Partita: ciechino_statistiche.
 Volume del menu Impostazioni, all'apertura e a ogni ritocco, al volume scritto nel campo: ciechino_volume.
 Si apre la scelta della scheda audio, con Ctrl+Maiusc+X o con Scheda audio del menu Impostazioni, appena Ciechino ha riletto le schede: ciechino_scheda_audio.
+Si aprono gli Ascolti, il tutorial audio, con Ascolti del menu Impostazioni o del menu Aiuto, o da soli all'avvio finché non si è giocata una partita: ciechino_ascolti.
 Si apre la scelta della forma del proiettile, con Proiettile del menu Impostazioni: ciechino_proiettile.
 La lettura dei resoconti con la sintesi si accende, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_impostazioni.
 La lettura dei resoconti con la sintesi si spegne, con Leggi i resoconti con la sintesi del menu Impostazioni: ciechino_sintesi_spenta.

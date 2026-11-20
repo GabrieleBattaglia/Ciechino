@@ -33,6 +33,8 @@ Proiettile, nel menu Impostazioni, sceglie il timbro del proiettile in volo, sen
 
 Scheda audio, nel menu Impostazioni, o Ctrl+Maiusc+X, sceglie dove suona Ciechino: rilegge le schede, così nell'elenco ci sono anche le cuffie Bluetooth accese dopo l'avvio, e dice la latenza di ognuna. La scheda scelta vale da subito e resta per i prossimi avvii; se manca, Ciechino suona su quella automatica, la scheda di Windows, e lo dice. Lo stesso tasto ridà il suono quando la scheda si stacca durante il gioco.
 
+Ascolti, nel menu Impostazioni e nel menu Aiuto, è il tutorial audio: un passo alla volta, con la barra spaziatrice che lo fa sentire e Invio che passa al seguente, il test stereo, il bersaglio che si muove nel cubo, i punti a caso da indovinare, la grandezza, le forme, i timbri, la mira, il volo e gli effetti; il passo del vicino e del lontano ritara l'orecchio sulla distanza quando cambi il volume, e finché non hai giocato la prima partita gli Ascolti si aprono da soli all'avvio.
+
 Nella palestra, i primi tre livelli, Ctrl+P mette in pausa la partita, anche durante la mira, e la fa riprendere; dal quarto livello la pausa con Ctrl+P non c'è più. La partita si ferma da sola, in silenzio e in tutti i livelli, quando apri un menu o un dialogo o passi a un'altra finestra, e riprende da sola quando torni; una pausa chiesta con Ctrl+P invece resta, finché non la togli. Con una partita in corso, Ctrl+N e l'uscita chiedono prima se abbandonarla, col No già scelto.
 
 ## Aiuto
@@ -77,7 +79,7 @@ Il pacchetto si compila con PyInstaller dalla ricetta Ciechino.spec, a cartella,
 
 Ciechino nasce in italiano, ma ogni testo per l'utente passa da lingua.py, con le funzioni _, ngettext e plurale, così si può tradurre senza toccare il programma. babel.cfg dice a pybabel quali file leggere; il modello dei testi si estrae con le parole chiave _, ngettext:1,2 e plurale:2,3, e con i commenti per i traduttori:
 
-    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.8.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
+    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.9.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
     pybabel init -i locales/messages.pot -d locales -l en
     pybabel update -i locales/messages.pot -d locales
     pybabel compile -d locales

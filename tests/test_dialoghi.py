@@ -12,6 +12,7 @@ della funzione dei suoni. I messaggi di wx sono sostituiti.
 """
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 import wx
@@ -42,6 +43,27 @@ class Messaggi(list):
         return wx.OK
 
 
+class RegiaFinta:
+    """La regia degli Ascolti vista dal dialogo (D23): i passi coi titoli e i testi, e le chiamate annotate; da_rivelare è il
+    testo che rivelazione restituisce."""
+
+    def __init__(self, quanti=3):
+        self.passi = tuple(SimpleNamespace(nome=f"passo_{n}", titolo=f"Il passo {n}", testo=f"Il testo del passo {n}.\nLa seconda riga del passo {n}.")
+                           for n in range(1, quanti + 1))
+        self.chiamate = []
+        self.da_rivelare = ""
+
+    def suona(self, indice):
+        self.chiamate.append(("suona", indice))
+        return indice
+
+    def ferma(self):
+        self.chiamate.append(("ferma",))
+
+    def rivelazione(self):
+        return self.da_rivelare
+
+
 @pytest.fixture
 def sentiti():
     return Sentiti()
@@ -57,6 +79,7 @@ def messaggi(monkeypatch):
 # Le fabbriche di ogni dialogo, come li apre la finestra.
 FABBRICHE = {
     "Lettura": lambda suona: dialoghi.Lettura(None, "Classifica", "La classifica è ancora vuota.", suona=suona),
+    "Ascolti": lambda suona: dialoghi.Ascolti(None, RegiaFinta(), suona=suona),
     "Caffe": lambda suona: dialoghi.Caffe(None, "Offrimi un caffè, se ti va.", suona),
     "Aggiornamento": lambda suona: dialoghi.Aggiornamento(None, "0.1.0", "0.2.0", "Versione 0.2.0.", 120, suona),
     "Nome": lambda suona: dialoghi.Nome(None, "Gabry", "Con 1.234 punti entri in classifica al posto 1: scrivi il tuo nome.", suona),
@@ -187,6 +210,123 @@ def test_caffe_invio_nel_testo_chiude_ma_non_quello_tenuto_giu(app_wx, monkeypat
         assert dialogo.GetReturnCode() == wx.ID_OK
     finally:
         dialogo.Destroy()
+
+
+TASTI_DEGLI_ASCOLTI = ["Spazio: fa sentire il passo, e lo rifà sentire quante volte vuoi.", "Invio: ferma il suono e passa al passo seguente.",
+                       "Esc: chiude gli Ascolti in ogni momento."]
+
+
+def test_ascolti_area_etichettata_testo_del_passo_e_pulsanti(app_wx, sentiti):
+    """D23: l'area in sola lettura «Ascolti» con «Passo N di M», il titolo, il testo e i tasti in fondo; Ascolta, Passo seguente, il
+    predefinito, e Chiudi, che vale anche per Esc."""
+    dialogo = dialoghi.Ascolti(None, RegiaFinta(), suona=sentiti)
+    try:
+        assert dialogo.GetTitle() == "Ascolti"
+        figli = list(dialogo.pannello.GetChildren())
+        etichetta = figli[figli.index(dialogo.testo) - 1]
+        assert isinstance(etichetta, wx.StaticText) and etichetta.GetLabel() == "Ascolti" and dialogo.testo.GetName() == "Ascolti"
+        stile = dialogo.testo.GetWindowStyleFlag()
+        assert stile & wx.TE_READONLY and stile & wx.TE_MULTILINE and stile & wx.TE_RICH2
+        assert dialogo.testo.GetValue().splitlines() == ["Passo 1 di 3. Il passo 1.", "Il testo del passo 1.", "La seconda riga del passo 1.", *TASTI_DEGLI_ASCOLTI]
+        assert [b.GetLabelText() for b in dialogo.bottoni] == ["Ascolta", "Passo seguente", "Chiudi"]
+        assert all(b.GetLabelText() for b in dialogo.bottoni)
+        assert dialogo.GetDefaultItem() is dialogo.bottoni[1] and dialogo.pulsante_chiudi is dialogo.bottoni[-1]
+        assert dialogo.indice == 0 and not dialogo.finiti
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_ascolti_spazio_invio_ed_esc(app_wx, sentiti, monkeypatch):
+    """Lo spazio fa sentire il passo, quante volte si vuole; Invio ferma il suono e passa al seguente, col cursore in cima e la
+    sintesi, e all'ultimo passo chiude; un Invio o uno spazio entro la grazia da quello di prima, o dall'apertura, non contano."""
+    orologio = [100.0]
+    monkeypatch.setattr(dialoghi, "_adesso", lambda: orologio[0])
+    regia, detti = RegiaFinta(), []
+    dialogo = dialoghi.Ascolti(None, regia, detti.append, sentiti)
+    try:
+        testo = dialogo.testo
+        # L'Invio tenuto giù dalla voce del menu non salta il primo passo, e non arriva all'area di testo.
+        orologio[0] += dialoghi.GRAZIA_INVIO / 2
+        assert not _tasto(dialogo, wx.WXK_RETURN, testo).GetSkipped()
+        assert dialogo.indice == 0 and regia.chiamate == []
+        # Lo spazio fa sentire il passo, e si ferma nel gancio: niente eco, niente spazio nel testo.
+        assert not _tasto(dialogo, wx.WXK_SPACE, testo).GetSkipped()
+        assert regia.chiamate == [("suona", 0)]
+        # Lo spazio ripetuto subito, come un tasto tenuto giù che NVDA rimanda, non rifà partire il suono; dopo la grazia sì.
+        orologio[0] += dialoghi.GRAZIA_INVIO / 2
+        _tasto(dialogo, wx.WXK_SPACE, testo)
+        assert regia.chiamate == [("suona", 0)]
+        orologio[0] += dialoghi.GRAZIA_INVIO * 2
+        _tasto(dialogo, wx.WXK_SPACE, testo)
+        assert regia.chiamate == [("suona", 0), ("suona", 0)]
+        # Invio: il suono si ferma, il testo è quello del passo 2, col cursore in cima, e la sintesi lo legge senza i tasti.
+        testo.SetInsertionPoint(testo.GetLastPosition())
+        orologio[0] += dialoghi.GRAZIA_INVIO * 2
+        _tasto(dialogo, wx.WXK_RETURN, testo)
+        assert regia.chiamate[-1] == ("ferma",) and dialogo.indice == 1
+        assert testo.GetValue().splitlines()[0] == "Passo 2 di 3. Il passo 2." and testo.GetInsertionPoint() == 0
+        assert detti == ["Passo 2 di 3. Il passo 2. Il testo del passo 2. La seconda riga del passo 2."]
+        _tasto(dialogo, wx.WXK_SPACE, testo)
+        assert regia.chiamate[-1] == ("suona", 1)
+        # All'ultimo passo Invio chiude: lo dicono il testo e il pulsante, che diventa Fine.
+        orologio[0] += dialoghi.GRAZIA_INVIO * 2
+        _tasto(dialogo, wx.WXK_NUMPAD_ENTER, testo)
+        assert dialogo.indice == 2 and testo.GetValue().splitlines()[-2] == "Invio: ferma il suono e chiude gli Ascolti."
+        assert dialogo.bottoni[1].GetLabelText() == "Fine"
+        orologio[0] += dialoghi.GRAZIA_INVIO * 2
+        codice, _massimizzato = _apri(dialogo, lambda d: _tasto(d, wx.WXK_RETURN, d.testo))
+        assert codice == wx.ID_OK and dialogo.finiti and regia.chiamate[-1] == ("ferma",)
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_ascolti_esc_e_i_pulsanti(app_wx, sentiti, monkeypatch):
+    """Esc chiude in ogni momento e ferma il suono, senza contare come finiti; i pulsanti fanno ciò che fanno i tasti, e sui pulsanti
+    lo spazio e Invio restano loro."""
+    monkeypatch.setattr(dialoghi, "_adesso", lambda: 100.0)
+    regia = RegiaFinta()
+    dialogo = dialoghi.Ascolti(None, regia, suona=sentiti)
+    try:
+        ascolta, seguente, _chiudi = dialogo.bottoni
+        # Sul pulsante lo spazio resta suo: il gancio lo lascia andare, e lo preme il pulsante, come in Windows.
+        assert _tasto(dialogo, wx.WXK_SPACE, seguente).GetSkipped() and regia.chiamate == []
+        _premi(ascolta)
+        _premi(seguente)
+        assert regia.chiamate == [("suona", 0), ("ferma",)] and dialogo.indice == 1
+        codice, _massimizzato = _apri(dialogo, _esc)
+        assert codice == wx.ID_OK and not dialogo.finiti and regia.chiamate[-1] == ("ferma",)
+    finally:
+        dialogo.Destroy()
+    assert sentiti == []
+
+
+def test_ascolti_il_testo_che_si_rivela_dopo_l_ascolto(app_wx):
+    """Quando il suono del passo è finito, il testo della regia va in fondo all'area, col cursore sul suo inizio, e alla sintesi,
+    una volta per passo."""
+    regia, detti = RegiaFinta(), []
+    dialogo = dialoghi.Ascolti(None, regia, detti.append)
+    try:
+        dialogo.controlla()
+        assert detti == [] and dialogo.testo.GetValue().splitlines()[-1] == TASTI_DEGLI_ASCOLTI[-1]
+        regia.da_rivelare = "Ecco dove erano i punti che hai sentito:\nPunto 1: al centro."
+        dialogo.controlla()
+        dialogo.controlla()
+        righe = dialogo.testo.GetValue().splitlines()
+        assert righe[-3:] == [TASTI_DEGLI_ASCOLTI[-1], "Ecco dove erano i punti che hai sentito:", "Punto 1: al centro."]
+        _trovata, _colonna, riga = dialogo.testo.PositionToXY(dialogo.testo.GetInsertionPoint())
+        assert dialogo.testo.GetLineText(riga) == "Ecco dove erano i punti che hai sentito:"
+        assert detti == ["Ecco dove erano i punti che hai sentito: Punto 1: al centro."]
+        # Al passo seguente il testo nuovo non ha la rivelazione di prima, e una nuova si può dire.
+        dialogo.seguente()
+        assert "Punto 1: al centro." not in dialogo.testo.GetValue()
+        dialogo.controlla()
+        assert dialogo.testo.GetValue().endswith("\nPunto 1: al centro.") and len(detti) == 3
+    finally:
+        dialogo.Destroy()
+    # Chiuso il dialogo, il timer non chiede più niente alla regia, e il suono è fermo.
+    assert regia.chiamate[-1] == ("ferma",)
 
 
 def test_aggiornamento_aggiorna_non_adesso_e_scadenza(app_wx):

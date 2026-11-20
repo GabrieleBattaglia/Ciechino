@@ -42,6 +42,8 @@ EVENTI_DEL_CONTRATTO = (
     # La scelta della scheda audio (D20): l'elenco che si apre, e la scheda scelta che non c'è o non si apre. La scheda
     # cambiata suona confermato, come ogni dialogo confermato.
     "scheda_audio", "scheda_non_aperta",
+    # Gli Ascolti, il tutorial audio (D23): il suono della loro apertura, dai menu o da soli all'avvio.
+    "ascolti",
 )
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98
@@ -273,6 +275,18 @@ def test_i_suoni_della_scheda_audio(creata):
         assert f"in {millesimi} ms" in creata.dati[nome]["descrizione"], evento
     # La scheda cambiata con successo suona come ogni dialogo confermato, e l'azione lo dice.
     assert "scheda audio" in suoni.AZIONI["confermato"]
+
+
+def test_il_suono_degli_ascolti(creata):
+    """D23: l'apertura degli Ascolti sta coi menu, col suo preset, che fa sentire un orecchio, l'altro e il centro, e la descrizione dice
+    la durata vera."""
+    assert "ascolti" in dict(suoni.GRUPPI)["La finestra, i menu"]
+    nome = suoni.EVENTI["ascolti"]
+    assert nome == "ciechino_ascolti"
+    assert round(crea_preset.durata(creata.dati[nome]["score"]) * 1000) == 420 and "in 420 ms" in creata.dati[nome]["descrizione"]
+    panorami = [quartina[2] for quartina in creata.dati[nome]["score"] if quartina[0] != "p"]
+    assert panorami[0] < 0 < panorami[1] and panorami[-1] == 0
+    assert "Ascolti" in suoni.AZIONI["ascolti"]
 
 
 def test_sparo_colpiti_e_terra_sono_di_rumore(creata):

@@ -15,12 +15,13 @@ import itertools
 import json
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
 import pytest
 import wx
-from aiuti_audio import ALTOPARLANTI, ASIO, CUFFIE, CUFFIE_FINTE, DIGITALE, FlussoFinto, apri_finto, motore_finto
+from aiuti_audio import ALTOPARLANTI, ASIO, CUFFIE, CUFFIE_FINTE, DIGITALE, LATENZA_FINTA, FlussoFinto, apri_finto, motore_finto
 
 import aggiornamento
 import classifica
@@ -258,8 +259,8 @@ def test_i_menu_coi_tasti_giusti(finestra):
             tasti[voce.GetItemLabelText()] = rapido.ToString() if rapido is not None else None
     assert tasti == {
         "Nuova partita": "Ctrl+N", "Pausa": "Ctrl+P", "Classifica": "Ctrl+K", "Statistiche": "Ctrl+T", "Esci": "Ctrl+Q",
-        "Volume...": None, "Scheda audio...": "Ctrl+Shift+X", "Proiettile...": None, "Leggi i resoconti con la sintesi": None, "Lingua...": None,
-        "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
+        "Volume...": None, "Scheda audio...": "Ctrl+Shift+X", "Ascolti...": None, "Proiettile...": None, "Leggi i resoconti con la sintesi": None,
+        "Lingua...": None, "Guida ai comandi": "F1", "Manuale": "Shift+F1", "Novità": "F2", "Informazioni": "F3", "Offrimi un caffè...": None,
         "Entra al PUB, il gruppo di supporto...": None, "Chiedi aiuto al PUB...": None,
     }
     sintesi = finestra.voci_del_menu[finestra.cambia_sintesi]
@@ -1187,6 +1188,171 @@ def test_la_forma_salvata_arriva_alla_partita_all_apertura(app_wx, sentiti, mess
         _chiudi(finestra)
 
 
+# Gli Ascolti (D23).
+
+FRASE_DELLA_PRIMA_APERTURA = modulo_finestra.frase_della_prima_apertura()
+
+
+def _voci_del_menu(finestra, etichetta):
+    """Le voci dei menu con quell'etichetta: il titolo del menu e l'identificativo della voce."""
+    barra = finestra.GetMenuBar()
+    trovate = []
+    for i in range(barra.GetMenuCount()):
+        for voce in barra.GetMenu(i).GetMenuItems():
+            if not voce.IsSeparator() and voce.GetItemLabelText() == etichetta:
+                trovate.append((barra.GetMenuLabelText(i), voce.GetId()))
+    return trovate
+
+
+def test_gli_ascolti_dai_due_menu_fermano_la_partita_e_alla_chiusura_tacciono(finestra, sentiti, monkeypatch):
+    finestra._esegui(finestra.nuova_partita)
+    partita = finestra.partita
+    voci = _voci_del_menu(finestra, "Ascolti...")
+    assert [menu for menu, _identificativo in voci] == ["Impostazioni", "Aiuto"]
+    motore = finestra.motore
+    fermate = []
+    ferma = motore.ferma
+
+    def spia(voce, campione=None, sfumatura=costanti.SFUMATURA_STOP):
+        fermate.append((voce, campione))
+        return ferma(voce, campione, sfumatura)
+
+    monkeypatch.setattr(motore, "ferma", spia)
+    aperti = []
+
+    def ascolta(dialogo):
+        ascolto = dialogo.ascolta()
+        aperti.append((partita.in_pausa, partita.automatica, dialogo.regia, ascolto, len(fermate)))
+        return wx.ID_OK
+
+    monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", ascolta)
+    for _menu, identificativo in voci:
+        evento = wx.CommandEvent(wx.wxEVT_MENU, identificativo)
+        evento.SetEventObject(finestra)
+        finestra.GetEventHandler().ProcessEvent(evento)
+        # Chiusi gli Ascolti, la partita riprende da sola (D14).
+        wx.Yield()
+        assert not partita.in_pausa
+    assert len(aperti) == 2
+    for in_pausa, automatica, regia, ascolto, prima in aperti:
+        # Con gli Ascolti aperti la partita è ferma, come con ogni dialogo, e gli Ascolti suonano sul motore del gioco.
+        assert in_pausa and automatica and regia.motore is motore and regia.proiettile == finestra.impostazioni["proiettile"]
+        assert ascolto.passo == "stereo" and ascolto.voci
+        # Alla chiusura ogni voce degli Ascolti tace: una fermata subito, dopo quelle che il passo aveva messo in programma.
+        subito = {id(voce) for voce, campione in fermate[prima:] if campione is None}
+        assert {id(voce) for voce in ascolto.voci} <= subito
+    assert sentiti.count("ascolti") == 2
+    conti = finestra.statistiche.dati["conti"]
+    assert conti["ascolti_aperti"] == 2 and conti["passi_ascoltati"] == 2 and conti["ascolti_finiti"] == 0 and conti["ascolti_d_avvio"] == 0
+
+
+def test_gli_ascolti_letti_dalla_sintesi_e_seguiti_fino_in_fondo(finestra, voce_finta, monkeypatch):
+    letti = []
+
+    def fino_in_fondo(dialogo):
+        dialogo.seguente()
+        letti.append(voce_finta[-1])
+        dialogo.indice = len(dialogo.passi) - 1
+        dialogo.seguente()
+        return dialogo.GetReturnCode()
+
+    monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", fino_in_fondo)
+    finestra._esegui(finestra.ascolti)
+    # Il passo nuovo va alla sintesi, perché la lettura dei resoconti è accesa.
+    assert letti and letti[0].startswith("Passo 2 di 13. Il centro del cubo e la tratta orizzontale.")
+    conti = finestra.statistiche.dati["conti"]
+    assert conti["ascolti_aperti"] == 1 and conti["ascolti_finiti"] == 1 and conti["passi_ascoltati"] == 0
+
+
+def test_alla_prima_apertura_gli_ascolti_si_aprono_da_soli_dopo_i_suoni_d_avvio(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """D23, da Gabriele: con zero partite cominciate gli Ascolti si aprono da soli, una volta per avvio, finiti i suoni dell'avvio e
+    l'avviso dei dati rovinati, a finestra attiva; la vista lo dice, e intanto la proposta dell'aggiornamento aspetta."""
+    with open(percorsi.percorso_dati(costanti.FILE_IMPOSTAZIONI), "w", encoding="utf-8") as file:
+        file.write("{ rovinato")
+    motore, flusso = motore_finto()
+    f = _crea(motore=motore)
+    try:
+        monkeypatch.setattr(f, "IsActive", lambda: True)
+        aperti = []
+        monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", lambda dialogo: aperti.append(f.aspetta_i_dialoghi_d_avvio(0)) or wx.ID_OK)
+        f.suoni_d_avvio()
+        assert sentiti[-2:] == ["avvio", "dati_rovinati"]
+        assert f.ascolti_alla_prima_apertura() and not f.aspetta_i_dialoghi_d_avvio(0)
+        # Finché suonano l'avvio e l'avviso dei dati rovinati, gli Ascolti aspettano.
+        f._al_battito()
+        wx.Yield()
+        assert aperti == []
+        flusso.avanza_fino(f._fine_dei_suoni_d_avvio + round(LATENZA_FINTA * motore.fs) + motore.blocco)
+        f._al_battito()
+        wx.Yield()
+        # Aperti una volta, e con loro aperti la strada dell'aggiornamento è chiusa; chiusi, è libera.
+        assert aperti == [False] and f.aspetta_i_dialoghi_d_avvio(0)
+        assert sentiti.count("ascolti") == 1
+        assert f.vista.GetValue().endswith("\n" + FRASE_DELLA_PRIMA_APERTURA) and _riga_del_cursore(f.vista) == (FRASE_DELLA_PRIMA_APERTURA, 0)
+        conti = f.statistiche.dati["conti"]
+        assert conti["ascolti_d_avvio"] == 1 and conti["ascolti_aperti"] == 1
+        f._al_battito()
+        wx.Yield()
+        assert aperti == [False]
+    finally:
+        _chiudi(f)
+
+
+def test_con_una_partita_cominciata_gli_ascolti_non_si_aprono_da_soli(finestra, sentiti, monkeypatch):
+    aperti = []
+    monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", lambda dialogo: aperti.append(dialogo) or wx.ID_OK)
+    # Le statistiche contano una partita: gli Ascolti non aspettano, e nemmeno l'aggiornamento.
+    finestra.statistiche.conta("partite_iniziate")
+    finestra.suoni_d_avvio()
+    assert not finestra.ascolti_alla_prima_apertura() and finestra.aspetta_i_dialoghi_d_avvio(0)
+    finestra._al_battito()
+    wx.Yield()
+    # Senza partite, ma con una partita cominciata con lo spazio prima che si aprano: non si aprono più.
+    finestra.statistiche.dati["conti"]["partite_iniziate"] = 0
+    assert finestra.ascolti_alla_prima_apertura()
+    finestra._esegui(finestra.nuova_partita)
+    finestra._al_battito()
+    wx.Yield()
+    assert aperti == [] and finestra.aspetta_i_dialoghi_d_avvio(0) and not finestra._ascolti_d_avvio
+    assert "ascolti" not in sentiti and FRASE_DELLA_PRIMA_APERTURA not in finestra.vista.GetValue()
+
+
+def test_la_proposta_dell_aggiornamento_arriva_dopo_gli_ascolti_della_prima_apertura(app_wx, sentiti, messaggi, senza_modali, monkeypatch):
+    """L'ordine dei dialoghi dell'avvio: prima gli Ascolti della prima apertura, poi la proposta dell'aggiornamento, che li aspetta."""
+    import GBUtils
+
+    motore, flusso = motore_finto()
+    f = _crea(motore=motore)
+    filo = None
+    try:
+        monkeypatch.setattr(f, "IsActive", lambda: True)
+        ordine = []
+        monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", lambda dialogo: ordine.append("ascolti") or wx.ID_OK)
+        monkeypatch.setattr(dialoghi.Aggiornamento, "ShowModal", lambda dialogo: ordine.append("aggiornamento") or wx.ID_NO)
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(GBUtils, "gestisci_aggiornamento", lambda app, versione, api, **opzioni: opzioni["proponi"](versione, "9.9.9", "Note.", attesa=None))
+        f.suoni_d_avvio()
+        assert f.ascolti_alla_prima_apertura()
+        filo = aggiornamento.controlla(f)
+        # Il filo aspetta gli Ascolti: la proposta non arriva, nemmeno dando a wx il tempo di portarla.
+        for _giro in range(5):
+            wx.Yield()
+            time.sleep(0.01)
+        assert ordine == [] and filo.is_alive()
+        flusso.avanza_fino(f._fine_dei_suoni_d_avvio + round(LATENZA_FINTA * motore.fs) + motore.blocco)
+        f._al_battito()
+        for _giro in range(300):
+            wx.Yield()
+            if len(ordine) == 2:
+                break
+            time.sleep(0.01)
+        assert ordine == ["ascolti", "aggiornamento"]
+        filo.join(5)
+        assert not filo.is_alive()
+    finally:
+        _chiudi(f)
+
+
 # La scheda audio (D20).
 
 SCELTA_CUFFIE = {"dispositivo": CUFFIE, "interfaccia": "Windows WASAPI"}
@@ -1497,8 +1663,10 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
             assert (f"{voce}: {tasto}." if tasto else f"{voce}: dal menu, senza tasto rapido.") in righe, voce
     assert "Manuale: Maiusc+F1." in righe and "Volume: dal menu, senza tasto rapido." in righe
     # Le voci nuove del proiettile (D17) e della scheda audio (D20) entrano nella guida da sole, perché la guida nasce dalla tabella dei menu.
-    assert "Il menu Impostazioni, con 5 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
+    assert "Il menu Impostazioni, con 6 comandi:" in righe and "Proiettile: dal menu, senza tasto rapido." in righe
     assert "Scheda audio: Ctrl+Maiusc+X." in righe
+    # Gli Ascolti (D23) stanno nel menu Impostazioni e nel menu Aiuto, e la guida li dice tutte e due le volte.
+    assert "Il menu Aiuto, con 8 comandi:" in righe and righe.count("Ascolti: dal menu, senza tasto rapido.") == 2
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
     assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
     assert sentiti == ["guida"]

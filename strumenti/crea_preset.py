@@ -351,6 +351,16 @@ PRESET = {
                         "Il suo seguito, quando la scheda scelta non si apre, è ciechino_scheda_non_aperta. Va bene per la scelta di "
                         "un'uscita audio, un collegamento o un selettore."),
     },
+    # Gli Ascolti, il tutorial audio (D23): le cuffie che si provano, un orecchio, l'altro e il centro.
+    "ciechino_ascolti": {
+        "score": [["c6", 0.07, -0.8, -0.12], ["p", 0.05, 0.0, -0.5], ["c6", 0.07, 0.8, -0.12], ["p", 0.05, 0.0, -0.5], ["g5.c6", 0.18, 0.0, -0.1]],
+        "kind": 1,
+        "adsr": [5.0, 20.0, 65.0, 30.0],
+        "descrizione": ("Ciechino, si aprono gli Ascolti, il tutorial audio, dal menu Impostazioni, dal menu Aiuto o da soli all'avvio: le "
+                        "cuffie che si provano, seno, un do 6 a sinistra e, dopo una breve pausa, lo stesso a destra, poi una scivolata che "
+                        "sale dal sol 5 al do 6, al centro, in 420 ms. Va bene per una prova delle cuffie, un tutorial audio o un ascolto "
+                        "guidato."),
+    },
     "ciechino_proiettile": {
         "score": [["e5.b5", 0.12, -0.6, -0.1], ["b5.f#5", 0.16, 0.6, -0.12]],
         "kind": 1,

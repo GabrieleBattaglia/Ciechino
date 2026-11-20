@@ -530,17 +530,33 @@ class Bersaglio:
         """Di quante ottave l'LFO sposta la frequenza del centro, in su e in giù: il raggio per
         FATTORE_ESCURSIONE e per la sua escursione, in ottave, così l'oscillazione copre le altezze
         del bersaglio, un po' di più o un po' di meno secondo il caso."""
-        return self.raggio * FATTORE_ESCURSIONE * self.escursione / METRI_PER_OTTAVA
+        return mezza_escursione_ottave(self.raggio, self.escursione)
 
     def parametri_sonori(self, tempi_di_gioco, tempi_audio):
         """(frequenze, pan, guadagni lineari) per la voce del motore, tre array lunghi come i tempi:
         la posizione dai tempi di gioco, l'LFO dai tempi dell'audio, BERSAGLIO_DB compreso. Uno dei
         due tempi può essere scalare, per esempio il tempo di gioco fermo durante la mira."""
         gioco, audio = np.broadcast_arrays(np.atleast_1d(np.asarray(tempi_di_gioco, dtype=float)), np.atleast_1d(np.asarray(tempi_audio, dtype=float)))
-        frequenze, pan, guadagni = fisica.suono_di(self.posizione(gioco))
-        frequenze = np.asarray(frequenze) * 2.0 ** (np.asarray(self.lfo(audio)) * self.mezza_escursione_ottave())
+        return self.suono_in(self.posizione(gioco), audio)
+
+    def suono_in(self, posizioni, tempi_audio, raggio=None):
+        """(frequenze, pan, guadagni lineari) del bersaglio nelle posizioni date, (N, 3), invece che in
+        quella del suo moto: le stesse regole di parametri_sonori, l'LFO dai tempi dell'audio e
+        BERSAGLIO_DB compreso. raggio, se c'è, prende il posto del suo, anche un array di N raggi, per
+        un bersaglio che cambia grandezza. Serve agli Ascolti (D23), dove il bersaglio segue un
+        cammino che il gioco non conosce."""
+        mezza = self.mezza_escursione_ottave() if raggio is None else mezza_escursione_ottave(np.asarray(raggio, dtype=float), self.escursione)
+        frequenze, pan, guadagni = fisica.suono_di(posizioni)
+        frequenze = np.asarray(frequenze) * 2.0 ** (np.asarray(self.lfo(tempi_audio)) * mezza)
         guadagni = np.asarray(guadagni) * 10.0 ** (BERSAGLIO_DB / 20.0)
         return frequenze, np.asarray(pan, dtype=float), guadagni
+
+
+def mezza_escursione_ottave(raggio, escursione=1.0):
+    """Di quante ottave l'LFO di un bersaglio di quel raggio sposta la frequenza del centro, in su e in
+    giù: il raggio per FATTORE_ESCURSIONE e per l'escursione, diviso METRI_PER_OTTAVA. Il raggio può
+    essere un array, per un bersaglio che cresce, come negli Ascolti (D23)."""
+    return raggio * FATTORE_ESCURSIONE * escursione / METRI_PER_OTTAVA
 
 
 def raggio_del_livello(n):

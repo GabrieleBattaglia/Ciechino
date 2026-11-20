@@ -246,6 +246,27 @@ def test_il_manuale_dice_i_livelli_della_palestra_e_del_sommario():
     assert numeri == palestra, "il sommario coi numeri e la palestra non vanno più fino allo stesso livello: rileggi il manuale"
 
 
+def test_il_manuale_e_il_changelog_dicono_gli_ascolti():
+    """D23: il capitolo degli Ascolti, le loro voci nei due menu, con un passo per ogni passo vero, e la riga della prima apertura con le
+    parole della vista; il blocco della versione nel CHANGELOG ne parla, e il manuale ha la versione vera."""
+    from ascolti import passi
+    from gui.finestra import frase_della_prima_apertura
+
+    manuale = _leggi("manuale.html")
+    assert f"<p>Versione {VERSIONE}," in manuale
+    assert '<h2 id="ascolti">Gli Ascolti</h2>' in manuale and manuale.count("<li>Ascolti: ") == 2
+    sezione = re.search(r'<h3 id="ascolti-passi">.*?<ul>(.*?)</ul>', manuale, re.DOTALL)
+    assert sezione, "nel manuale manca l'elenco dei passi degli Ascolti"
+    # Le forme dell'oscillazione stanno in due passi veri e in una voce sola dell'elenco.
+    elenco = passi()
+    assert sezione.group(1).count("<li>") == len(elenco) - (sum(passo.nome.startswith("forme") for passo in elenco) - 1)
+    assert f"I passi sono {A_PAROLE[len(elenco)]}" in manuale
+    frase = frase_della_prima_apertura()
+    assert frase in manuale and "Esc" in frase and "Impostazioni" in frase and "Aiuto" in frase
+    assert "sala briefing dei suoni" in manuale
+    assert "Ascolti" in _blocco_della_versione(_leggi("CHANGELOG.md"), VERSIONE) and "Ascolti" in _leggi("README.md")
+
+
 def test_niente_separatori_grafici_nei_documenti():
     testo_del_manuale = "".join(_manuale().testo)
     for nome, testo in (("manuale.html", testo_del_manuale), ("README.md", _leggi("README.md")), ("CHANGELOG.md", _leggi("CHANGELOG.md"))):

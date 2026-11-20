@@ -352,7 +352,16 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     s.conta("scheda_non_aperta", 12)
     s.conta("pause_rifiutate", 13)
     s.conta("attese_della_palestra", 14)
+    s.conta("ascolti_aperti", 15)
+    s.conta("ascolti_d_avvio", 16)
+    s.conta("passi_ascoltati", 17)
+    s.conta("ascolti_finiti", 18)
     righe = s.righe()
+    # Gli Ascolti (D23), in breve, dopo le schede audio e prima delle mail al PUB, nell'ordine.
+    ascolti = ["Aperture degli Ascolti: 15.", "Ascolti aperti da soli all'avvio, prima della prima partita: 16.", "Passi degli Ascolti ascoltati: 17.",
+               "Ascolti seguiti fino all'ultimo passo: 18."]
+    primo = righe.index(ascolti[0])
+    assert righe[primo:primo + 4] == ascolti and righe[primo - 1] == "Schede audio scelte che non si sono aperte: 12." and righe[primo + 4] == "Mail al PUB preparate: 3."
     for riga in ("Cambi di lingua: 1.", "Mail al PUB preparate: 3.", "Mail d'aiuto al PUB coi registri allegati: 2.", "Partite entrate in classifica: 4.",
                  "Pause chieste con Ctrl+P: 5.", "Pause automatiche, per un dialogo o un menu aperto o un'altra finestra: 6.", "Cambi della forma del proiettile: 7.",
                  "Partite col proiettile in seno: 8.", "Partite col proiettile in triangolo: 9.", "Partite col proiettile in sega morbida: 10.",
@@ -397,9 +406,11 @@ def _chiavi_contate(percorso):
 
 def test_ogni_chiave_contata_dalla_partita_e_dalla_finestra_ha_un_etichetta():
     radice = Path(statistiche.__file__).resolve().parent
-    contate = _chiavi_contate(radice / "partita.py") | _chiavi_contate(radice / "gui" / "finestra.py")
+    contate = _chiavi_contate(radice / "partita.py") | _chiavi_contate(radice / "gui" / "finestra.py") | _chiavi_contate(radice / "ascolti.py")
     # La prova deve trovare davvero le chiamate: se non ne trova, il modo di contare è cambiato.
     assert {"partite_iniziate", "ingressi_in_classifica", "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta"} <= contate
+    # Gli Ascolti (D23): la finestra conta le aperture, quelle dell'avvio e quelli finiti, la regia i passi.
+    assert {"ascolti_aperti", "ascolti_d_avvio", "ascolti_finiti", "passi_ascoltati"} <= contate
     assert contate - set(statistiche.CHIAVI_DEI_CONTI) == set()
 
 
