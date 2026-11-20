@@ -2,8 +2,8 @@
 La fisica di Ciechino: il tiro, la traiettoria del proiettile e il modo in cui un punto dello spazio diventa suono.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
-Niente wx e niente audio, soltanto numpy: la usano il gioco, il motore audio dentro il callback, le
-prove e i banchi. Ogni funzione di mappatura accetta uno scalare o un array numpy e restituisce la
+Niente wx e niente audio, soltanto numpy: la usano il gioco, il motore audio dentro il callback e
+le prove. Ogni funzione di mappatura accetta uno scalare o un array numpy e restituisce la
 stessa forma, uno scalare come float di Python e un array come array: così il motore chiede in un
 colpo solo i parametri di tutti i campioni di un blocco, e chi lavora con un punto solo non si
 porta dietro array di dimensione zero.
@@ -267,7 +267,7 @@ def velocita_per(punto, alzo_gradi):
 
 def soluzione(punto):
     """I tre valori da 0 a 1 di un tiro che passa per il punto, tutti dentro i margini di copertura,
-    oppure None se non ce n'è. Serve alla prova della copertura e ai banchi.
+    oppure None se non ce n'è. Serve alla prova della copertura.
     La direzione viene diretta dall'azimut del punto. Fra gli alzi possibili si sceglie quello che
     chiede la potenza più bassa: è il tiro più dolce, e il più indulgente, perché nella velocità
     minima la gittata non cambia al primo ordine con l'alzo, come i 45 gradi sul terreno piano, e un

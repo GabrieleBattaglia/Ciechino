@@ -31,6 +31,3 @@ ignore = [
 [lint.per-file-ignores]
 # Nei test l'assert è lo strumento stesso della verifica.
 "tests/*" = ["S101", "DTZ001"]
-# I banchi d'ascolto leggono la tastiera della console e scrivono i loro esiti: niente di diverso
-# dai test.
-"strumenti/*" = ["S101"]

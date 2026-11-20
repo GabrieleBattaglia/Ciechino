@@ -230,7 +230,7 @@ def test_babel_porta_al_catalogo_i_moduli_giusti():
         assert metodo(percorso) == "python", percorso
     for percorso in ("zip_maker.py", "setup_maker.py"):
         assert metodo(percorso) == "ignore", percorso
-    for percorso in ("tests/test_pacchetto.py", "strumenti/banco_mira.py"):
+    for percorso in ("tests/test_pacchetto.py", "strumenti/crea_preset.py"):
         assert metodo(percorso) is None, percorso
 
 

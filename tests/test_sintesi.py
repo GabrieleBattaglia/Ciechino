@@ -117,8 +117,6 @@ def test_lunghezze_al_campione():
         assert barra.buffer.shape == (atteso + _campioni(SCIVOLATA_DURATA), 2)
         assert barra.buffer.dtype == np.float32
         assert barra.fine_scivolata == len(barra.buffer)
-    corta = sintesi.scivolata("alzo", bip_durata=0.02)
-    assert corta.inizio_scivolata == 3 * _campioni(0.02) + 2 * _campioni(BIP_DISTACCO) + _campioni(BIP_SILENZIO_FINALE)
 
 
 def test_bip_e_silenzi_al_loro_posto():
@@ -190,14 +188,6 @@ def test_frequenza_istantanea_dell_alzo_esponenziale():
     assert frequenze[-1] == pytest.approx(ALZO_FREQUENZE[1], rel=0.02)
 
 
-def test_alzo_lineare_per_i_banchi():
-    barra = sintesi.scivolata("alzo", tacche=False, curva="lineare")
-    scala = _scala(barra)[:, 0]
-    istanti, frequenze = _frequenza_dagli_zeri(scala)
-    attese = ALZO_FREQUENZE[0] + (ALZO_FREQUENZE[1] - ALZO_FREQUENZE[0]) * istanti / len(scala)
-    assert np.allclose(frequenze, attese, rtol=0.01)
-
-
 def _livelli_in_db(barra, finestra):
     scala = _scala(barra)
     centri, livelli = [], []
@@ -221,30 +211,14 @@ def test_inviluppo_della_potenza_in_decibel():
     assert pendenza == pytest.approx(-POTENZA_DB_MINIMO, rel=0.01)
 
 
-def test_potenza_varianti():
-    ridotta = sintesi.scivolata("potenza", tacche=False, db_minimo=-20.0)
-    centri, livelli = _livelli_in_db(ridotta, _campioni(0.1))
-    assert np.polyfit(centri[1:-1], livelli[1:-1], 1)[0] == pytest.approx(20.0, rel=0.01)
-    in_ampiezza = sintesi.scivolata("potenza", tacche=False, curva="ampiezza")
-    centri, livelli = _livelli_in_db(in_ampiezza, _campioni(0.1))
-    ampiezze = 10.0 ** (livelli / 20.0)
-    assert np.polyfit(centri[1:-1], ampiezze[1:-1], 2)[0] == pytest.approx(0.0, abs=0.01)
-    with pytest.raises(ValueError):
-        sintesi.scivolata("potenza", curva="esponenziale")
+def test_parametro_sconosciuto():
     with pytest.raises(ValueError):
         sintesi.scivolata("velocità")
 
 
 def test_nessun_campione_oltre_uno():
-    varianti = [
-        {},
-        {"forma": "sega_morbida"},
-        {"forma": "organo", "frequenze": (100.0, 15000.0)},
-        {"tacca_db": 0.0},
-        {"bip_durata": 0.03},
-    ]
     for parametro in PARAMETRI:
-        for variante in varianti:
-            barra = sintesi.scivolata(parametro, **variante)
+        for tacche in (True, False):
+            barra = sintesi.scivolata(parametro, tacche=tacche)
             assert np.all(np.isfinite(barra.buffer))
             assert np.max(np.abs(barra.buffer)) <= 1.0

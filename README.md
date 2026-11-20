@@ -67,7 +67,7 @@ Gli strumenti dello sviluppo, cioè pytest, ruff, PyInstaller, Babel e polib, st
     python -m pytest -q
     ruff check .
 
-La cartella strumenti contiene i banchi d'ascolto con cui Gabriele tara il gioco, banco_mira.py per le scivolate, banco_bersagli.py per le forme e le grandezze dei bersagli, banco_volo.py per il proiettile e gli effetti, che si giocano alla tastiera e scrivono gli esiti accanto a sé; crea_preset.py, che aggiunge i preset di Ciechino alla collezione dei suoni di GBUtils, e elenco_suoni.py, che scrive suoni_di_ciechino.txt, l'elenco delle azioni con il loro preset da ritoccare con Acu_Maker.
+La cartella strumenti contiene crea_preset.py, che aggiunge i preset di Ciechino alla collezione dei suoni di GBUtils, e elenco_suoni.py, che scrive suoni_di_ciechino.txt, l'elenco delle azioni con il loro preset da ritoccare con Acu_Maker.
 
 Il pacchetto si compila con PyInstaller dalla ricetta Ciechino.spec, a cartella, poi zip_maker.py prepara Ciechino.zip per l'aggiornamento automatico e setup_maker.py l'installatore con Inno Setup 6, dalla ricetta Ciechino.iss:
 
@@ -79,7 +79,7 @@ Il pacchetto si compila con PyInstaller dalla ricetta Ciechino.spec, a cartella,
 
 Ciechino nasce in italiano, ma ogni testo per l'utente passa da lingua.py, con le funzioni _, ngettext e plurale, così si può tradurre senza toccare il programma. babel.cfg dice a pybabel quali file leggere; il modello dei testi si estrae con le parole chiave _, ngettext:1,2 e plurale:2,3, e con i commenti per i traduttori:
 
-    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.12.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
+    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=1.0.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
     pybabel init -i locales/messages.pot -d locales -l en
     pybabel update -i locales/messages.pot -d locales
     pybabel compile -d locales

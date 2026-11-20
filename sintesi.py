@@ -66,9 +66,6 @@ RAMPA_DEL_BIP = 0.001
 RAMPA_DELLA_SCALA = 0.005
 # lineare_in_db di un silenzio perfetto: un pavimento invece di meno infinito.
 PAVIMENTO_IN_DB = -240.0
-# Le curve delle scivolate: l'alzo in hertz, la potenza in livello; la direzione ha la sola
-# panoramica, lineare.
-CURVE = {"direzione": ("lineare",), "alzo": ("esponenziale", "lineare"), "potenza": ("decibel", "ampiezza")}
 
 
 def _armoniche_della_forma(forma):
@@ -244,33 +241,29 @@ def frequenze_delle_tacche(quante=TACCHE, frequenze=TACCA_FREQUENZE):
     return da * (a / da) ** (np.arange(quante) / (quante - 1))
 
 
-def scivolata(parametro, forma=None, frequenze=None, db_minimo=None, curva=None, tacche=True, tacca_db=None, bip_durata=None, fs=FS):
-    """Il buffer della mira per un parametro di PARAMETRI, con i valori di costanti.py dove
-    l'argomento è None.
-    Il buffer: i bip di BIP_FREQUENZE del parametro, lunghi bip_durata (BIP_DURATA) e separati da
-    BIP_DISTACCO di silenzio, poi BIP_SILENZIO_FINALE di silenzio, poi la scala di SCIVOLATA_DURATA
-    secondi, arrotondati al campione. Ogni durata si arrotonda al campione da sola, così il conto
-    dei campioni è esatto e il motore, la mira e le prove lo rifanno uguale.
+def scivolata(parametro, tacche=True, fs=FS):
+    """Il buffer della mira per un parametro di PARAMETRI, coi valori di costanti.py.
+    Il buffer: i bip di BIP_FREQUENZE del parametro, lunghi BIP_DURATA e separati da BIP_DISTACCO
+    di silenzio, poi BIP_SILENZIO_FINALE di silenzio, poi la scala di SCIVOLATA_DURATA secondi,
+    arrotondati al campione, nella forma SCIVOLATA_FORMA del parametro. Ogni durata si arrotonda al
+    campione da sola, così il conto dei campioni è esatto e il motore, la mira e le prove lo rifanno
+    uguale.
     La scala: la direzione va da tutto a sinistra a tutto a destra a DIREZIONE_FREQUENZA; l'alzo
-    sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1], al centro, con la curva "esponenziale" o
-    "lineare" in hertz; la potenza a POTENZA_FREQUENZA, al centro, cresce da db_minimo
-    (POTENZA_DB_MINIMO) sotto SCIVOLATA_DB fino a SCIVOLATA_DB, con la curva "decibel", cioè
-    lineare in decibel, o "ampiezza", lineare nel guadagno. Il campione i della scala vale la
-    frazione i diviso campioni_scivolata, la stessa che mira.valore_scelto dà allo spazio.
-    frequenze, per i banchi: un numero tiene ferma la frequenza, una coppia la fa scorrere.
-    Le tacche, se tacche è vero: TACCHE bip di TACCA_DURATA a tacca_db (TACCA_DB), al centro, da
+    sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1], al centro, su scala esponenziale in hertz; la
+    potenza a POTENZA_FREQUENZA, al centro, cresce da POTENZA_DB_MINIMO sotto SCIVOLATA_DB fino a
+    SCIVOLATA_DB, lineare in decibel. Il campione i della scala vale la frazione i diviso
+    campioni_scivolata, la stessa che mira.valore_scelto dà allo spazio.
+    Le tacche, se tacche è vero: TACCHE bip di TACCA_DURATA a TACCA_DB, al centro, da
     TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1] su scala esponenziale; la k-esima finisce a k decimi
-    della scala, quindi l'ultima la chiude."""
+    della scala, quindi l'ultima la chiude. Senza tacche, le prove sentono la scala da sola.
+    Fino alla 0.12.0 la funzione prendeva anche le varianti dei banchi d'ascolto, la forma, le
+    frequenze, le curve, il minimo della potenza, il volume delle tacche e la durata dei bip: i
+    banchi sono usciti con la 1.0.0, e con loro le varianti."""
     if parametro not in PARAMETRI:
         raise ValueError(f"parametro sconosciuto: {parametro!r}")
-    forma = SCIVOLATA_FORMA[parametro] if forma is None else forma
-    if forma not in _ARMONICHE:
-        raise ValueError(f"forma sconosciuta: {forma!r}")
-    curva = CURVE[parametro][0] if curva is None else curva
-    if curva not in CURVE[parametro]:
-        raise ValueError(f"curva {curva!r} non valida per {parametro}: {', '.join(CURVE[parametro])}")
+    forma = SCIVOLATA_FORMA[parametro]
     fs = int(fs)
-    campioni_bip = round((BIP_DURATA if bip_durata is None else bip_durata) * fs)
+    campioni_bip = round(BIP_DURATA * fs)
     campioni_distacco = round(BIP_DISTACCO * fs)
     campioni_silenzio = round(BIP_SILENZIO_FINALE * fs)
     campioni_scala = round(SCIVOLATA_DURATA * fs)
@@ -285,30 +278,25 @@ def scivolata(parametro, forma=None, frequenze=None, db_minimo=None, curva=None,
     livello = db_in_lineare(SCIVOLATA_DB)
     pan = 0.0
     if parametro == "direzione":
-        hertz = _glissando(DIREZIONE_FREQUENZA if frequenze is None else frequenze, frazioni, True)
+        hertz = _glissando(DIREZIONE_FREQUENZA, frazioni, True)
         pan = 2.0 * frazioni - 1.0
     elif parametro == "alzo":
-        hertz = _glissando(ALZO_FREQUENZE if frequenze is None else frequenze, frazioni, curva == "esponenziale")
+        hertz = _glissando(ALZO_FREQUENZE, frazioni, True)
     else:
-        hertz = _glissando(POTENZA_FREQUENZA if frequenze is None else frequenze, frazioni, True)
-        minimo = POTENZA_DB_MINIMO if db_minimo is None else db_minimo
-        if curva == "decibel":
-            livello = db_in_lineare(SCIVOLATA_DB + minimo * (1.0 - frazioni))
-        else:
-            livello = db_in_lineare(SCIVOLATA_DB + minimo) + (db_in_lineare(SCIVOLATA_DB) - db_in_lineare(SCIVOLATA_DB + minimo)) * frazioni
+        hertz = _glissando(POTENZA_FREQUENZA, frazioni, True)
+        livello = db_in_lineare(SCIVOLATA_DB + POTENZA_DB_MINIMO * (1.0 - frazioni))
     scala = Oscillatore(forma, fs).rendi(hertz) * livello
     _rampe(scala, round(RAMPA_DELLA_SCALA * fs))
     sinistra_destra[inizio:] += panoramica(scala, pan)
     posizioni = []
     if tacche and TACCHE > 0:
         campioni_tacca = round(TACCA_DURATA * fs)
-        db_tacca = TACCA_DB if tacca_db is None else tacca_db
         for k, frequenza in enumerate(frequenze_delle_tacche(), start=1):
             fine = inizio + round(k * campioni_scala / TACCHE)
             dove = max(inizio, fine - campioni_tacca)
-            sinistra_destra[dove:fine] += panoramica(_bip(frequenza, fine - dove, db_tacca, "seno", fs), 0.0)
+            sinistra_destra[dove:fine] += panoramica(_bip(frequenza, fine - dove, TACCA_DB, "seno", fs), 0.0)
             posizioni.append((dove, fine))
-    # Con i valori di costanti.py la somma resta ben sotto uno; una variante da banco esagerata, per
+    # Con i valori di costanti.py la somma resta ben sotto uno; una taratura nuova esagerata, per
     # esempio tacche a zero decibel, si abbassa tutta insieme invece di tagliarsi.
     picco = float(np.max(np.abs(sinistra_destra))) if len(sinistra_destra) else 0.0
     if picco > 1.0:

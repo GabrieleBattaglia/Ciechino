@@ -106,7 +106,7 @@ TACCA_DURATA = 0.006
 TACCA_FREQUENZE = (1200.0, 2400.0)
 TACCA_DB = -18.0
 # Secondi da togliere all'istante in cui il programma vede lo spazio, per il ritardo fra il dito e
-# il programma: si tara al banco della mira.
+# il programma: il banco della mira, uscito con la 1.0.0, l'ha lasciato a zero.
 COMPENSAZIONE_DEL_TASTO = 0.0
 # Durante la mira i bersagli restano fermi e si sentono più piano (scelta di Gabriele del 19
 # novembre 2026).

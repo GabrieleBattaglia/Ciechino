@@ -292,7 +292,7 @@ def _tempi_del_volo(traiettoria):
 def misure_dell_artigliere(traiettoria, bersaglio, partenza):
     """Le Misure dell'artigliere del tiro sparato al tempo di gioco partenza, rispetto a quel
     bersaglio, sulla parabola intera fino a terra (D21). calcola_volo le dà al bersaglio colpito o al
-    vicino; da sola serve alle prove e ai banchi."""
+    vicino; da sola serve alle prove."""
     partenza = float(partenza)
     tempi = _tempi_del_volo(traiettoria)
     return _misure(traiettoria, bersaglio, partenza, tempi, traiettoria.posizione(tempi), bersaglio.posizione(partenza + tempi))

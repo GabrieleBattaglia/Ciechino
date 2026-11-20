@@ -2,10 +2,10 @@
 La mira di Ciechino: dal campione che si sente quando si preme spazio al valore scelto con una scivolata.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
-La funzione è una sola, la stessa per il gioco e per il banco della mira, così ciò che Gabriele
-tara al banco vale identico in partita. Non sa niente di audio né di finestre: riceve il campione
-udibile dal motore e il buffer da sintesi.scivolata, e fa il conto. Il modulo resta leggero, senza
-numpy, perché lo importano anche le prove e i banchi che non suonano.
+La funzione è una sola, la stessa per il gioco e per gli Ascolti, e fino alla 0.12.0 per il banco
+della mira, con cui Gabriele ha tarato le scivolate. Non sa niente di audio né di finestre: riceve
+il campione udibile dal motore e il buffer da sintesi.scivolata, e fa il conto. Il modulo resta
+leggero, senza numpy, perché lo importano anche le prove che non suonano.
 """
 
 from costanti import COMPENSAZIONE_DEL_TASTO, FS, MARGINE_DOPO_LA_SCIVOLATA
@@ -51,7 +51,7 @@ def scaduta(campione_udibile, inizio_buffer, scivolata, margine=None):
     """Vero quando il campione udibile ha passato la fine della scala di margine secondi
     (MARGINE_DOPO_LA_SCIVOLATA se è None): la scivolata che nessuno ha fermato è scaduta. Nel gioco,
     da D25, la barra scaduta ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte, e poi il
-    proiettile è perduto; nel banco della mira, che misura le scelte, vale ancora il massimo di D3.
+    proiettile è perduto.
     Qui non si toglie la compensazione del tasto, che riguarda il dito, non il tempo che passa: il
     battito, che guarda il tempo, passa il campione udibile; per lo spazio il gioco passa invece
     campione_del_tasto, lo stesso istante di valore_scelto, così lo spazio che valore_scelto prende

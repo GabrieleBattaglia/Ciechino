@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [1.0.0] - 2026-11-20
+
+La prima versione pubblica di Ciechino, il tiro a segno a orecchio. Davanti a te, in un cubo di 50 metri per lato, cantano i bersagli: la panoramica dice dove stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani. Scegli direzione, alzo e potenza fermando con la barra spaziatrice tre suoni che scivolano, poi segui il colpo con l'orecchio. I primi tre livelli sono la palestra, dove dopo ogni tiro la partita aspetta che tu abbia capito; gli Ascolti, nel menu Aiuto, insegnano a sentire lo spazio prima di giocare, e alla prima apertura partono da soli. I cento punteggi migliori restano nella classifica, una griglia da leggere in braille, e le statistiche contano tutto, primati compresi.
+
+Rispetto alla 0.12.0, l'ultima provata prima della pubblicazione, il gioco non cambia: dalla cartella strumenti sono usciti i banchi d'ascolto con cui Gabriele ha tarato le scivolate, i bersagli e il proiettile, perché le loro scelte sono ormai tutte dentro Ciechino.
+
 ## [0.12.0] - 2026-11-20
 
 La classifica è più ricca, come voleva Gabriele: ogni voce dice, oltre alla posizione, al nome e al punteggio, il livello raggiunto, i tiri sparati, i centri, bonus compresi, la precisione globale media della partita, i tiri a vuoto compresi, il tempo di gioco, senza le pause e senza le attese della palestra, e quanti giorni fa è stata fatta. Ed è una griglia allineata: dopo la riga che dice quante voci ci sono, una riga coi titoli delle colonne, poi una voce per riga, coi campi in colonna, da leggere in braille scorrendo su e giù. Il tempo si scrive come un cronometro, 12:05, e dall'ora in su 01:02:05; la voce appena entrata finisce con la parola nuova. Nella finestra di Ctrl+K la griglia ha un carattere a larghezza fissa, così resta in colonna anche sullo schermo.
