@@ -2,9 +2,17 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [0.11.8] - 2026-11-20
+
+La riga del sommario coi numeri non ha più lo spazio dopo i due punti, come L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%: così i valori e la precisione globale stanno tutti nei primi 40 caratteri, e la legenda comincia dal quarantunesimo. Dal quarto al sesto livello le parole hanno la loro riga, e la precisione globale col punto di vista va sempre sulla riga sotto.
+
+Lo spazio premuto appena finita una scivolata prende il massimo per tre decimi di secondo, non più 50 millesimi; dopo, la barra ricomincia. Corretto anche un difetto nascosto, che con la compensazione del tasto poteva far ricominciare la barra proprio a chi aveva preso il massimo.
+
+Nelle statistiche il proiettile perduto entra nella precisione globale media come un tiro allo 0%, il primato della media migliore in una partita vale soltanto per le partite di almeno dieci tiri, e i massimi presi con lo spazio hanno una voce loro, separata da quella delle versioni prima della 0.10.0, che contava le scivolate arrivate in fondo senza lo spazio.
+
 ## [0.11.0] - 2026-11-20
 
-Arriva la precisione globale, chiesta da Gabriele: ogni resoconto dice quanto il proiettile si è avvicinato al bersaglio considerando l'intero cubo, in percentuale con un decimale. Si misura dal centro del bersaglio, colpito o passato più vicino, sulla diagonale del cubo, 86,6 metri: un centro al primo livello vale sempre più del 94%, e la precisione di prima, quella che raddoppia i punti, resta com'è. Nei primi tre livelli sta nel sommario coi numeri, come G, nei tre seguenti accanto alle parole, e dopo nella riga dell'esito; la voce e il braille la dicono sempre.
+Arriva la precisione globale, chiesta da Gabriele: ogni resoconto, tranne quello del proiettile perduto, che non ha volo, dice quanto il proiettile si è avvicinato al bersaglio considerando l'intero cubo, in percentuale con un decimale. Si misura dal centro del bersaglio, colpito o passato più vicino, sulla diagonale del cubo, 86,6 metri: un centro al primo livello vale sempre più del 94%, e la precisione di prima, quella che raddoppia i punti, resta com'è. Nei primi tre livelli sta nel sommario coi numeri, come G, nei tre seguenti accanto alle parole, e dopo nella riga dell'esito; la voce e il braille la dicono sempre.
 
 Le statistiche contano la precisione globale media dei tiri e quella per partita, le ultime partite dicono la loro media, e due primati nuovi, la precisione globale migliore in un tiro e la media migliore in una partita, si annunciano quando li batti.
 

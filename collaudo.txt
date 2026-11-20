@@ -1,4 +1,4 @@
-Collaudo di Ciechino 0.11.0, gli Ascolti e il secondo collaudo: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Collaudo di Ciechino 0.11.8, gli Ascolti e il secondo collaudo: cancella le righe superate, annota dopo i due punti quelle con problemi.
 Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. Per arrivare presto ai livelli alti, prima del collaudo ClaudIA porta CENTRI_PER_LIVELLO di costanti.py da 10 a 2, e alla fine lo rimette a 10, senza committarlo: si sale di livello ogni 2 centri.
 Passo 1: dal menu Impostazioni scegli Ascolti, con Alt, I e S.
 Domanda 1: il suono dell'apertura, un do a sinistra, lo stesso a destra e una scivolata al centro, si distingue dagli altri suoni dei menu?
@@ -34,15 +34,15 @@ Domanda 18: con gli Ascolti aperti la partita tace, e con Esc tutto tace subito 
 Domanda 19: le lettere dei menu, la S in Impostazioni, dove la A è di Scheda audio, e la A in Aiuto, ti vanno bene?
 Passo 14: al primo livello tira un centro, poi un colpo debole che cade prima del bersaglio; dopo ogni tiro ascolta l'effetto fino in fondo, poi leggi la prima riga del resoconto col display, scorrendo anche al secondo blocco.
 Domanda 20: il secondo di silenzio fra la fine del jingle o del tonfo e la voce va bene, o lo vuoi più lungo o più corto?
-Domanda 21: la riga del sommario comincia coi valori, L, V, P, I e G, e dal quarantunesimo carattere la legenda: il secondo blocco comincia proprio all'inizio della seconda schermata del display, e la voce dice bene iniziali, due punti e segni?
-Domanda 22: nel colpo debole la riga dice L: manca, V: manca e I: manca, e la legenda spiega perché: la parola manca ti va bene, o vuoi un altro segno?
-Domanda 23: la precisione globale, G, sta nel primo blocco quando i valori sono corti, altrimenti apre il secondo: ti va bene che si sposti, e la percentuale con un decimale ti dice quanto ti avvicini?
-Passo 15: avvia la mira e lascia passare la direzione due volte senza spazio, leggendo la barra di stato con F7; poi fermala e prendi gli altri valori.
-Domanda 24: la barra che ricomincia si riconosce, col secondo di silenzio e i bip, e passaggio 2 di 5, dal quarantunesimo carattere della barra di stato, si legge bene sul display?
+Domanda 21: la riga del sommario comincia coi valori attaccati ai due punti, come L:+1,9 V:+15,8 P:+24,7 I:-18,5 G:82,7%, tutti nel primo blocco, e dal quarantunesimo carattere la legenda: il secondo blocco comincia proprio all'inizio della seconda schermata del display, e la voce dice bene iniziali, due punti e segni senza lo spazio?
+Domanda 22: nel colpo debole la riga dice L:manca, V:manca e I:manca, e la legenda spiega perché: la parola manca ti va bene, o vuoi un altro segno?
+Domanda 23: la precisione globale, G, sta nel primo blocco dopo l'inclinazione: la percentuale con un decimale ti dice quanto ti avvicini?
+Passo 15: avvia la mira e lascia passare la direzione due volte senza spazio, leggendo la barra di stato con F7; poi fermala, prendi l'alzo con lo spazio appena finita la sua scivolata, e la potenza.
+Domanda 24: la barra che ricomincia si riconosce, col secondo di silenzio e i bip, e passaggio 2 di 5, dal quarantunesimo carattere della barra di stato, si legge bene sul display? L'alzo preso appena finita la scivolata, entro tre decimi di secondo, vale il massimo, 85 gradi nel resoconto, senza far ripartire la barra?
 Passo 16: avvia la mira e lascia passare la direzione cinque volte senza spazio.
 Domanda 25: il suono del proiettile perduto, una miccia che sfrigola e si spegne senza lo sparo, si distingue dagli effetti del tiro, e il resoconto dice chiaro perché il colpo è perso?
 Passo 17: avvia la mira, prendi la direzione e premi Esc durante l'alzo; poi avvia la mira, metti la pausa con Ctrl+P e premi Esc.
 Domanda 26: Esc annulla subito, col respiro che si lascia andare, e il messaggio dice che il proiettile resta; nella pausa la mira si annulla e la pausa resta: ti va bene così?
 Passo 18: gioca fino al settimo livello, e leggi un resoconto del quinto e uno del settimo.
-Domanda 27: dal quarto al sesto le parole stanno nel primo blocco e la precisione globale apre il secondo; dal settimo la precisione globale sta nella riga dell'esito: ti va bene?
+Domanda 27: dal quarto al sesto le parole stanno sulla prima riga, e la precisione globale col punto di vista sempre sulla riga sotto; dal settimo la precisione globale sta nella riga dell'esito: si leggono bene, a voce e sul display?
 Esito:

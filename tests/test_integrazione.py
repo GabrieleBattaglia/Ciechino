@@ -61,9 +61,9 @@ SEME = 2026
 NOME = "Gabriele"
 # Il sommario di D21 del tiro a vuoto voluto, rasoterra e piano, che cade a pochi metri dal cannone:
 # né alla distanza né all'altezza del bersaglio, e così nessuna misura.
-# Da D24 la riga comincia coi valori, ognuno con la sua iniziale: qui mancano tutti, e la precisione globale di D26, che c'è, non
-# ci sta nel primo blocco e apre il secondo.
-VUOTO = "L: manca V: manca P: manca I: manca"
+# Da D24 la riga comincia coi valori, ognuno con la sua iniziale: qui mancano tutti; dalla 0.11.8 senza lo spazio dopo i due punti,
+# e la precisione globale di D26 ci sta con loro nel primo blocco.
+VUOTO = "L:manca V:manca P:manca I:manca"
 # Il buffer finto di ogni preset: breve e costante, così ogni effetto finisce presto e non resta voce.
 LUNGHEZZA_FINTA = 256
 AMPIEZZA_FINTA = 0.1
@@ -483,7 +483,7 @@ def _centro(tavolo, numero, totale):
     # e la precisione globale (D26); nell'annuncio l'esito, poi il primo blocco, senza la legenda.
     sommario, esito = resoconto.testo.splitlines()[:2]
     atteso = resoconti.sommario_del_tiro(volo, "numeri")
-    assert sommario == atteso.riga and sommario.startswith("L: ") and "L laterale, V verticale" in sommario and " G: " in atteso.annuncio
+    assert sommario == atteso.riga and sommario.startswith("L:") and "L laterale, V verticale" in sommario and " G:" in atteso.annuncio
     assert esito.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
     assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {atteso.annuncio}"
     tavolo.cursore_sul_nuovo()
@@ -573,11 +573,11 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             assert AIUTO_MANCATO_FINO_AL_LIVELLO >= 2 and "Il bersaglio più vicino è stato mancato di " in resoconto.testo
             # Al livello 2 il sommario c'è ancora, coi numeri (D21); il tiro rasoterra cade prima della
             # distanza del bersaglio e sotto la sua altezza, e il sommario lo dice senza numeri.
-            assert resoconto.testo.splitlines()[0] == resoconti.riga_del_sommario(partita.ultimo_volo, "numeri") and resoconto.testo.startswith(VUOTO)
+            assert resoconto.testo.splitlines()[0] == resoconti.riga_del_sommario(partita.ultimo_volo, "numeri") and resoconto.testo.startswith(f"{VUOTO} G:")
             # Anche il livello 2 è della palestra (D22): dopo il tiro a vuoto lo spazio riporta all'ascolto.
             if partita.riserva > 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "info"] and partita.fase == "attesa"
-                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}. {VUOTO} G: ")
+                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}. {VUOTO} G:")
                 assert nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
             elif partita.riserva == 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "avviso", "info"] and nuovi[1].annuncio == "Ultimo colpo."
@@ -589,7 +589,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
 
         # La fine: il resoconto, la fine col riepilogo, il nome e la classifica in coda alla vista.
         assert partita.fase == "finita" and not partita.in_corso()
-        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.startswith(f"A vuoto, riserva vuota. {VUOTO} G: ")
+        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.startswith(f"A vuoto, riserva vuota. {VUOTO} G:")
         tiri = CENTRI_PER_LIVELLO + riserva
         # La durata non conta né la pausa né le attese della palestra, una dopo ogni tiro tranne l'ultimo (D22).
         assert tavolo.in_attesa > 0
@@ -639,7 +639,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica.
         assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
-        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. L: " in detto and " G: " in detto) == CENTRI_PER_LIVELLO
+        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. L:" in detto and " G:" in detto) == CENTRI_PER_LIVELLO
 
         # Le statistiche, sul disco, coi numeri della partita.
         statistiche = _leggi(costanti.FILE_STATISTICHE)
@@ -655,7 +655,9 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
                                         "partita_finita": 1, "in_classifica": 1, "confermato": 1}
         for parametro in PARAMETRI:
             presi = statistiche["mira"][parametro]
-            assert (presi["scelto"], presi["minimo"], presi["massimo"], presi["nei_centri"]) == (CENTRI_PER_LIVELLO, riserva, 0, CENTRI_PER_LIVELLO)
+            # Dalla 0.11.8 il massimo con lo spazio ha la chiave sua, e massimo resta ai conti di prima della 0.10.0.
+            assert (presi["scelto"], presi["minimo"], presi["massimo_con_lo_spazio"], presi["massimo"], presi["nei_centri"]) == (
+                CENTRI_PER_LIVELLO, riserva, 0, 0, CENTRI_PER_LIVELLO)
         assert statistiche["moto"] == {"fermi": {"apparsi": CENTRI_PER_LIVELLO + 1, "colpiti": CENTRI_PER_LIVELLO}, "mobili": {"apparsi": 0, "colpiti": 0}}
         primati = statistiche["primati"]
         assert (primati["punteggio"]["valore"], primati["livello"]["valore"], primati["centri_in_una_partita"]["valore"],

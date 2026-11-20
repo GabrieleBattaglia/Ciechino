@@ -14,21 +14,29 @@ from costanti import COMPENSAZIONE_DEL_TASTO, FS, MARGINE_DOPO_LA_SCIVOLATA
 ESITI = ("pausa", "minimo", "scelto", "massimo")
 
 
+def campione_del_tasto(campione_udibile, scivolata, compensazione=None):
+    """Il campione che si sentiva quando il dito è sceso sullo spazio: campione_udibile meno compensazione
+    secondi, COMPENSAZIONE_DEL_TASTO se è None, alla frequenza di campionamento della scivolata. È l'istante
+    con cui valore_scelto sceglie il valore, e quello che il gioco passa a scaduta per lo spazio, così i due
+    conti guardano lo stesso momento."""
+    if compensazione is None:
+        compensazione = COMPENSAZIONE_DEL_TASTO
+    return float(campione_udibile) - float(compensazione) * getattr(scivolata, "fs", FS)
+
+
 def valore_scelto(campione_udibile, inizio_buffer, scivolata, compensazione=None):
     """Il valore scelto premendo spazio quando dalle casse esce campione_udibile, per una scivolata
     il cui buffer è partito al campione inizio_buffer del motore. Restituisce (valore, esito).
     Al campione udibile si tolgono compensazione secondi (COMPENSAZIONE_DEL_TASTO se è None), il
-    ritardo fra il dito e il programma, perché conta ciò che si sentiva quando il dito è sceso.
+    ritardo fra il dito e il programma, perché conta ciò che si sentiva quando il dito è sceso: è il
+    conto di campione_del_tasto.
     Prima del buffer, cioè nella pausa fra le barre, lo spazio non conta: (None, "pausa"). Nei
     bip e nel silenzio che li segue sceglie il minimo: (0.0, "minimo"). Nella scala sceglie la
     frazione percorsa, continua, senza gradini: (frazione, "scelto"). Dopo la fine della scala,
     nel margine prima che la barra scada, sceglie il massimo: (1.0, "massimo").
     scivolata è una sintesi.Scivolata, o qualunque oggetto con inizio_scivolata,
     campioni_scivolata e, se diversa da FS, la frequenza di campionamento fs."""
-    if compensazione is None:
-        compensazione = COMPENSAZIONE_DEL_TASTO
-    fs = getattr(scivolata, "fs", FS)
-    posizione = float(campione_udibile) - float(compensazione) * fs - float(inizio_buffer)
+    posizione = campione_del_tasto(campione_udibile, scivolata, compensazione) - float(inizio_buffer)
     if posizione < 0.0:
         return None, "pausa"
     inizio_scala = scivolata.inizio_scivolata
@@ -44,7 +52,10 @@ def scaduta(campione_udibile, inizio_buffer, scivolata, margine=None):
     (MARGINE_DOPO_LA_SCIVOLATA se è None): la scivolata che nessuno ha fermato è scaduta. Nel gioco,
     da D25, la barra scaduta ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte, e poi il
     proiettile è perduto; nel banco della mira, che misura le scelte, vale ancora il massimo di D3.
-    Qui non si toglie la compensazione del tasto, che riguarda il dito, non il tempo che passa."""
+    Qui non si toglie la compensazione del tasto, che riguarda il dito, non il tempo che passa: il
+    battito, che guarda il tempo, passa il campione udibile; per lo spazio il gioco passa invece
+    campione_del_tasto, lo stesso istante di valore_scelto, così lo spazio che valore_scelto prende
+    come massimo non fa scadere la barra."""
     if margine is None:
         margine = MARGINE_DOPO_LA_SCIVOLATA
     fs = getattr(scivolata, "fs", FS)

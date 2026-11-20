@@ -1,6 +1,7 @@
 """
 Le prove di mira.py: i quattro esiti di valore_scelto, la compensazione del tasto e la scadenza, che da D25
-fa ricominciare la barra invece di darle il massimo.
+fa ricominciare la barra invece di darle il massimo; dalla 0.11.8 il margine di tre decimi e il campione del
+tasto, lo stesso istante per il valore e per la scadenza.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 """
@@ -93,3 +94,37 @@ def test_il_massimo_vale_fino_alla_scadenza():
         assert mira.valore_scelto(campione, INIZIO, Finta(), compensazione=0.0) == (1.0, "massimo")
         assert not mira.scaduta(campione, INIZIO, Finta())
     assert mira.scaduta(fine + margine, INIZIO, Finta())
+
+
+def test_il_margine_e_di_tre_decimi():
+    """Dalla 0.11.8, per scelta di Gabriele del 20 novembre 2026, lo spazio prende il massimo fino a tre decimi di secondo
+    dopo la fine della scivolata, non più 50 millesimi."""
+    assert round(MARGINE_DOPO_LA_SCIVOLATA, 6) == 0.3
+    fine = INIZIO + 11_000
+    assert not mira.scaduta(fine + 0.29 * FS, INIZIO, Finta()) and mira.scaduta(fine + 0.3 * FS, INIZIO, Finta())
+
+
+def test_il_campione_del_tasto():
+    """L'istante dello spazio tolta la compensazione, alla frequenza della scivolata, e con la compensazione predefinita
+    quella del modulo, letta alla chiamata: è lo stesso conto di valore_scelto."""
+    assert mira.campione_del_tasto(INIZIO, Finta(), compensazione=0.03) == pytest.approx(INIZIO - 0.03 * FS)
+    lenta = Finta()
+    lenta.fs = 1000
+    assert mira.campione_del_tasto(INIZIO, lenta, compensazione=0.5) == pytest.approx(INIZIO - 500)
+    assert mira.campione_del_tasto(INIZIO, Finta()) == pytest.approx(INIZIO - COMPENSAZIONE_DEL_TASTO * FS)
+
+
+def test_scaduta_e_valore_con_lo_stesso_istante(monkeypatch):
+    """Con la compensazione del tasto a 0,03 secondi, lo spazio sentito appena oltre il margine, ma premuto dentro, prende il
+    massimo: scaduta, chiamata col campione del tasto come fa la partita, non lo fa scadere; col campione udibile sì, ed è
+    proprio il caso del battito, che guarda il tempo che passa e non il dito."""
+    monkeypatch.setattr(mira, "COMPENSAZIONE_DEL_TASTO", 0.03)
+    fine = INIZIO + 11_000
+    sentito = fine + (MARGINE_DOPO_LA_SCIVOLATA + 0.01) * FS
+    premuto = mira.campione_del_tasto(sentito, Finta())
+    assert premuto == pytest.approx(sentito - 0.03 * FS)
+    assert mira.valore_scelto(sentito, INIZIO, Finta()) == (1.0, "massimo")
+    assert not mira.scaduta(premuto, INIZIO, Finta()) and mira.scaduta(sentito, INIZIO, Finta())
+    # Premuto oltre il margine anche tolta la compensazione: scade, con l'uno e con l'altro.
+    tardi = fine + (MARGINE_DOPO_LA_SCIVOLATA + 0.03) * FS + 1
+    assert mira.scaduta(mira.campione_del_tasto(tardi, Finta()), INIZIO, Finta())

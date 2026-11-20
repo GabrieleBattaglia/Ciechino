@@ -13,14 +13,17 @@ Le misure si arrotondano prima di scriverle: così 1,04 metri diventa «1 metro�
 uno scarto di tre centimetri a destra si dice «al centro» invece di «0,0 metri a destra».
 Il resoconto di un tiro comincia col sommario di D21, con le misure dell'artigliere di volo.Misure
 viste dal bersaglio, sempre nello stesso ordine, laterale, verticale, profondità e inclinazione: nei
-primi livelli i numeri con un decimale e il segno, poi soltanto le parole, poi tace. Da D24 la riga si
-legge a blocchi sul display braille: nel primo, di BLOCCO_DEL_BRAILLE caratteri, i valori, ciascuno con
-la sua iniziale, «L: +1,9 V: +15,8 P: +24,7 I: -18,5», o le parole; dal carattere seguente la legenda.
-Nell'annuncio il primo blocco viene dopo l'esito, senza la legenda. La riga del mancato di D6 dice le
-stesse misure, nello stesso ordine, a parole.
+primi livelli i numeri con un decimale e il segno, poi soltanto le parole, poi tace. Da D24 la riga coi
+numeri si legge a blocchi sul display braille: nel primo, di BLOCCO_DEL_BRAILLE caratteri, i valori,
+ciascuno con la sua iniziale e i due punti, dalla 0.11.8 senza spazio, come
+«L:+1,9 V:+15,8 P:+24,7 I:-18,5 G:61,2%»; dal carattere seguente la legenda. La riga a parole tiene le
+parole, e dalla 0.11.8 la precisione globale e la legenda vanno sempre sotto, su una riga loro. Nell'annuncio i valori o le parole
+vengono dopo l'esito, senza la legenda. La riga del mancato di D6 dice le stesse misure, nello stesso
+ordine, a parole.
 La precisione globale di D26, quanto il proiettile si è avvicinato al bersaglio nell'intero cubo, sta
-in ogni resoconto: nel sommario coi numeri come G:, in quello a parole nel secondo blocco, e dove il
-sommario tace nella riga dell'esito; l'annuncio la dice sempre.
+nel resoconto di ogni tiro che ha un bersaglio vicino: nel sommario coi numeri come G:, in quello a parole
+sulla seconda riga, e dove il sommario tace nella riga dell'esito; l'annuncio la dice sempre. Non l'hanno
+il proiettile perduto, che non ha volo, e il tiro senza bersagli vivi.
 Nella palestra delle attese di D22 i messaggi di un tiro finiscono con la riga che dice che cosa farà
 lo spazio, e la barra di stato lo ripete; fuori dalla palestra Ctrl+P ha il suo messaggio di rifiuto.
 Da D25 il proiettile perduto, quando una barra della mira passa PASSAGGI_DELLA_BARRA volte senza lo
@@ -346,14 +349,18 @@ def parole_delle_misure(misure):
 class Sommario:
     """Il sommario di un tiro in pezzi (D21, D24): primo, il primo blocco della riga, coi valori o le
     parole; secondo, il blocco che comincia dal carattere seguente, con la legenda; annuncio, ciò che ne
-    dice l'annuncio del tiro, i valori senza la legenda. riga è la riga intera, a blocchi."""
+    dice l'annuncio del tiro, i valori senza la legenda. riga è la riga intera, a blocchi; con a_capo,
+    il sommario a parole dalla 0.11.8, secondo va invece sotto, su una riga sua, e riga ne ha due."""
 
     primo: str
     secondo: str
     annuncio: str
+    a_capo: bool = False
 
     @property
     def riga(self):
+        if self.a_capo and self.secondo:
+            return f"{self.primo}\n{self.secondo}"
         return in_blocchi(self.primo, self.secondo)
 
 
@@ -364,24 +371,25 @@ def frase_della_globale(globale):
 
 
 def _valori_coi_numeri(misure):
-    """Il primo blocco del sommario coi numeri (D24): ogni misura con la sua iniziale e i due punti, col
-    segno e un decimale, nell'ordine laterale, verticale, profondità e inclinazione; quella che manca con
-    la sua iniziale e la parola manca."""
+    """Il primo blocco del sommario coi numeri (D24): ogni misura con la sua iniziale e i due punti, senza
+    spazio dalla 0.11.8, perché i valori stiano tutti nel primo blocco, G compresa, col segno e un
+    decimale, nell'ordine laterale, verticale, profondità e inclinazione; quella che manca con la sua
+    iniziale e la parola manca."""
     def scritto(valore):
         if valore is None:
-            # Traduttori: al posto del numero di una misura che manca, nel sommario coi numeri: «L: manca»; la legenda dice perché.
+            # Traduttori: al posto del numero di una misura che manca, nel sommario coi numeri: «L:manca»; la legenda dice perché.
             return _("manca")
         return con_segno(valore)
 
     return " ".join((
-        # Traduttori: da qui, i valori del sommario coi numeri (D24), ognuno con la sua iniziale, nel primo blocco del display braille; valore è come «+1,9», «-18,5», «0,0» o «manca». L, il laterale, in metri, positivo a destra del bersaglio.
-        _("L: {valore}").format(valore=scritto(misure.laterale)),
+        # Traduttori: da qui, i valori del sommario coi numeri (D24), ognuno con la sua iniziale e i due punti, senza spazio, perché stiano nel primo blocco del display braille; valore è come «+1,9», «-18,5», «0,0» o «manca». L, il laterale, in metri, positivo a destra del bersaglio.
+        _("L:{valore}").format(valore=scritto(misure.laterale)),
         # Traduttori: V, il verticale, in metri, positivo sopra il bersaglio.
-        _("V: {valore}").format(valore=scritto(misure.verticale)),
+        _("V:{valore}").format(valore=scritto(misure.verticale)),
         # Traduttori: P, la profondità, in metri, positiva se il tiro è lungo, oltre il bersaglio visto dal cannone.
-        _("P: {valore}").format(valore=scritto(misure.profondita)),
+        _("P:{valore}").format(valore=scritto(misure.profondita)),
         # Traduttori: I, l'inclinazione del proiettile, in gradi, positiva in salita.
-        _("I: {valore}").format(valore=scritto(misure.inclinazione)),
+        _("I:{valore}").format(valore=scritto(misure.inclinazione)),
     ))
 
 
@@ -405,14 +413,15 @@ def _legenda_dei_numeri(misure, con_la_globale):
 
 def _sommario_coi_numeri(misure, globale):
     """Il sommario al grado «numeri» (D24): i valori nel primo blocco, la legenda nel secondo. La precisione
-    globale di D26, G:, segue i valori nel primo blocco se ci sta, altrimenti apre il secondo; l'annuncio
-    la dice sempre dopo i valori."""
+    globale di D26, G:, segue i valori nel primo blocco, dove coi valori senza spazio dopo i due punti ci
+    sta quasi sempre; nella riga eccezionale che non ci sta con almeno uno spazio dopo di sé apre il
+    secondo. L'annuncio la dice sempre dopo i valori."""
     valori = _valori_coi_numeri(misure)
     legenda = _legenda_dei_numeri(misure, globale is not None)
     if globale is None:
         return Sommario(valori, legenda, valori)
-    # Traduttori: la precisione globale nel sommario coi numeri (D26), con la sua iniziale G; percentuale è come «61,2%».
-    sigla = _("G: {percentuale}").format(percentuale=testi.percento(globale, 1))
+    # Traduttori: la precisione globale nel sommario coi numeri (D26), con la sua iniziale G e i due punti, senza spazio come gli altri valori; percentuale è come «61,2%».
+    sigla = _("G:{percentuale}").format(percentuale=testi.percento(globale, 1))
     con_la_globale = f"{valori} {sigla}"
     if _sta_nel_blocco(con_la_globale):
         return Sommario(con_la_globale, legenda, con_la_globale)
@@ -440,15 +449,17 @@ def _parole_del_sommario(misure):
 
 
 def _sommario_a_parole(misure, globale):
-    """Il sommario al grado «parole» (D24): le parole nel primo blocco; nel secondo la precisione globale
-    di D26, se c'è, e il punto di vista con l'ordine delle parole. L'annuncio ha le parole e la globale."""
+    """Il sommario al grado «parole» (D24): le parole sulla prima riga; sulla seconda la precisione globale
+    di D26, se c'è, e il punto di vista con l'ordine delle parole. Dalla 0.11.8 la seconda parte va sempre
+    sotto, su una riga sua, per scelta di Gabriele del 20 novembre 2026: «Tagliamo la testa al toro e
+    mettiamola sempre sotto, su una seconda riga.». L'annuncio ha le parole e la globale."""
     parole = _parole_del_sommario(misure)
-    # Traduttori: il secondo blocco del sommario a parole (D24), dal 41° carattere della riga: il punto di vista e l'ordine delle quattro parole del primo blocco.
+    # Traduttori: la seconda riga del sommario a parole (D24), sotto le parole: il punto di vista e l'ordine delle quattro parole della riga sopra.
     legenda = _("Dal bersaglio: lato, altezza, profondità, inclinazione.")
     if globale is None:
-        return Sommario(parole, legenda, parole)
+        return Sommario(parole, legenda, parole, a_capo=True)
     frase = frase_della_globale(globale)
-    return Sommario(parole, f"{frase} {legenda}", f"{parole} {frase}")
+    return Sommario(parole, f"{frase} {legenda}", f"{parole} {frase}", a_capo=True)
 
 
 def sommario_del_tiro(volo, grado="numeri"):
@@ -457,8 +468,9 @@ def sommario_del_tiro(volo, grado="numeri"):
     centro del bersaglio, quello colpito o quello passato più vicino, con le misure dell'artigliere di
     volo.Misure, sempre in quest'ordine: il laterale, il verticale, la profondità e l'inclinazione. Al
     grado «numeri» coi valori e le loro iniziali, un decimale e il segno, e la precisione globale di D26;
-    al grado «parole» con le parole, come «A destra, sopra, lungo, in discesa.». Un grado fuori da
-    GRADI_DELLA_PALESTRA solleva ValueError."""
+    al grado «parole» con le parole, come «A destra, sopra, lungo, in discesa.», e a_capo vero, perché la
+    precisione globale e la legenda vanno sulla riga sotto. Un grado fuori da GRADI_DELLA_PALESTRA solleva
+    ValueError."""
     if grado not in GRADI_DELLA_PALESTRA:
         raise ValueError(f"grado della palestra sconosciuto: {grado!r}; i gradi sono {', '.join(GRADI_DELLA_PALESTRA)}")
     misure = volo.misure
@@ -470,10 +482,11 @@ def sommario_del_tiro(volo, grado="numeri"):
 
 
 def riga_del_sommario(volo, grado="numeri"):
-    """Il sommario del tiro (D21), la prima riga del resoconto, a blocchi per il display braille (D24):
-    al grado «numeri» «L: +8,8 V: +4,5 P: +3,9 I: -45,8 G: 99,1%», poi spazi fino al carattere
-    BLOCCO_DEL_BRAILLE compreso e la legenda; al grado «parole» «A destra, sopra, lungo, in discesa.», poi la
-    precisione globale e il punto di vista; al grado «niente», o se nessun bersaglio vivo c'era, vuoto.
+    """Il sommario del tiro (D21), in testa al resoconto. Al grado «numeri» una riga a blocchi per il
+    display braille (D24), «L:+8,8 V:+4,5 P:+3,9 I:-45,8 G:99,1%», poi spazi fino al carattere
+    BLOCCO_DEL_BRAILLE compreso e la legenda; al grado «parole» due righe, «A destra, sopra, lungo, in
+    discesa.» e sotto la precisione globale col punto di vista; al grado «niente», o se nessun bersaglio
+    vivo c'era, vuoto.
     La misura che manca al grado «numeri» ha la sua iniziale e la parola manca, che la legenda spiega; a
     parole si dice: il tiro che cade prima di arrivare alla distanza del bersaglio «cade prima della sua
     distanza», e quello che, scendendo, resta sempre sotto il centro del bersaglio «profondità non
@@ -583,10 +596,10 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
     e se è None vale fino al livello AIUTO_MANCATO_FINO_AL_LIVELLO (D6); serve anche all'annuncio,
     che allora aggiunge lo scarto principale. palestra è il grado del sommario, uno di
     GRADI_DELLA_PALESTRA, e se è None lo dà il livello del tiro con grado_della_palestra; il sommario,
-    quando c'è, è la prima riga del testo, a blocchi (D24). La precisione globale di D26 sta nel
-    sommario, e dove il sommario tace nella riga dell'esito. L'annuncio per la voce e il braille dice
-    prima l'esito, poi il primo blocco del sommario, senza la legenda, per scelta di Gabriele, con la
-    precisione globale; col sommario coi numeri l'esito non ripete lo scarto principale, che il
+    quando c'è, apre il testo: la prima riga, a blocchi, coi numeri (D24), le prime due a parole. La
+    precisione globale di D26 sta nel sommario, e dove il sommario tace nella riga dell'esito. L'annuncio
+    per la voce e il braille dice prima l'esito, poi i valori o le parole del sommario, senza la legenda,
+    per scelta di Gabriele, con la precisione globale; col sommario coi numeri l'esito non ripete lo scarto principale, che il
     sommario dice già. Senza sommario l'annuncio è l'esito e la precisione globale. Nei dati c'è anche
     precisione_globale, None senza un bersaglio vivo vicino."""
     if aiuto is None:
@@ -625,7 +638,7 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
             # Traduttori: l'annuncio breve di un tiro a vuoto; riserva è un numero.
             annuncio = _("A vuoto, riserva {riserva}.").format(riserva=testi.intero(riserva))
     if sommario is not None:
-        # Traduttori: l'annuncio di un tiro col sommario (D21, D24): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi il primo blocco del sommario, come «L: +1,9 V: +15,8 P: +24,7 I: -18,5 G: 61,2%».
+        # Traduttori: l'annuncio di un tiro col sommario (D21, D24): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi il primo blocco del sommario, come «L:+1,9 V:+15,8 P:+24,7 I:-18,5 G:61,2%».
         annuncio = _("{annuncio} {sommario}").format(annuncio=annuncio, sommario=sommario.annuncio)
     elif globale is not None:
         # Traduttori: l'annuncio di un tiro senza sommario (D26): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi la precisione globale, come «Precisione globale 93,2%.».

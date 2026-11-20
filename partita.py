@@ -44,7 +44,7 @@ quella che finisce senza ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte 
 l'ultima finisce senza il proiettile è perduto, come un tiro a vuoto, col suo suono e il suo resoconto.
 Esc, con annulla_mira, annulla la mira e conserva il proiettile. Da D24 il resoconto arriva un secondo
 dopo la fine dell'effetto, e da D26 ogni tiro ha la sua precisione globale, che la partita somma per la
-media delle statistiche.
+media delle statistiche, dove il proiettile perduto conta come 0%.
 """
 
 import functools
@@ -900,11 +900,15 @@ class Partita:
         """Lo spazio nella mira vale secondo il campione udibile; nella pausa non conta e non suona,
         così assorbe i doppi colpi e le ripetizioni del tasto che arrivano con NVDA. Lo spazio che arriva
         dopo la scadenza della barra, prima che il battito se ne accorga, la fa scadere come il battito
-        (D25): ricomincia, e lo spazio cade nella sua pausa, o il proiettile è perduto."""
-        udibile = self.motore.campione_udibile()
-        if mira.scaduta(udibile, self.inizio_barra, self._scivolata()):
+        (D25): ricomincia, e lo spazio cade nella sua pausa, o il proiettile è perduto. Lo spazio vale
+        nell'istante in cui il dito è sceso, tolta la compensazione del tasto, e lo stesso istante decide
+        se la barra è scaduta e quale valore si prende: così lo spazio che valore_scelto prende come
+        massimo non fa ripartire la barra."""
+        barra = self._scivolata()
+        premuto = mira.campione_del_tasto(self.motore.campione_udibile(), barra)
+        if mira.scaduta(premuto, self.inizio_barra, barra):
             return self._scade()
-        valore, esito = mira.valore_scelto(udibile, self.inizio_barra, self._scivolata())
+        valore, esito = mira.valore_scelto(premuto, self.inizio_barra, barra, compensazione=0.0)
         if esito == "pausa":
             return []
         return self._prendi(valore, esito)
@@ -967,7 +971,9 @@ class Partita:
         serie si chiude. Poi come dopo ogni tiro a vuoto: il resoconto, che arriva alla fine del suono più
         RITARDO_DEL_RESOCONTO, l'ultimo colpo, la fine a riserva vuota, l'attesa nella palestra o, fuori,
         l'ascolto col tempo che riprende e il bonus che può nascere. Non c'è volo: ultimo_volo torna None,
-        e il tiro non ha né misure né precisione globale."""
+        e il tiro non ha misure, e il resoconto non ha la precisione globale; nelle medie della precisione
+        globale, quella della partita e quella dei tiri delle statistiche, entra però come 0%, per scelta di
+        Gabriele del 20 novembre 2026, e non può fare il primato."""
         parametro, passaggi = PARAMETRI[self.barra], self.passaggio or PASSAGGI_DELLA_BARRA
         self.barra = self.sottofase = self.inizio_barra = self.passaggio = None
         k = self.motore.prossimo_campione()
@@ -978,6 +984,8 @@ class Partita:
         self._conta("proiettili_perduti")
         self.ultimo_volo = None
         self.tiri += 1
+        # Il proiettile perduto conta nella media della precisione globale della partita come 0% (D26).
+        self._tiri_globali += 1
         self.riserva = max(0, self.riserva - 1)
         self.serie = 0
         self._serie_detta = False
@@ -989,7 +997,7 @@ class Partita:
         messaggi = [resoconti.proiettile_perduto(self.tiri, livello_del_tiro, parametro, passaggi, self.riserva, totale=self.punti)]
         if self.statistiche is not None:
             esito = {"colpito": False, "bonus": False, "forma": None, "portante": None, "mobile": False, "precisione": None, "punti": 0,
-                     "distanza_dal_vicino": None, "serie": 0, "precisione_globale": None}
+                     "distanza_dal_vicino": None, "serie": 0, "precisione_globale": 0.0, "perduto": True}
             self.statistiche.tiro(list(self.valori), esito)
         messaggi.extend(self._controlla_il_bonus())
         self._seguito_del_tiro(messaggi, [], None, palestra, 0, fine_dell_effetto)

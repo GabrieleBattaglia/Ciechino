@@ -1,5 +1,7 @@
 """
-Le prove di statistiche.py: i conti, i primati, le ultime partite, il file con le sue copie e la pagina.
+Le prove di statistiche.py: i conti, i primati, le ultime partite, il file con le sue copie e la pagina; dalla
+0.11.8 il massimo preso con lo spazio con la chiave sua, il proiettile perduto nella media come 0% e il primato
+della media della partita soltanto con almeno COLPI_INIZIALI tiri.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0. Il conftest dirotta la cartella del programma in una cartella
 temporanea; l'orologio delle statistiche è finto, così le date delle righe sono note.
@@ -106,7 +108,8 @@ def test_mira_istogramma_e_media():
     s.mira("direzione", None, "pausa")
     s.mira("potenza", 1.7, "scelto")
     m = s.dati["mira"]["direzione"]
-    assert (m["minimo"], m["scelto"], m["massimo"]) == (1, 2, 1)
+    # Dalla 0.11.8 il massimo preso con lo spazio ha la chiave sua; massimo resta ai conti di prima della 0.10.0.
+    assert (m["minimo"], m["scelto"], m["massimo_con_lo_spazio"], m["massimo"]) == (1, 2, 1, 0)
     assert m["classi"] == [1, 0, 0, 0, 0, 2, 0, 0, 0, 1]
     assert abs(m["somma"] - 2.13) < 1e-9
     assert s.dati["mira"]["potenza"]["classi"][-1] == 1
@@ -397,8 +400,8 @@ def test_la_mira_di_d25_con_le_sue_etichette():
 
 def test_la_precisione_globale(cartella_di_prova):
     """D26: la precisione globale di ogni tiro dà la media dei tiri e il primato della migliore; quella media di ogni partita va fra
-    le ultime partite, dà la media per partita e il suo primato. Un tiro o una partita senza, come il proiettile perduto o le
-    partite di prima di D26, non contano nelle medie, e i dati di prima si leggono."""
+    le ultime partite, dà la media per partita e il suo primato, dalla 0.11.8 soltanto con almeno COLPI_INIZIALI tiri. Un tiro o
+    una partita senza, come le partite di prima di D26, non contano nelle medie, e i dati di prima si leggono."""
     orologio = Orologio()
     s = statistiche.Statistiche(ora=orologio)
     assert s.tiro((0.5, 0.5, 0.5), esito(precisione_globale=0.95)) == []
@@ -408,20 +411,27 @@ def test_la_precisione_globale(cartella_di_prova):
     somme = s.dati["somme"]
     assert somme["tiri_col_globale"] == 3 and abs(somme["precisione_globale"] - 2.725) < 1e-9
     assert s.dati["primati"]["precisione_globale"]["valore"] == 0.975
-    assert s.partita_finita({"punteggio": 300, "livello": 1, "tiri": 4, "centri": 2, "durata_s": 60.0, "motivo": "abbandonata",
+    assert s.partita_finita({"punteggio": 300, "livello": 1, "tiri": 14, "centri": 2, "durata_s": 60.0, "motivo": "abbandonata",
                              "precisione_globale": 0.90833333}) == []
-    assert s.partita_finita({"punteggio": 100, "livello": 1, "tiri": 1, "centri": 1, "durata_s": 10.0, "motivo": "riserva_vuota",
+    assert s.partita_finita({"punteggio": 100, "livello": 1, "tiri": costanti.COLPI_INIZIALI, "centri": 1, "durata_s": 10.0, "motivo": "riserva_vuota",
                              "precisione_globale": 0.95}) == ["precisione_globale_media"]
+    # Dalla 0.11.8 una partita più corta di COLPI_INIZIALI tiri entra nelle medie e nelle ultime partite, ma non prende il primato.
+    assert s.partita_finita({"punteggio": 50, "livello": 1, "tiri": costanti.COLPI_INIZIALI - 1, "centri": 0, "durata_s": 30.0, "motivo": "abbandonata",
+                             "precisione_globale": 0.99}) == []
     s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": None})
     s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": 1.7})
-    assert [p["precisione_globale"] for p in s.dati["ultime"]] == [0.9083, 0.95, None, None]
-    assert somme["partite_col_globale"] == 2 and abs(somme["globale_delle_partite"] - 1.8583) < 1e-9
+    assert [p["precisione_globale"] for p in s.dati["ultime"]] == [0.9083, 0.95, 0.99, None, None]
+    assert somme["partite_col_globale"] == 3 and abs(somme["globale_delle_partite"] - 2.8483) < 1e-9
+    assert s.dati["primati"]["precisione_globale_media"]["valore"] == 0.95
     righe = s.righe()
     assert "Precisione globale media dei tiri: 90,8%." in righe
-    assert "Precisione globale media per partita: 92,9%." in righe
+    assert "Precisione globale media per partita: 94,9%." in righe
     assert "La precisione globale migliore in un tiro: 97,5%, giovedì 19 novembre 2026." in righe
     assert "La precisione globale media migliore in una partita: 95,0%, giovedì 19 novembre 2026." in righe
-    assert "Giovedì 19 novembre 2026 alle 18:03: 100 punti, livello 1, 1 centro su 1 tiro, precisione globale media 95,0%, 10 secondi, finita a riserva vuota." in righe
+    assert ("Giovedì 19 novembre 2026 alle 18:03: 100 punti, livello 1, 1 centro su 10 tiri, precisione globale media 95,0%, 10 secondi, finita a riserva "
+            "vuota.") in righe
+    assert ("Giovedì 19 novembre 2026 alle 18:03: 50 punti, livello 1, 0 centri su 9 tiri, precisione globale media 99,0%, 30 secondi, "
+            "abbandonata.") in righe
     assert "Giovedì 19 novembre 2026 alle 18:03: 0 punti, livello 1, 0 centri su 1 tiro, 5 secondi, finita a riserva vuota." in righe
     # I file di prima di D26, senza le somme nuove e senza la precisione delle ultime partite, si leggono da zero.
     grezzi = json.loads(json.dumps(s.dati))
@@ -432,6 +442,46 @@ def test_la_precisione_globale(cartella_di_prova):
     letto = statistiche.Statistiche(dati=grezzi, ora=orologio)
     assert letto.dati["somme"]["tiri_col_globale"] == 0 and all(p["precisione_globale"] is None for p in letto.dati["ultime"])
     assert letto.righe()
+
+
+def test_il_proiettile_perduto_nella_media_come_zero():
+    """Dalla 0.11.8, per scelta di Gabriele del 20 novembre 2026, il proiettile perduto di D25 entra nella media della precisione
+    globale dei tiri come 0%, ma non fa il primato: nemmeno quando è il primo tiro della storia, che lo farebbe nascere a zero."""
+    s = nuove()
+    perduto = esito(colpito=False, forma=None, distanza_dal_vicino=None, serie=0, precisione_globale=0.0, perduto=True)
+    assert s.tiro([], perduto) == []
+    somme = s.dati["somme"]
+    assert (somme["tiri_col_globale"], somme["precisione_globale"]) == (1, 0.0) and "precisione_globale" not in s.dati["primati"]
+    assert s.dati["conti"]["tiri_a_vuoto"] == 1
+    # Il primo tiro vero dà il primo valore del primato, che non si annuncia; il perduto che segue non lo tocca.
+    assert s.tiro((0.5, 0.5, 0.5), esito(precisione_globale=0.9)) == []
+    assert s.tiro([], perduto) == []
+    assert s.dati["primati"]["precisione_globale"]["valore"] == 0.9 and somme["tiri_col_globale"] == 3
+    assert "Precisione globale media dei tiri: 30,0%." in s.righe()
+
+
+def test_il_massimo_con_lo_spazio_e_quelli_di_prima_della_0_10_0():
+    """Dalla 0.11.8 il massimo preso con lo spazio, appena finita la scivolata, ha la chiave sua, massimo_con_lo_spazio, con
+    l'etichetta che lo dice; la chiave massimo tiene i conti di prima della 0.10.0, quando la scivolata arrivata in fondo senza
+    lo spazio valeva il massimo (D3), e l'etichetta dice proprio questo. Un file vecchio si legge senza perdere niente."""
+    vecchio = statistiche.nuovi_dati("2026-11-19T18:03:00")
+    del vecchio["mira"]["alzo"]["massimo_con_lo_spazio"]
+    vecchio["mira"]["alzo"].update({"minimo": 1, "scelto": 4, "massimo": 3})
+    s = statistiche.Statistiche(dati=json.loads(json.dumps(vecchio)), ora=Orologio())
+    alzo = s.dati["mira"]["alzo"]
+    assert (alzo["minimo"], alzo["scelto"], alzo["massimo"], alzo["massimo_con_lo_spazio"]) == (1, 4, 3, 0)
+    s.mira("alzo", 1.0, "massimo")
+    s.mira("alzo", 1.0, "massimo")
+    assert (alzo["massimo"], alzo["massimo_con_lo_spazio"]) == (3, 2)
+    righe = s.righe()
+    assert "Alzo, valori presi: 10." in righe
+    presi = [r for r in righe if r.startswith("Alzo, ") and "%." in r and "valore medio" not in r and "fasce" not in r]
+    assert presi == ["Alzo, scelti con lo spazio nella scivolata: 4, 40%.", "Alzo, fermati al minimo nei bip: 1, 10%.",
+                     "Alzo, presi al massimo con lo spazio appena finita la scivolata: 2, 20%.",
+                     "Alzo, scivolate arrivate in fondo senza lo spazio, prese al massimo prima della 0.10.0: 3, 30%."]
+    # Il file riscritto e riletto tiene le due chiavi.
+    riletto = statistiche.Statistiche(dati=json.loads(json.dumps(s.dati)), ora=Orologio())
+    assert (riletto.dati["mira"]["alzo"]["massimo"], riletto.dati["mira"]["alzo"]["massimo_con_lo_spazio"]) == (3, 2)
 
 
 def test_ogni_chiave_dei_conti_ha_la_sua_riga():

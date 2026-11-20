@@ -25,11 +25,14 @@ I conti arrivano da sette strade:
 - suono(evento), per ogni evento sonoro, contato per nome;
 - bersaglio_apparso(forma, mobile, bonus, portante=None), per ogni bersaglio che nasce, col timbro
   della sua voce, la portante di D18, che tiro conta anche fra i colpiti;
-- mira(parametro, valore, esito_della_scivolata), per ogni valore preso con le scivolate;
+- mira(parametro, valore, esito_della_scivolata), per ogni valore preso con le scivolate; dalla 0.11.8 il
+  massimo preso con lo spazio ha la chiave sua, massimo_con_lo_spazio, e la chiave massimo tiene soltanto
+  i conti di prima della 0.10.0, quando la scivolata arrivata in fondo senza lo spazio valeva il massimo;
 - tiro(valori, esito), dopo ogni tiro, con la precisione globale di D26, che dà la sua media e il
-  primato della migliore;
+  primato della migliore; il proiettile perduto di D25 entra nella media come 0%, ma non nel primato;
 - partita_finita(riepilogo), alla fine di ogni partita, finita a riserva vuota o abbandonata, con la
-  precisione globale media dei suoi tiri, che va fra le ultime partite e ha il suo primato.
+  precisione globale media dei suoi tiri, che va fra le ultime partite e nella media per partita, e ha
+  il suo primato soltanto con almeno COLPI_INIZIALI tiri.
 tiro e partita_finita restituiscono le chiavi dei primati appena battuti, perché la partita possa
 dirlo; il primo valore di un primato non è un primato battuto.
 
@@ -62,6 +65,12 @@ CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abba
 # scala, presa al massimo con lo spazio appena dopo la fine; da D25 la scivolata che nessuno ferma non
 # dà più il massimo, ma ricomincia da capo.
 ESITI_DELLA_SCIVOLATA = ("minimo", "scelto", "massimo")
+# La chiave della mira in cui si conta ogni esito. Il massimo preso con lo spazio ha dalla 0.11.8 la chiave
+# sua: sotto massimo restano i conti di prima della 0.10.0, quando il massimo era quasi sempre la scivolata
+# arrivata in fondo senza lo spazio (D3), e i file vecchi si leggono senza perdere niente.
+CHIAVI_DEGLI_ESITI = {"minimo": "minimo", "scelto": "scelto", "massimo": "massimo_con_lo_spazio"}
+# Le chiavi dei valori presi nella mira, nell'ordine della pagina, coi massimi di prima della 0.10.0 in fondo.
+CHIAVI_DEI_PRESI = ("scelto", "minimo", "massimo_con_lo_spazio", "massimo")
 # Come può finire una partita, dal riepilogo.
 MOTIVI = ("riserva_vuota", "abbandonata")
 # I primati: quelli in cui vince il valore più alto e quelli in cui vince il più basso, nell'ordine
@@ -114,7 +123,7 @@ def _data_valida(testo):
 # La struttura.
 
 def _nuova_mira():
-    return {"minimo": 0, "scelto": 0, "massimo": 0, "classi": [0] * CLASSI, "somma": 0.0, "nei_centri": 0, "somma_nei_centri": 0.0}
+    return {"minimo": 0, "scelto": 0, "massimo": 0, "massimo_con_lo_spazio": 0, "classi": [0] * CLASSI, "somma": 0.0, "nei_centri": 0, "somma_nei_centri": 0.0}
 
 
 def _nuova_coppia():
@@ -156,7 +165,7 @@ def _mira_pulita(valore):
     mira = _nuova_mira()
     if not isinstance(valore, dict):
         return mira
-    for chiave in ("minimo", "scelto", "massimo", "nei_centri"):
+    for chiave in (*CHIAVI_DEI_PRESI, "nei_centri"):
         mira[chiave] = _contatore(valore.get(chiave))
     for chiave in ("somma", "somma_nei_centri"):
         mira[chiave] = _quantita(valore.get(chiave))
@@ -322,11 +331,13 @@ class Statistiche:
 
     def mira(self, parametro, valore, esito_della_scivolata):
         """Un valore preso con una scivolata: esito «minimo», «scelto» o «massimo», come lo dà
-        mira.valore_scelto. Un esito diverso, come la pausa, non è un valore e non si conta."""
+        mira.valore_scelto, contato nella chiave di CHIAVI_DEGLI_ESITI, il massimo in massimo_con_lo_spazio.
+        Un esito diverso, come la pausa, non è un valore e non si conta."""
         if esito_della_scivolata not in ESITI_DELLA_SCIVOLATA:
             return
         mira = self._mira(parametro)
-        mira[esito_della_scivolata] += 1
+        chiave = CHIAVI_DEGLI_ESITI[esito_della_scivolata]
+        mira[chiave] = mira.get(chiave, 0) + 1
         if numero_valido(valore):
             v = min(1.0, max(0.0, float(valore)))
             mira["classi"][min(CLASSI - 1, int(v * CLASSI))] += 1
@@ -353,7 +364,9 @@ class Statistiche:
         "distanza_dal_vicino", "serie", "precisione_globale"}, con precisione, distanza e precisione
         globale None quando non ci sono; la portante, il timbro del bersaglio colpito, e la precisione
         globale di D26 possono mancare. Il proiettile perduto di D25 arriva come un tiro a vuoto senza
-        distanza né precisione globale. Restituisce i primati battuti."""
+        distanza, con la precisione globale a zero e "perduto" vero: entra nella media della precisione
+        globale come 0%, per scelta di Gabriele del 20 novembre 2026, ma non nel primato, che col primo
+        tiro della storia perduto nascerebbe a zero. Restituisce i primati battuti."""
         e = esito if isinstance(esito, dict) else {}
         battuti = []
         self.conta("tiri")
@@ -395,7 +408,7 @@ class Statistiche:
             somme = self.dati["somme"]
             somme["precisione_globale"] = round(somme["precisione_globale"] + g, 6)
             somme["tiri_col_globale"] += 1
-            if self._primato("precisione_globale", g):
+            if not e.get("perduto") and self._primato("precisione_globale", g):
                 battuti.append("precisione_globale")
         serie = e.get("serie")
         if numero_valido(serie) and serie > 0 and self._primato("serie", round(serie)):
@@ -405,7 +418,10 @@ class Statistiche:
     def partita_finita(self, riepilogo):
         """Una partita conclusa: riepilogo è {"punteggio", "livello", "tiri", "centri",
         "durata_s", "motivo", "precisione_globale"}, con motivo «riserva_vuota» o «abbandonata», e la
-        precisione globale media dei suoi tiri (D26), da 0 a 1, che può mancare o essere None.
+        precisione globale media dei suoi tiri (D26), da 0 a 1, che può mancare o essere None. La media
+        va nelle ultime partite e nella media per partita sempre, ma prende il primato
+        precisione_globale_media soltanto in una partita di almeno COLPI_INIZIALI tiri, per scelta di
+        Gabriele del 20 novembre 2026: una partita di un tiro fortunato non vale una partita intera.
         Restituisce i primati battuti."""
         r = riepilogo if isinstance(riepilogo, dict) else {}
         motivo = r.get("motivo") if r.get("motivo") in MOTIVI else MOTIVI[0]
@@ -425,7 +441,7 @@ class Statistiche:
         if media is not None:
             somme["globale_delle_partite"] = round(somme["globale_delle_partite"] + media, 6)
             somme["partite_col_globale"] += 1
-            if self._primato("precisione_globale_media", media):
+            if partita["tiri"] >= costanti.COLPI_INIZIALI and self._primato("precisione_globale_media", media):
                 battuti.append("precisione_globale_media")
         self.dati["ultime"] = [*self.dati["ultime"], partita][-costanti.ULTIME_PARTITE:]
         return battuti
@@ -614,19 +630,24 @@ class Pagina:
 
     def _righe_del_parametro(self, parametro, m):
         nome = _maiuscola(NOMI_DEI_PARAMETRI.get(parametro, parametro.replace("_", " ")))
-        presi = m["minimo"] + m["scelto"] + m["massimo"]
+        presi = sum(m.get(chiave, 0) for chiave in CHIAVI_DEI_PRESI)
         if not presi:
             return []
         righe = [
             # Traduttori: da qui, le righe della mira; parametro è direzione, alzo o potenza, con l'iniziale maiuscola.
             _("{parametro}, valori presi: {n}.").format(parametro=nome, n=testi.intero(presi)),
         ]
-        for chiave, frase in (("scelto", _("{parametro}, scelti con lo spazio nella scivolata: {n}, {percentuale}.")),
-                              ("minimo", _("{parametro}, fermati al minimo nei bip: {n}, {percentuale}.")),
-                              # Traduttori: il massimo si prende con lo spazio premuto appena finita la scivolata, prima che la barra ricominci (D25).
-                              ("massimo", _("{parametro}, presi al massimo con lo spazio appena finita la scivolata: {n}, {percentuale}."))):
-            if m[chiave]:
-                righe.append(frase.format(parametro=nome, n=testi.intero(m[chiave]), percentuale=testi.percento(m[chiave] / presi)))
+        frasi = {
+            "scelto": _("{parametro}, scelti con lo spazio nella scivolata: {n}, {percentuale}."),
+            "minimo": _("{parametro}, fermati al minimo nei bip: {n}, {percentuale}."),
+            # Traduttori: il massimo si prende con lo spazio premuto appena finita la scivolata, prima che la barra ricominci (D25).
+            "massimo_con_lo_spazio": _("{parametro}, presi al massimo con lo spazio appena finita la scivolata: {n}, {percentuale}."),
+            # Traduttori: i conti delle versioni di Ciechino prima della 0.10.0, quando la scivolata arrivata in fondo senza che nessuno la fermasse valeva il massimo.
+            "massimo": _("{parametro}, scivolate arrivate in fondo senza lo spazio, prese al massimo prima della 0.10.0: {n}, {percentuale}."),
+        }
+        for chiave in CHIAVI_DEI_PRESI:
+            if m.get(chiave):
+                righe.append(frasi[chiave].format(parametro=nome, n=testi.intero(m[chiave]), percentuale=testi.percento(m[chiave] / presi)))
         valori = sum(m["classi"])
         if valori:
             righe.append(_("{parametro}, valore medio: {percentuale} della scala.").format(parametro=nome, percentuale=testi.percento(m["somma"] / valori)))

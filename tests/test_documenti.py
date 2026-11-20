@@ -20,7 +20,9 @@ numeri, le parole, le attese e la pausa di Ctrl+P, con le soglie del sommario e 
 questi si confrontano con costanti.py, e l'avviso di Ctrl+P fuori dalla palestra con quello di resoconti.py.
 Dal secondo collaudo (D24, D25 e D26) il manuale dice il secondo di silenzio prima del resoconto, i blocchi di
 40 caratteri del sommario con la sua legenda, i passaggi delle barre, Esc nella mira col suo messaggio e la
-precisione globale con la diagonale del cubo; e ogni versione ha il suo blocco nel CHANGELOG.
+precisione globale con la diagonale del cubo; e ogni versione ha il suo blocco nel CHANGELOG. Dalla 0.11.8 anche il
+margine dopo la scivolata, la seconda riga del sommario a parole, il primato della media dai dieci tiri e il proiettile
+perduto nelle medie.
 """
 
 import re
@@ -41,6 +43,7 @@ from costanti import (
     FORME_LFO,
     GRAZIA_DELL_ATTESA,
     LIVELLO_DEI_BONUS,
+    MARGINE_DOPO_LA_SCIVOLATA,
     PALESTRA_FINO_AL_LIVELLO,
     PASSAGGI_DELLA_BARRA,
     PROIETTILE_FORMA,
@@ -76,6 +79,8 @@ SOGLIE_A_PAROLE = {0.5: "Uno scarto sotto il mezzo metro"}
 GRAZIE_A_PAROLE = {0.5: "o nel mezzo secondo che segue"}
 # Come il manuale dice il ritardo del resoconto dopo l'effetto (D24).
 RITARDI_A_PAROLE = {1.0: "dopo un secondo di silenzio"}
+# Come il manuale e il README dicono il margine in cui lo spazio, dopo la fine della scivolata, prende ancora il massimo (0.11.8).
+MARGINI_A_PAROLE = {0.3: "tre decimi di secondo"}
 # Gli elementi HTML che non si chiudono.
 VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
@@ -305,7 +310,9 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
                 distanza_al_centro=None, vicino=bersaglio, distanza_dal_vicino=13.0, scarto=None, altezza_massima=25.0, gittata=70.0, laterale_finale=0.0,
                 misure=misure)
     sommario = resoconti.sommario_del_tiro(volo, "numeri")
-    legenda = sommario.secondo.split(". ", 1)[1].rstrip(".")
+    # Dalla 0.11.8 la G sta coi valori nel primo blocco, e il secondo è la legenda sola.
+    assert sommario.primo.endswith(" G:82,7%") and len(sommario.primo) < BLOCCO_DEL_BRAILLE
+    legenda = sommario.secondo.rstrip(".")
     frasi = [
         RITARDI_A_PAROLE[RITARDO_DEL_RESOCONTO],
         f"a blocchi di {BLOCCO_DEL_BRAILLE} caratteri",
@@ -326,6 +333,40 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
     for versione in ("0.9.1", "0.9.2", "0.10.0", "0.11.0"):
         assert _blocco_della_versione(changelog, versione).strip()
     assert "Esc" in _blocco_della_versione(changelog, "0.10.0") and "precisione globale" in _blocco_della_versione(changelog, "0.11.0")
+
+
+def test_le_correzioni_della_0_11_8_nei_documenti():
+    """Le decisioni di Gabriele del 20 novembre 2026: il margine di tre decimi dopo la scivolata, il sommario a parole con la seconda
+    riga sotto, detta con le parole vere di resoconti.py, il primato della media soltanto dalle partite di COLPI_INIZIALI tiri, il
+    proiettile perduto allo 0% nelle medie; il README e il CHANGELOG dicono che il proiettile perduto non ha la precisione globale, e
+    la 0.11.8 ha il suo blocco."""
+    from bersagli import Bersaglio
+    from fisica import Traiettoria
+    from volo import Misure, Volo
+
+    manuale, readme, changelog = _leggi("manuale.html"), _leggi("README.md"), _leggi("CHANGELOG.md")
+    assert MARGINE_DOPO_LA_SCIVOLATA in MARGINI_A_PAROLE, f"il margine di {MARGINE_DOPO_LA_SCIVOLATA} secondi va detto nel manuale, e in MARGINI_A_PAROLE"
+    margine = MARGINI_A_PAROLE[MARGINE_DOPO_LA_SCIVOLATA]
+    bersaglio = Bersaglio(numero=1, forma="seno", raggio=2.0, partenza=(0.0, 20.0, 50.0))
+    misure = Misure(arrivo=2.0, laterale=1.9, verticale=15.8, inclinazione=-18.5, ricaduta=2.5, profondita=24.7)
+    volo = Volo(traiettoria=Traiettoria(0.0, 40.0, 30.0), partenza=0.0, durata=3.0, colpito=None, punto_finale=(0.0, 0.0, 70.0), precisione=None,
+                distanza_al_centro=None, vicino=bersaglio, distanza_dal_vicino=13.0, scarto=None, altezza_massima=25.0, gittata=70.0, laterale_finale=0.0,
+                misure=misure)
+    parole = resoconti.sommario_del_tiro(volo, "parole")
+    assert parole.a_capo and parole.riga == f"{parole.primo}\n{parole.secondo}"
+    frasi = [
+        f"nei {margine} che la seguono",
+        f"Sulla riga sotto, sempre, come ha deciso Gabriele, vengono la precisione globale e il punto di vista: {parole.secondo}",
+        f"che vale soltanto per le partite di almeno {A_PAROLE[COLPI_INIZIALI]} tiri",
+        "entra nella precisione globale media come un tiro allo 0%",
+    ]
+    mancanti = [frase for frase in frasi if frase not in manuale]
+    assert not mancanti, f"frasi della 0.11.8 che il manuale non dice: {mancanti}"
+    assert f"nei {margine} dopo la fine della scivolata" in readme
+    for nome, testo in (("README.md", readme), ("CHANGELOG.md", _blocco_della_versione(changelog, "0.11.0"))):
+        assert "tranne quello del proiettile perduto" in testo, f"{nome} non dice che il proiettile perduto non ha la precisione globale"
+    blocco = _blocco_della_versione(changelog, "0.11.8")
+    assert "L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%" in blocco and margine in blocco and f"almeno {A_PAROLE[COLPI_INIZIALI]} tiri" in blocco
 
 
 def test_niente_separatori_grafici_nei_documenti():

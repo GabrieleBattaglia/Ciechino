@@ -119,7 +119,9 @@ ATTENUAZIONE_IN_MIRA_DB = -9.0
 RAMPA_DEL_GUADAGNO = 0.05
 # Dopo la fine udibile di una scivolata non fermata, tanti secondi in cui lo spazio prende ancora il
 # massimo; passati questi, da D25 la barra ricomincia da capo, col suo secondo di silenzio e i suoi bip.
-MARGINE_DOPO_LA_SCIVOLATA = 0.05
+# Erano 0,05 fino alla 0.11.0: dalla 0.11.8 Gabriele, il 20 novembre 2026, l'ha voluto di tre decimi, e
+# nessun suono nuovo per la barra che riparte, perché bastano i bip e la barra di stato.
+MARGINE_DOPO_LA_SCIVOLATA = 0.3
 # Quante volte al più suona ogni barra della mira, il primo passaggio compreso, se nessuno la ferma con lo
 # spazio (D25, scelta di Gabriele del 20 novembre 2026: «5 in tutto per ciascuna delle 3 barre»): se anche
 # l'ultimo passaggio finisce senza spazio, il colpo non parte e il proiettile è perduto, come un tiro a
