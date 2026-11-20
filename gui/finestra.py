@@ -34,6 +34,9 @@ nasce con la scheda delle impostazioni, e se quella non c'è o non si apre la vi
 dicono, e Ciechino suona su quella automatica, senza cancellare la scelta, perché le cuffie possono
 tornare. Ctrl+Maiusc+X, Scheda audio del menu Impostazioni, fa rileggere le schede al motore, così
 compaiono anche le cuffie Bluetooth accese dopo l'avvio, e il suono perso torna; poi apre l'elenco.
+Gli Ascolti, il tutorial audio (D23), si aprono da Ascolti del menu Impostazioni e del menu Aiuto, e da soli
+all'avvio, una volta, finché le statistiche non contano una partita cominciata: dopo i suoni dell'avvio, a
+finestra attiva e senza altri dialoghi; la proposta dell'aggiornamento li aspetta.
 """
 
 import contextlib
@@ -41,6 +44,7 @@ import datetime
 import functools
 import os
 import sys
+import threading
 import time
 import traceback
 from collections.abc import Callable
@@ -180,6 +184,12 @@ def menu_di_windows():
         return None
 
 
+def frase_della_prima_apertura():
+    """La riga della vista quando gli Ascolti si aprono da soli all'avvio (D23): che è la prima volta, che Esc li chiude e dove si ritrovano."""
+    return _("Sembra la prima volta che apri Ciechino: ti porto negli Ascolti, la sala briefing dei suoni, che Esc chiude e che ritrovi quando vuoi nel "
+             "menu Impostazioni e nel menu Aiuto.")
+
+
 def _senza_tasto(testo):
     """Il testo di una voce di menu per la guida: senza la e commerciale e senza i puntini del dialogo che apre."""
     return testo.replace("&&", "\x00").replace("&", "").replace("\x00", "&").rstrip(".")
@@ -256,6 +266,12 @@ class FinestraPrincipale(wx.Frame):
         # La riga della barra che dice lo scaricamento dell'aggiornamento, quando c'è.
         self._riga_dell_aggiornamento = None
         self._sintesi = None
+        # Gli Ascolti all'avvio (D23): se aspettano di aprirsi da soli, il campione dove finiscono i suoni
+        # dell'avvio, e il segnale che dice al filo dell'aggiornamento quando la sua proposta può arrivare.
+        self._ascolti_d_avvio = False
+        self._fine_dei_suoni_d_avvio = None
+        self._avvio_libero = threading.Event()
+        self._avvio_libero.set()
         self.impostazioni = modulo_impostazioni.carica()
         self.avvisi_dei_dati = [modulo_impostazioni.ultimo_avviso] if modulo_impostazioni.ultimo_avviso else []
         # Statistiche.carica conta da sé l'avvio.
@@ -349,6 +365,8 @@ class FinestraPrincipale(wx.Frame):
                 Voce(_("&Volume..."), None, self.cambia_volume),
                 # Il tasto di MeTeOra per la stessa scelta (D20): il gancio dei tasti lo lascia ai menu, perché ha i modificatori.
                 Voce(_("Scheda &audio..."), "Ctrl+Shift+X", self.scegli_la_scheda),
+                # Gli Ascolti (D23), anche nel menu Aiuto: qui la lettera è la s, perché la a è già di Scheda audio.
+                Voce(_("A&scolti..."), None, self.ascolti),
                 Voce(_("&Proiettile..."), None, self.cambia_proiettile),
                 Voce(_("&Leggi i resoconti con la sintesi"), None, self.cambia_sintesi, True),
                 Voce(_("L&ingua..."), None, self.cambia_lingua),
@@ -358,6 +376,7 @@ class FinestraPrincipale(wx.Frame):
                 Voce(_("&Manuale"), "Shift+F1", self.manuale),
                 Voce(_("&Novità"), "F2", self.novita),
                 Voce(_("&Informazioni"), "F3", self.informazioni),
+                Voce(_("&Ascolti..."), None, self.ascolti),
                 None,
                 Voce(_("&Offrimi un caffè..."), None, self.caffe),
                 None,
@@ -516,6 +535,8 @@ class FinestraPrincipale(wx.Frame):
         PAUSA_DOPO_L_AVVIO dalla precedente, le notizie: la più importante fra il crash della volta prima
         e i dati che non si leggevano, se c'è, e la scheda audio scelta che non c'è o non si apre (D20),
         che dice anche la sintesi. Il motore mette ogni notizia al campione giusto, così non si sovrappongono.
+        Il campione dove l'ultimo di questi suoni finisce resta in _fine_dei_suoni_d_avvio: gli Ascolti
+        dell'avvio aspettano lui (D23).
         """
         voce = self.suoni.suona("avvio")
         notizie = []
@@ -531,8 +552,88 @@ class FinestraPrincipale(wx.Frame):
             if voce is not None:
                 inizio = voce.inizio + len(voce.buffer) + round(PAUSA_DOPO_L_AVVIO * self.motore.fs)
             voce = self.suoni.suona(notizia, inizio=inizio) or voce
+        if voce is not None:
+            self._fine_dei_suoni_d_avvio = voce.inizio + len(voce.buffer)
         if scheda_mancata:
             self._dici(self._riga_della_scheda())
+
+    # Gli Ascolti all'avvio (D23), chiesti da Gabriele il 20 novembre 2026: «quando Ciechino viene aperto e le
+    # partite fatte sono 0, quindi presumibilmente è la prima apertura, porta direttamente il giocatore alla
+    # nostra sala briefing dei suoni.»
+
+    def ascolti_alla_prima_apertura(self):
+        """
+        Ciechino.py la chiama all'avvio, dopo suoni_d_avvio e prima del controllo dell'aggiornamento. Se le
+        statistiche non contano nessuna partita cominciata, gli Ascolti si apriranno da soli, una volta per
+        avvio: il battito li apre appena i suoni dell'avvio sono finiti, la finestra è attiva e nessun
+        dialogo o menu è aperto. Intanto la proposta dell'aggiornamento aspetta, con
+        aspetta_i_dialoghi_d_avvio, che arriva soltanto quando gli Ascolti si sono chiusi; e una partita
+        cominciata prima li toglie. Restituisce vero se gli Ascolti aspettano di aprirsi.
+        """
+        if self.chiusa or self._partite_cominciate():
+            return False
+        self._ascolti_d_avvio = True
+        self._avvio_libero.clear()
+        return True
+
+    def aspetta_i_dialoghi_d_avvio(self, attesa=None):
+        """
+        Per il filo dell'aggiornamento, prima della proposta e degli avvisi: aspetta, al più attesa secondi,
+        o finché serve se è None, che gli Ascolti dell'avvio si siano chiusi, o che non debbano aprirsi più.
+        Vero se la strada è libera. Si chiama soltanto fuori dal filo della finestra, che altrimenti si fermerebbe.
+        """
+        return self._avvio_libero.wait(attesa)
+
+    def _partite_cominciate(self):
+        """Vero se le statistiche contano una partita cominciata, o se una partita è in corso adesso."""
+        conti = self.statistiche.dati.get("conti", {})
+        return bool(conti.get("partite_iniziate")) or bool(self.partita.in_corso())
+
+    def _libera_l_avvio(self):
+        """Gli Ascolti dell'avvio non aspettano più: la proposta dell'aggiornamento può arrivare."""
+        self._ascolti_d_avvio = False
+        self._avvio_libero.set()
+
+    def _pronti_gli_ascolti_d_avvio(self):
+        """Vero quando gli Ascolti dell'avvio si possono aprire: i suoni dell'avvio sono finiti, la finestra è attiva e niente è aperto."""
+        fine = self._fine_dei_suoni_d_avvio or 0
+        return self.IsActive() and not self._comandi_in_corso and not self._dialogo_aperto() and self.motore.campione_udibile() >= fine
+
+    def _forse_gli_ascolti_d_avvio(self):
+        """
+        A ogni battito, se gli Ascolti dell'avvio aspettano: una partita cominciata li toglie; quando sono
+        pronti si aprono, ma fuori dal battito, che deve continuare a girare anche col dialogo aperto.
+        """
+        if not self._ascolti_d_avvio:
+            return
+        if self.chiusa or self._partite_cominciate():
+            self._libera_l_avvio()
+            return
+        if self._pronti_gli_ascolti_d_avvio():
+            self._ascolti_d_avvio = False
+            wx.CallAfter(self._apri_gli_ascolti_d_avvio)
+
+    def _apri_gli_ascolti_d_avvio(self):
+        """
+        Gli Ascolti dell'avvio: se intanto è cambiato qualcosa, come un dialogo aperto, il battito riprova;
+        altrimenti la vista dice che è la prima volta, come si riaprono e che Esc li chiude, col cursore su
+        quella riga, che NVDA ritrova quando il dialogo si chiude, e si aprono, come dal menu. Chiusi, la
+        proposta dell'aggiornamento può arrivare.
+        """
+        if not self or self.IsBeingDeleted():
+            return
+        if self.chiusa or self._partite_cominciate():
+            self._libera_l_avvio()
+            return
+        if not self._pronti_gli_ascolti_d_avvio():
+            self._ascolti_d_avvio = True
+            return
+        try:
+            self.statistiche.conta("ascolti_d_avvio")
+            self._in_coda(frase_della_prima_apertura())
+            self._esegui(self.ascolti)
+        finally:
+            self._libera_l_avvio()
 
     # I comandi e i tasti.
 
@@ -626,6 +727,7 @@ class FinestraPrincipale(wx.Frame):
             except Exception:  # noqa: BLE001 - i messaggi sono già consumati e non si ripetono: il battito seguente va avanti
                 self._guasto("messaggi")
             self._notizie_del_motore()
+            self._forse_gli_ascolti_d_avvio()
         finally:
             self._nel_battito = False
         self.aggiorna_barra()
@@ -1374,6 +1476,32 @@ class FinestraPrincipale(wx.Frame):
             testo = _("Il proiettile adesso suona in {forma}: lo senti dalla prossima partita.").format(forma=dialoghi.nome_del_proiettile(forma))
         self._in_coda(testo, testo)
 
+    def ascolti(self):
+        """
+        Ascolti, nel menu Impostazioni e nel menu Aiuto (D23): il tutorial audio, un passo alla volta. Suona
+        ascolti, conta ascolti_aperti, e apre dialoghi.Ascolti con la Regia di ascolti.py, sul motore del gioco,
+        coi suoni della finestra e la forma del proiettile delle impostazioni; la regia conta passi_ascoltati,
+        e dici è quella della vista, che legge soltanto se l'impostazione lo vuole. La partita in corso si
+        ferma come con ogni dialogo (D14); alla chiusura ogni voce degli Ascolti tace. Chiusi con Invio
+        all'ultimo passo, si conta ascolti_finiti.
+        """
+        from ascolti import Regia
+
+        self.suoni.suona("ascolti")
+        self.statistiche.conta("ascolti_aperti")
+        regia = Regia(self.motore, self.suoni, self.impostazioni["proiettile"], conta=self.statistiche.conta)
+        dialogo = dialoghi.Ascolti(self, regia, self._dici, self.suoni.suona)
+        finiti = False
+        try:
+            self._modale(dialogo)
+            finiti = dialogo.finiti
+        finally:
+            dialogo.ferma()
+            regia.ferma()
+            dialogo.Destroy()
+        if finiti:
+            self.statistiche.conta("ascolti_finiti")
+
     def cambia_sintesi(self):
         """Leggi i resoconti con la sintesi: la voce a spunta accende e spegne l'annuncio dei messaggi della partita."""
         acceso = not self.impostazioni.get("sintesi")
@@ -1789,6 +1917,8 @@ class FinestraPrincipale(wx.Frame):
         if event.CanVeto():
             self._chiudi_i_conti()
         self.chiusa = True
+        # Il filo dell'aggiornamento che aspettava gli Ascolti dell'avvio non resta appeso (D23).
+        self._libera_l_avvio()
         if callable(self.al_congedo):
             with contextlib.suppress(Exception):
                 self.al_congedo()

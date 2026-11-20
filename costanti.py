@@ -256,6 +256,48 @@ GRAZIA_DELL_ATTESA = 0.5
 # secondi di silenzio, da tarare ascoltando.
 RITARDO_DEL_RESOCONTO = 0.0
 
+# Gli Ascolti, il tutorial audio chiesto da Gabriele il 20 novembre 2026 (D23): nel menu Impostazioni e nel menu
+# Aiuto, un passo alla volta, il test stereo, il bersaglio che si muove nel cubo, i punti a caso, la grandezza, le
+# forme, i timbri, la mira, il volo e gli effetti, con le regole dello spazio sonoro del gioco. Tutti da tarare
+# ascoltando. Ogni suono degli Ascolti entra ed esce con una rampa di tanti secondi, contro i click.
+ASCOLTI_RAMPA = 0.05
+# Il silenzio fra i suoni di uno stesso passo, fra due forme, due timbri, due punti o due effetti, e quanto suona
+# ognuno di quei suoni, una forma, un timbro o un punto a caso (D23).
+ASCOLTI_PAUSA = 0.6
+ASCOLTI_SUONO = 2.5
+# Il test stereo (D23): un suono fermo tutto a sinistra per ASCOLTI_STEREO_SOSTA secondi, poi la scivolata fino a
+# tutto a destra in ASCOLTI_STEREO_VIAGGIO, poi fermo lì; la forma d'onda, fra quelle di sintesi.FORME_PORTANTI,
+# la nota in hertz e il livello in decibel, quello delle scivolate della mira.
+ASCOLTI_STEREO_SOSTA = 1.0
+ASCOLTI_STEREO_VIAGGIO = 4.0
+ASCOLTI_STEREO_FORMA = "triangolo"
+ASCOLTI_STEREO_FREQUENZA = 440.0
+ASCOLTI_STEREO_DB = SCIVOLATA_DB
+# Il bersaglio degli Ascolti (D23): grande come quelli del primo livello, con la forma dell'LFO più regolare, che
+# oscilla a metà dell'intervallo del gioco.
+ASCOLTI_RAGGIO = RAGGIO_INIZIALE
+ASCOLTI_FORMA = "seno"
+ASCOLTI_FREQUENZA_LFO = (FREQUENZA_LFO[0] + FREQUENZA_LFO[1]) / 2
+# Le tratte degli Ascolti (D23), in orizzontale, in altezza e in profondità: il bersaglio va a tanti metri al
+# secondo, partendo e arrivando dolce; si ferma al centro del cubo per ASCOLTI_SOSTA secondi, all'inizio e alla fine,
+# e a ogni capo della tratta per ASCOLTI_SOSTA_AI_CAPI.
+ASCOLTI_VELOCITA = 8.0
+ASCOLTI_SOSTA = 1.5
+ASCOLTI_SOSTA_AI_CAPI = 1.0
+# Quanti punti a caso nel cubo (D23), dopo i quali il testo dice dove erano.
+ASCOLTI_PUNTI = 3
+# La grandezza (D23): le tappe del raggio, in metri, dal più piccolo del gioco al primo livello, poi un gigante grande
+# il doppio di ogni bersaglio vero, e la velocità con cui il raggio cresce, in metri al secondo. A ogni tappa il
+# bersaglio si ferma ASCOLTI_SOSTA secondi.
+ASCOLTI_GRANDEZZE = (RAGGIO_MINIMO, RAGGIO_INIZIALE, 2 * RAGGIO_INIZIALE)
+ASCOLTI_CRESCITA = 1.5
+# Le forme dell'oscillazione, tante per passo, perché un passo non diventi troppo lungo (D23).
+ASCOLTI_FORME_PER_PASSO = 6
+# Il bonus che attraversa il cubo negli Ascolti (D23) va alla velocità di questo livello, il primo dei bonus.
+ASCOLTI_LIVELLO_DEL_BONUS = LIVELLO_DEI_BONUS
+# Un passo degli Ascolti dura al massimo tanti secondi: se ne serve di più, si divide in due (D23).
+ASCOLTI_DURATA_MASSIMA = 20.0
+
 # I punti di un centro: PUNTI_BASE, per il rapporto fra RAGGIO_DI_RIFERIMENTO e il raggio alla
 # ESPONENTE_DEL_RAGGIO, per 1 più la velocità del bersaglio divisa per VELOCITA_DI_RIFERIMENTO, per 1
 # più PREMIO_PRECISIONE per la precisione (da 0 di striscio a 1 nel centro pieno: fino al doppio,

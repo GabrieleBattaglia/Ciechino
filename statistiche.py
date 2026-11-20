@@ -16,8 +16,9 @@ I conti arrivano da sette strade:
   (D22), e partite_col_seno, partite_col_triangolo e partite_con_la_sega_morbida,
   le partite cominciate con ogni forma del proiettile (D17); dalla finestra ingressi_in_classifica,
   lingua_cambiata, proiettile_cambiato, scheda_cambiata e scheda_non_aperta, le schede audio scelte
-  con Ctrl+Maiusc+X e quelle scelte che non c'erano o non si aprivano (D20), mail_al_pub_pronte e
-  registri_al_pub; e qualunque chiave
+  con Ctrl+Maiusc+X e quelle scelte che non c'erano o non si aprivano (D20), mail_al_pub_pronte,
+  registri_al_pub, e per gli Ascolti (D23) ascolti_aperti, ascolti_d_avvio, quelli aperti da soli
+  all'avvio, e ascolti_finiti; dalla regia degli Ascolti passi_ascoltati; e qualunque chiave
   nuova, che la pagina dice nella sezione degli altri conti finché non ha un'etichetta sua;
 - suono(evento), per ogni evento sonoro, contato per nome;
 - bersaglio_apparso(forma, mobile, bonus, portante=None), per ogni bersaglio che nasce, col timbro
@@ -51,7 +52,8 @@ CLASSI = 10
 CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abbandonate", "tiri", "centri", "tiri_a_vuoto", "punti", "bonus_apparsi",
                     "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate", "pause", "pause_automatiche",
                     "pause_rifiutate", "attese_della_palestra", "partite_col_seno", "partite_col_triangolo", "partite_con_la_sega_morbida", "ingressi_in_classifica", "lingua_cambiata",
-                    "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta", "mail_al_pub_pronte", "registri_al_pub")
+                    "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta", "mail_al_pub_pronte", "registri_al_pub",
+                    "ascolti_aperti", "ascolti_d_avvio", "passi_ascoltati", "ascolti_finiti")
 # Come può finire una scivolata, da mira.valore_scelto: fermata nei bip o subito dopo, scelta nella
 # scala, arrivata al massimo senza lo spazio.
 ESITI_DELLA_SCIVOLATA = ("minimo", "scelto", "massimo")
@@ -476,6 +478,12 @@ class Pagina:
             self._voce(_("Cambi della scheda audio: {n}."), self.c("scheda_cambiata")),
             # Traduttori: le volte in cui la scheda audio scelta non c'era, o non si apriva, all'avvio o appena scelta.
             self._voce(_("Schede audio scelte che non si sono aperte: {n}."), self.c("scheda_non_aperta")),
+            # Traduttori: da qui, gli Ascolti, il tutorial audio di Ciechino, nel menu Impostazioni e nel menu Aiuto: le volte in cui si sono aperti,
+            # quelle in cui si sono aperti da soli all'avvio, prima della prima partita, i passi fatti suonare e le volte in cui si è arrivati fino all'ultimo.
+            self._voce(_("Aperture degli Ascolti: {n}."), self.c("ascolti_aperti")),
+            self._voce(_("Ascolti aperti da soli all'avvio, prima della prima partita: {n}."), self.c("ascolti_d_avvio")),
+            self._voce(_("Passi degli Ascolti ascoltati: {n}."), self.c("passi_ascoltati")),
+            self._voce(_("Ascolti seguiti fino all'ultimo passo: {n}."), self.c("ascolti_finiti")),
             # Traduttori: il PUB è il gruppo di supporto di Gabriele, e il nome resta così; conta le mail d'iscrizione e quelle d'aiuto.
             self._voce(_("Mail al PUB preparate: {n}."), self.c("mail_al_pub_pronte")),
             # Traduttori: le mail d'aiuto al PUB preparate col file dei registri degli errori allegato.

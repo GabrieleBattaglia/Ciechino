@@ -14,7 +14,9 @@ La finestra deve avere l'attributo chiusa e quattro metodi, che il filo chiama s
 finestra: proponi_l_aggiornamento(versione_attuale, versione_nuova, note, attesa=None), che risponde
 vero o falso e allo scadere dei secondi di attesa si chiude rispondendo falso;
 avvisa_dell_aggiornamento(testo), che torna quando chi gioca ha letto; avanzamento_dell_aggiornamento
-(presi, totale), in byte; chiudi_per_aggiornare().
+(presi, totale), in byte; chiudi_per_aggiornare(). Se la finestra ha anche aspetta_i_dialoghi_d_avvio(),
+il filo la chiama prima della proposta e di ogni avviso, e aspetta lì: così la proposta non si apre sopra
+gli Ascolti della prima apertura (D23), ma dopo.
 """
 
 import sys
@@ -88,7 +90,11 @@ def controlla(finestra, chiama_dopo=None):
         chiama_dopo = wx.CallAfter
 
     def nella_finestra(funzione, *argomenti):
-        """Esegue funzione nel filo della finestra e ne aspetta il valore; None se intanto la finestra si è chiusa."""
+        """Esegue funzione nel filo della finestra e ne aspetta il valore; None se intanto la finestra si è chiusa.
+        Prima aspetta che i dialoghi dell'avvio della finestra, come gli Ascolti della prima apertura, si siano chiusi."""
+        aspetta = getattr(finestra, "aspetta_i_dialoghi_d_avvio", None)
+        if callable(aspetta):
+            aspetta()
         esito, fatto = [], threading.Event()
 
         def lavoro():

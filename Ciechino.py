@@ -7,8 +7,9 @@ processo sia uscito. Poi, se un Ciechino è già aperto, questa copia lo porta i
 senza toccare niente, perché due copie insieme suonerebbero due partite sovrapposte e scriverebbero gli
 stessi file; altrimenti si mette lei in ascolto delle copie che verranno. Poi si apre il registro degli
 errori e dei crash accanto al programma, e un errore imprevisto, della finestra o di un altro filo, vi
-lascia il suo resoconto completo. Poi la finestra e, a finestra comparsa, solo dall'eseguibile
-compilato, il controllo dell'aggiornamento. Un errore che ferma Ciechino si scrive nel registro e si dice
+lascia il suo resoconto completo. Poi la finestra e, a finestra comparsa, i suoni dell'avvio, gli Ascolti
+della prima apertura (D23), che si aprono da soli finché non si è cominciata una partita, e, solo
+dall'eseguibile compilato, il controllo dell'aggiornamento, la cui proposta aspetta gli Ascolti. Un errore che ferma Ciechino si scrive nel registro e si dice
 in un messaggio, col suono dell'errore. All'uscita pulita l'ascolto si ferma e il registro si chiude,
 così il file del crash se ne va.
 Una copia lanciata mentre questa si sta già chiudendo, durante il congedo, non troverebbe nessuno da
@@ -78,6 +79,9 @@ def avvia_finestra(crash_precedente=None, finestre=None):
     finestra.Maximize()
     finestra.Show()
     wx.CallAfter(finestra.suoni_d_avvio)
+    # Senza partite cominciate gli Ascolti si apriranno da soli, finiti i suoni dell'avvio (D23); la proposta
+    # dell'aggiornamento li aspetta, perciò si preparano prima del controllo.
+    wx.CallAfter(finestra.ascolti_alla_prima_apertura)
     # A finestra comparsa: solo dall'eseguibile compilato, in un filo, e la finestra intanto risponde.
     wx.CallAfter(aggiornamento.controlla, finestra)
     app.MainLoop()
