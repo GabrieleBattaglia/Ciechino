@@ -8,6 +8,8 @@ La prima versione pubblica di Ciechino, il tiro a segno a orecchio. Davanti a te
 
 Rispetto alla 0.12.0, l'ultima provata prima della pubblicazione, il gioco non cambia: dalla cartella strumenti sono usciti i banchi d'ascolto con cui Gabriele ha tarato le scivolate, i bersagli e il proiettile, perché le loro scelte sono ormai tutte dentro Ciechino.
 
+Pubblicata su GitHub il 20 novembre 2026 come release v1.0.0, con l'archivio Ciechino.zip e l'installatore Ciechino-Setup-1.0.0.exe in allegato. Verificato che l'aggiornamento automatico la riconosca e ne riceva le note. L'eseguibile è stato provato su una copia a volume zero, su un desktop di Windows nascosto: apertura sulla scheda audio, gli Ascolti partiti da soli alla prima apertura, la collezione dei suoni nel pacchetto, chiusura senza processi rimasti e senza auto_updater_error.log.
+
 ## [0.12.0] - 2026-11-20
 
 La classifica è più ricca, come voleva Gabriele: ogni voce dice, oltre alla posizione, al nome e al punteggio, il livello raggiunto, i tiri sparati, i centri, bonus compresi, la precisione globale media della partita, i tiri a vuoto compresi, il tempo di gioco, senza le pause e senza le attese della palestra, e quanti giorni fa è stata fatta. Ed è una griglia allineata: dopo la riga che dice quante voci ci sono, una riga coi titoli delle colonne, poi una voce per riga, coi campi in colonna, da leggere in braille scorrendo su e giù. Il tempo si scrive come un cronometro, 12:05, e dall'ora in su 01:02:05; la voce appena entrata finisce con la parola nuova. Nella finestra di Ctrl+K la griglia ha un carattere a larghezza fissa, così resta in colonna anche sullo schermo.
