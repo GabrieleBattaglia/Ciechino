@@ -24,14 +24,17 @@ precisione globale; e ogni versione ha il suo blocco nel CHANGELOG. Dalla 0.11.8
 margine dopo la scivolata, la seconda riga del sommario a parole, il primato della media dai dieci tiri e il proiettile
 perduto nelle medie. Dal terzo collaudo, la 0.11.10, la precisione globale con la retta fino all'angolo più lontano del
 cubo, con gli esempi calcolati da volo.py per un bersaglio nel centro del cubo e uno in un angolo, e la voce Ascolti
-soltanto nel menu Aiuto.
+soltanto nel menu Aiuto. Dalla 0.12.0, la issue 1 (D27), la classifica è una griglia allineata: l'esempio del manuale si
+confronta con classifica.righe, e le colonne del suo elenco con quelle del codice.
 """
 
 import re
+from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
+import classifica
 import fisica
 import resoconti
 import suoni
@@ -438,6 +441,30 @@ def test_le_correzioni_della_0_11_10_nei_documenti():
         assert f"vale {dieci[0]} nel primo caso e {dieci[1]} nel secondo" in testo, nome
     assert f"lo 0% e {quarantasette[1]}" in readme and f"vale lo 0% nel centro del cubo e {quarantasette[1]} in un angolo" in blocco
     assert "menu Aiuto" in blocco and "Impostazioni" in blocco
+
+
+def test_la_classifica_ricca_della_0_12_0_nei_documenti():
+    """La issue 1, decisione D27: l'esempio della griglia nel manuale è quello che scrive classifica.righe, le colonne dell'elenco
+    sono quelle del codice e nel suo ordine, e l'annuncio a parole della voce nuova è quello vero; il blocco della 0.12.0 del
+    CHANGELOG e il README dicono la griglia, e il CHANGELOG anche le voci vecchie senza precisione."""
+    manuale, readme, changelog = _leggi("manuale.html"), _leggi("README.md"), _leggi("CHANGELOG.md")
+    voci = [
+        {"nome": "Gabry", "punteggio": 12340, "data": "2026-11-17T10:00:00", "livello": 4, "tiri": 37, "centri": 25, "durata_s": 725.0,
+         "precisione_globale": 0.7134},
+        {"nome": "Mario", "punteggio": 8120, "data": "2026-11-20T10:00:00", "livello": 3, "tiri": 30, "centri": 19, "durata_s": 581.0,
+         "precisione_globale": 0.64},
+        {"nome": "Anna", "punteggio": 5002, "data": "2026-11-09T10:00:00", "livello": 2, "tiri": 21, "centri": 12, "durata_s": 373.0,
+         "precisione_globale": None},
+    ]
+    esempio = re.search(r"<pre>(.*?)</pre>", manuale, re.DOTALL)
+    assert esempio and esempio.group(1).splitlines() == classifica.righe(voci, oggi=date(2026, 11, 20))
+    sezione = re.search(r'<h3 id="classifica">.*?</ul>', manuale, re.DOTALL)
+    assert sezione and re.findall(r"<li>([^:<]+):", sezione.group(0)) == classifica._colonne()
+    assert classifica.annuncio(voci[1], 2) in manuale
+    blocco = _blocco_della_versione(changelog, "0.12.0")
+    for testo in (blocco, readme):
+        assert "griglia allineata" in testo and "precisione globale media" in testo
+    assert "n.d." in blocco and f"{testi.durata_in_cifre(725.0)}, e dall'ora in su {testi.durata_in_cifre(3725.0)}" in blocco
 
 
 def test_niente_separatori_grafici_nei_documenti():

@@ -92,6 +92,15 @@ def test_durata_a_parole():
     assert testi.durata(2 * 86400 + 3 * 3600 + 60) == "2 giorni, 3 ore e 1 minuto"
 
 
+def test_durata_in_cifre():
+    """Come un cronometro, da formatta_durata di GBUtils, coi decimi scartati; vuoto per la durata
+    che non c'è, anche per un valore che non è un numero (D27)."""
+    assert testi.durata_in_cifre(725.9) == "12:05"
+    assert testi.durata_in_cifre(3725) == "01:02:05"
+    for niente in (0, -3, None, float("nan"), float("inf"), True, "12"):
+        assert testi.durata_in_cifre(niente, vuoto="n.d.") == "n.d."
+
+
 def test_informazioni():
     righe = testi.informazioni().split("\n")
     assert righe[0] == f"Ciechino, il tiro a segno a orecchio, versione {version.__version__}, rilasciata {testi.data_lunga(version.__date__)}."

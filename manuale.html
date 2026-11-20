@@ -58,7 +58,7 @@ code { font-family: Consolas, "Courier New", monospace; font-size: 0.95em; }
 </head>
 <body>
 <h1>Manuale di Ciechino</h1>
-<p>Versione 0.11.10, venerdì 20 novembre 2026.</p>
+<p>Versione 0.12.0, venerdì 20 novembre 2026.</p>
 <p>Ciechino, il tiro a segno a orecchio, è un gioco di tiro pensato per chi non vede. Questo manuale racconta come si installa, com'è fatta la finestra, come si gioca un tiro dal primo all'ultimo suono, come lo spazio dei bersagli diventa musica, come si fanno i punti e come si sale di livello, che cosa fanno tutti i menu e i loro tasti, e come gli Ascolti, il tutorial audio, ti fanno sentire lo spazio un passo alla volta.</p>
 <p>Il manuale si apre nel browser dal menu Aiuto, alla voce Manuale, oppure con <kbd>Maiusc+F1</kbd>. Nella finestra di Ciechino, <kbd>F1</kbd> dà invece la guida ai comandi, più breve, con tutti i tasti. In questa pagina il tasto H di NVDA salta da un titolo all'altro, e i numeri da 1 a 3 portano ai titoli di quel livello.</p>
 <nav aria-label="Indice">
@@ -439,11 +439,28 @@ code { font-family: Consolas, "Courier New", monospace; font-size: 0.95em; }
 <p>Le statistiche tengono i primati di tutte le tue partite: il punteggio più alto, il livello più alto, la serie più lunga di centri uno dopo l'altro, il centro più preciso, la precisione globale migliore in un tiro e quella media migliore in una partita, che vale soltanto per le partite di almeno dieci tiri, i punti in un tiro solo, i centri in una partita, la partita più lunga, e i tiri passati più vicino al centro di un bersaglio. Quando un tiro ne batte uno, il resoconto lo dice. La serie di centri si annuncia una volta sola, quando supera il primato: i centri seguenti la allungano in silenzio, e le statistiche la registrano intera.</p>
 <h2 id="classifica-statistiche">La classifica e le statistiche</h2>
 <h3 id="classifica">La classifica dei cento migliori</h3>
-<p>La classifica tiene le cento partite migliori, ordinate per punteggio. Si apre con Classifica del menu Partita, <kbd>Ctrl+K</kbd>, in una finestra di testo in sola lettura, una voce per riga, e la si ritrova in fondo alla vista quando una partita ci entra. La prima riga dice quante voci ha; poi ogni voce dice la posizione, il nome, il punteggio e l'età del record, cioè quanti giorni fa è stato fatto, per esempio:</p>
-<p>1. Gabry, 12.340 punti, 3 giorni fa.</p>
-<p>A parità di punteggio resta davanti chi c'era prima: un risultato uguale non scavalca mai quello già conquistato. Una partita senza punti non entra mai, nemmeno nella classifica vuota. Accanto a ogni voce Ciechino ricorda anche il livello raggiunto, i tiri, i centri e la durata della partita.</p>
+<p>La classifica tiene le cento partite migliori, ordinate per punteggio. Si apre con Classifica del menu Partita, <kbd>Ctrl+K</kbd>, in una finestra di testo in sola lettura, e la si ritrova in fondo alla vista quando una partita ci entra. È una griglia allineata, come una tabella: la prima riga dice quante voci ha, la seconda i titoli delle colonne, e poi c'è una voce per riga, con i campi in colonna, uno spazio fra l'uno e l'altro. In braille ogni colonna sta sempre allo stesso punto della riga, così scorrendo su e giù con le frecce confronti le partite campo per campo. Le colonne sono, nell'ordine:</p>
+<ul>
+<li>Pos: la posizione in classifica.</li>
+<li>Nome: il nome scritto entrando in classifica.</li>
+<li>Punti: il punteggio.</li>
+<li>Livello: il livello raggiunto.</li>
+<li>Tiri: i tiri sparati nella partita.</li>
+<li>Centri: i bersagli colpiti, bonus compresi.</li>
+<li>Precisione: la precisione globale media della partita, con un decimale, la stessa delle statistiche: la media della <a href="#precisione-globale">precisione globale</a> di tutti i suoi tiri, i tiri a vuoto compresi, e un proiettile perduto conta come zero.</li>
+<li>Tempo: il tempo di gioco, senza le pause e senza le attese della palestra, scritto come un cronometro, minuti e secondi, e dall'ora in su ore, minuti e secondi.</li>
+<li>Giorni: l'età del record, cioè quanti giorni fa è stato fatto; 0 vuol dire oggi.</li>
+</ul>
+<p>Per esempio:</p>
+<pre>Classifica, 3 voci, ordinata per punteggio.
+Pos Nome   Punti Livello Tiri Centri Precisione Tempo Giorni
+  1 Gabry 12.340       4   37     25      71,3% 12:05      3
+  2 Mario  8.120       3   30     19      64,0% 09:41      0
+  3 Anna   5.002       2   21     12       n.d. 06:13     11</pre>
+<p>Ogni colonna è larga quanto il suo testo più lungo, con il nome allineato a sinistra e i numeri a destra. La finestra di <kbd>Ctrl+K</kbd> scrive la griglia in un carattere a larghezza fissa, così resta in colonna anche sullo schermo. Le partite entrate in classifica prima della versione 0.12.0 non hanno la precisione, che allora non si salvava, e nella sua colonna dicono n.d., non disponibile: Ciechino non inventa un numero che non ha misurato.</p>
+<p>A parità di punteggio resta davanti chi c'era prima: un risultato uguale non scavalca mai quello già conquistato. Una partita senza punti non entra mai, nemmeno nella classifica vuota.</p>
 <h3 id="nome">Il nome in classifica</h3>
-<p>Il nome si chiede soltanto a chi entra in classifica. A partita finita, se il punteggio basta, senti il suono della fine e poi quello dell'ingresso; quando è finito si apre la finestra del nome, che dice con quanti punti entri e a che posto, e propone l'ultimo nome usato, tutto selezionato: <kbd>Invio</kbd> lo conferma, oppure scrivi un altro nome, da 1 a 20 caratteri. Uno spazio o un Invio premuti appena la finestra si apre, magari con il dito ancora sulla barra spaziatrice, non contano, così il nome proposto non si cancella per sbaglio. OK con il nome vuoto lo dice, con il suono del campo da correggere, e la finestra resta aperta; Annulla, o <kbd>Esc</kbd>, lascia la partita fuori dalla classifica, e la vista lo dice. Altrimenti la classifica arriva in fondo alla vista, con il cursore sulla voce nuova, che finisce con la parola nuova, per esempio: 4. Gabry, 8.120 punti, oggi, nuova.</p>
+<p>Il nome si chiede soltanto a chi entra in classifica. A partita finita, se il punteggio basta, senti il suono della fine e poi quello dell'ingresso; quando è finito si apre la finestra del nome, che dice con quanti punti entri e a che posto, e propone l'ultimo nome usato, tutto selezionato: <kbd>Invio</kbd> lo conferma, oppure scrivi un altro nome, da 1 a 20 caratteri. Uno spazio o un Invio premuti appena la finestra si apre, magari con il dito ancora sulla barra spaziatrice, non contano, così il nome proposto non si cancella per sbaglio. OK con il nome vuoto lo dice, con il suono del campo da correggere, e la finestra resta aperta; Annulla, o <kbd>Esc</kbd>, lascia la partita fuori dalla classifica, e la vista lo dice. Altrimenti la classifica arriva in fondo alla vista, con il cursore sulla riga della voce nuova, che finisce con la parola nuova. Con la lettura dei resoconti accesa, la sintesi, che a voce non ha i titoli delle colonne, dice la voce nuova a parole, con tutti i suoi campi, per esempio: 2. Mario, 8.120 punti, livello 3, 30 tiri, 19 centri, precisione globale media 64,0%, 9 minuti e 41 secondi, nuova.</p>
 <h3 id="statistiche">Le statistiche</h3>
 <p>Gabriele ama le statistiche, e Ciechino conta tutto. Statistiche, nel menu Partita, <kbd>Ctrl+T</kbd>, apre la loro pagina in una finestra di testo in sola lettura. La prima riga dice da quando sono raccolte, la seconda l'elenco delle sezioni; ogni sezione comincia con Sezione, il suo numero sul totale e il suo titolo, poi una voce per riga, nella forma etichetta, due punti, valore. Le voci che valgono zero non si dicono.</p>
 <ul>

@@ -5,7 +5,10 @@ Nasce il 2026-11-19 con la 0.1.0, sul modello di gestione_dati.py di Gabryscola 
 La classifica è la top 100 del punto 73 di idee.txt e della decisione D11: posizione, nome,
 punteggio ed età del record in giorni, ordinata per punteggio; a parità di punti resta davanti chi
 c'era prima, perché un risultato uguale non scavalca mai quello già conquistato. Il nome si chiede
-soltanto a chi entra.
+soltanto a chi entra. Dalla 0.12.0, issue 1 e decisione D27, ogni voce dice anche il livello, i
+tiri, i centri, la precisione globale media della partita e il tempo di gioco, e le righe sono una
+griglia allineata: il titolo, l'intestazione delle colonne, poi una voce per riga, coi campi in
+colonna, leggibili in braille scorrendo su e giù.
 Il modulo non stampa e non solleva per un file rovinato: carica restituisce le voci e un avviso, e
 chi chiama decide come dirlo. Qui sta anche la scrittura sicura dei file JSON di Ciechino, che usano
 pure statistiche.py e impostazioni.py: prima un file .tmp, poi il file vecchio diventa la copia
@@ -14,7 +17,9 @@ mai: si rinomina in .illeggibile, con un numero se ce n'è già uno, e si ripart
 riserva o da zero; ripresi i dati da una copia, il file principale torna al suo posto, così
 l'avviso si sente una volta sola.
 Una voce è {"nome", "punteggio", "data" (ISO, ora locale), "livello", "tiri", "centri",
-"durata_s"}; il file è {"formato": FORMATO_CLASSIFICA, "voci": [...]}.
+"durata_s", "precisione_globale"}; il file è {"formato": FORMATO_CLASSIFICA, "voci": [...]}. La
+precisione globale è una frazione da 0 a 1, o None nelle voci nate prima della 0.12.0, che non
+l'hanno: restano valide, e la loro riga dice n.d. invece di inventare un numero.
 """
 
 import contextlib
@@ -35,6 +40,12 @@ PUNTEGGIO_MINIMO = 1
 # I campi numerici di una voce, oltre al punteggio, con il loro tipo.
 CAMPI_INTERI = ("livello", "tiri", "centri")
 CAMPI_DECIMALI = ("durata_s",)
+# La precisione globale media della partita (D26 e D27), che nelle voci vecchie manca.
+CAMPO_PRECISIONE = "precisione_globale"
+# L'indice, fra le righe, della prima voce: davanti ci sono il titolo e l'intestazione delle colonne.
+PRIMA_VOCE = 2
+# Le colonne coi testi allineati a sinistra; le altre, i numeri, si allineano a destra.
+COLONNE_A_SINISTRA = (1,)
 # Il numero più grande che un file dei dati può contenere, in valore assoluto: 2 alla 53, l'intero
 # più grande che un float tiene esatto. Un intero più grande, scritto a mano in un file che resta
 # JSON valido, fa sollevare OverflowError a ogni conversione in float, e nessun conto vero di
@@ -268,12 +279,14 @@ def _adesso():
 
 def nuova_voce(nome, riepilogo, data=None):
     """La voce di una partita finita, dal riepilogo di Partita.riepilogo(): {"punteggio",
-    "livello", "tiri", "centri", "durata_s"}. La data è adesso, se non la si dà."""
+    "livello", "tiri", "centri", "durata_s", "precisione_globale"}. La data è adesso, se non la si
+    dà; la precisione che manca resta None."""
     voce = {"nome": pulisci_nome(nome), "punteggio": _intero(riepilogo.get("punteggio")), "data": data or _adesso()}
     for campo in CAMPI_INTERI:
         voce[campo] = _intero(riepilogo.get(campo))
     for campo in CAMPI_DECIMALI:
         voce[campo] = _decimale(riepilogo.get(campo))
+    voce[CAMPO_PRECISIONE] = _frazione(riepilogo.get(CAMPO_PRECISIONE))
     return voce
 
 
@@ -283,6 +296,12 @@ def _intero(valore):
 
 def _decimale(valore):
     return max(0.0, round(float(valore), 3)) if numero_valido(valore) else 0.0
+
+
+def _frazione(valore):
+    """Una frazione da 0 a 1, al decimillesimo, come la precisione globale; None per un valore che
+    manca o non è un numero, perché una precisione mai misurata non è una precisione di zero."""
+    return min(1.0, max(0.0, round(float(valore), 4))) if numero_valido(valore) else None
 
 
 def _data(testo):
@@ -296,7 +315,8 @@ def _data(testo):
 
 def _voce_pulita(grezza):
     """Una voce del file, pulita, o None se manca di ciò che serve: un nome, un punteggio, una
-    data che si legga. I campi secondari rovinati tornano a zero, e la voce resta."""
+    data che si legga. I campi secondari rovinati tornano a zero, e la voce resta; la precisione
+    che manca o è rovinata, come nelle voci nate prima della 0.12.0, resta None."""
     if not isinstance(grezza, dict):
         return None
     nome = pulisci_nome(grezza.get("nome")) if isinstance(grezza.get("nome"), str) else ""
@@ -308,6 +328,7 @@ def _voce_pulita(grezza):
         voce[campo] = _intero(grezza.get(campo))
     for campo in CAMPI_DECIMALI:
         voce[campo] = _decimale(grezza.get(campo))
+    voce[CAMPO_PRECISIONE] = _frazione(grezza.get(CAMPO_PRECISIONE))
     return voce
 
 
@@ -375,29 +396,79 @@ def _giorni(data, oggi):
     return (giorno - quando.date()).days
 
 
+def _non_disponibile():
+    # Traduttori: nella classifica, al posto di un dato che una voce vecchia non ha; sta in una colonna, quindi corto.
+    return _("n.d.")
+
+
+def _colonne():
+    """I titoli delle colonne della griglia, nell'ordine dei campi di ogni riga (D27)."""
+    # Traduttori: i titoli delle colonne della classifica, una griglia allineata, che si allarga da sola al testo più lungo di ogni colonna.
+    return [_("Pos"), _("Nome"), _("Punti"), _("Livello"), _("Tiri"), _("Centri"), _("Precisione"), _("Tempo"), _("Giorni")]
+
+
+def _celle(numero, voce, oggi):
+    """I campi di una voce, scritti, nell'ordine delle colonne: la precisione col decimale, il tempo
+    di gioco in cifre come un cronometro, l'età in giorni; n.d. per ciò che la voce non ha."""
+    precisione = voce.get(CAMPO_PRECISIONE)
+    return [testi.intero(numero), voce["nome"], testi.intero(voce["punteggio"]), testi.intero(voce.get("livello", 0)),
+            testi.intero(voce.get("tiri", 0)), testi.intero(voce.get("centri", 0)),
+            testi.percento(precisione, 1) if numero_valido(precisione) else _non_disponibile(),
+            testi.durata_in_cifre(voce.get("durata_s"), vuoto=_non_disponibile()), testi.intero(max(0, _giorni(voce.get("data"), oggi)))]
+
+
+def _allinea(celle, larghezze):
+    """Una riga della griglia: il nome a sinistra, i numeri a destra, uno spazio fra le colonne."""
+    parti = [cella.ljust(larghezza) if indice in COLONNE_A_SINISTRA else cella.rjust(larghezza)
+             for indice, (cella, larghezza) in enumerate(zip(celle, larghezze, strict=True))]
+    return " ".join(parti).rstrip()
+
+
+def _e_nuova(numero, voce, nuova):
+    if isinstance(nuova, int) and not isinstance(nuova, bool):
+        return numero == nuova
+    return nuova is not None and (voce is nuova or voce == nuova)
+
+
 def righe(voci, oggi=None, nuova=None):
-    """Le righe da leggere: l'intestazione, poi una riga per voce, come «1. Gabry, 12.340 punti,
-    3 giorni fa.». nuova è la voce appena entrata, o la sua posizione da 1, e la sua riga lo dice;
-    oggi è il giorno da cui contare l'età dei record, predefinito adesso. Una classifica vuota è
-    una riga sola, che lo dice."""
+    """Le righe da leggere, una griglia allineata (D27): il titolo, l'intestazione delle colonne,
+    poi una riga per voce, da PRIMA_VOCE in là, come «  1 Gabry 12.340 4 37 25 71,3% 12:05 3» con
+    le colonne larghe quanto il loro testo più lungo. nuova è la voce appena entrata, o la sua
+    posizione da 1, e la sua riga finisce con nuova; oggi è il giorno da cui contare l'età dei
+    record, predefinito adesso. Una classifica vuota è una riga sola, che lo dice."""
     voci = list(voci)
     if not voci:
         return [_("La classifica è ancora vuota: la prima partita che fa punti ci entra.")]
     oggi = oggi or datetime.now()
     n = len(voci)
-    risultato = [ngettext("Classifica, {n} voce, ordinata per punteggio.", "Classifica, {n} voci, ordinata per punteggio.", n).format(n=testi.intero(n))]
-    for numero, voce in enumerate(voci, 1):
-        if isinstance(nuova, int) and not isinstance(nuova, bool):
-            e_nuova = numero == nuova
-        else:
-            e_nuova = nuova is not None and (voce is nuova or voce == nuova)
-        punti = plurale(voce["punteggio"], "{n} punto", "{n} punti", come=testi.intero(voce["punteggio"]))
-        eta = testi.eta_in_giorni(_giorni(voce.get("data"), oggi))
-        if e_nuova:
-            # Traduttori: una riga della classifica, la voce appena entrata: «1. Gabry, 12.340 punti, oggi, nuova.».
-            riga = _("{posizione}. {nome}, {punti}, {eta}, nuova.")
-        else:
-            # Traduttori: una riga della classifica: «1. Gabry, 12.340 punti, 3 giorni fa.».
-            riga = _("{posizione}. {nome}, {punti}, {eta}.")
-        risultato.append(riga.format(posizione=numero, nome=voce["nome"], punti=punti, eta=eta))
+    colonne = _colonne()
+    tabella = [_celle(numero, voce, oggi) for numero, voce in enumerate(voci, 1)]
+    larghezze = [max(len(cella) for cella in colonna) for colonna in zip(colonne, *tabella, strict=True)]
+    risultato = [ngettext("Classifica, {n} voce, ordinata per punteggio.", "Classifica, {n} voci, ordinata per punteggio.", n).format(n=testi.intero(n)),
+                 _allinea(colonne, larghezze)]
+    for numero, (voce, celle) in enumerate(zip(voci, tabella, strict=True), 1):
+        riga = _allinea(celle, larghezze)
+        if _e_nuova(numero, voce, nuova):
+            # Traduttori: la riga della griglia della classifica con la voce appena entrata; riga è la riga coi suoi campi.
+            riga = _("{riga} nuova").format(riga=riga)
+        risultato.append(riga)
     return risultato
+
+
+def annuncio(voce, posizione):
+    """La voce appena entrata detta a parole, per la sintesi: con gli occhi e col braille la griglia
+    ha i titoli delle colonne, ma a voce i numeri da soli non dicono niente. Come «2. Gabry, 8.120
+    punti, livello 3, 30 tiri, 19 centri, precisione globale media 64,0%, 9 minuti e 41 secondi,
+    nuova.»; l'età no, perché una voce appena entrata è sempre di oggi."""
+    precisione = voce.get(CAMPO_PRECISIONE)
+    if numero_valido(precisione):
+        # Traduttori: nell'annuncio della voce nuova in classifica; valore è la percentuale già scritta, come 64,0%.
+        detta = _("precisione globale media {valore}").format(valore=testi.percento(precisione, 1))
+    else:
+        detta = _("precisione non registrata")
+    tiri, centri = voce.get("tiri", 0), voce.get("centri", 0)
+    # Traduttori: l'annuncio a voce della voce appena entrata in classifica: «2. Gabry, 8.120 punti, livello 3, 30 tiri, 19 centri, precisione globale media 64,0%, 9 minuti e 41 secondi, nuova.».
+    return _("{posizione}. {nome}, {punti}, livello {livello}, {tiri}, {centri}, {precisione}, {tempo}, nuova.").format(
+        posizione=posizione, nome=voce["nome"], punti=plurale(voce["punteggio"], "{n} punto", "{n} punti", come=testi.intero(voce["punteggio"])),
+        livello=testi.intero(voce.get("livello", 0)), tiri=plurale(tiri, "{n} tiro", "{n} tiri", come=testi.intero(tiri)),
+        centri=plurale(centri, "{n} centro", "{n} centri", come=testi.intero(centri)), precisione=detta, tempo=testi.durata(voce.get("durata_s")))

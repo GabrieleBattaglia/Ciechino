@@ -1225,29 +1225,34 @@ class FinestraPrincipale(wx.Frame):
         self.statistiche.conta("ingressi_in_classifica")
         self.suoni.suona("confermato" if salvata else "salvataggio_non_riuscito")
         righe = classifica.righe(voci, nuova=posizione)
-        self._in_coda(righe, righe[posizione] if posizione is not None and posizione < len(righe) else "", posizione or 0)
+        if posizione is not None and posizione <= len(voci):
+            # Il cursore sulla riga della voce nuova, nella griglia (D27); alla sintesi la stessa voce a parole.
+            self._in_coda(righe, classifica.annuncio(voci[posizione - 1], posizione), posizione - 1 + classifica.PRIMA_VOCE)
+        else:
+            self._in_coda(righe)
         if not salvata:
             testo = _("La classifica non si è potuta salvare: la voce nuova vale fino all'uscita.")
             self._in_coda(testo, testo)
         self._salva_le_impostazioni()
         self._salva_le_statistiche()
 
-    def _lettura(self, titolo, testo, suono):
-        """Un testo da leggere in un dialogo, massimizzato, in sola lettura, con Chiudi ed Esc (D11)."""
+    def _lettura(self, titolo, testo, suono, a_larghezza_fissa=False):
+        """Un testo da leggere in un dialogo, massimizzato, in sola lettura, con Chiudi ed Esc (D11);
+        a_larghezza_fissa per una griglia, come la classifica, che anche sullo schermo resta in colonna."""
         self.suoni.suona(suono)
-        dialogo = dialoghi.Lettura(self, titolo, testo, suona=self.suoni.suona)
+        dialogo = dialoghi.Lettura(self, titolo, testo, suona=self.suoni.suona, a_larghezza_fissa=a_larghezza_fissa)
         try:
             self._modale(dialogo)
         finally:
             dialogo.Destroy()
 
     def mostra_classifica(self):
-        """Ctrl+K: la classifica, una voce per riga."""
+        """Ctrl+K: la classifica, una voce per riga, nella griglia allineata di D27."""
         voci, avviso = self._classifica_attuale()
         righe = classifica.righe(voci)
         if avviso:
             righe.append(avviso)
-        self._lettura(_("Classifica"), "\n".join(righe), "classifica")
+        self._lettura(_("Classifica"), "\n".join(righe), "classifica", a_larghezza_fissa=True)
 
     def mostra_statistiche(self):
         """Ctrl+T: le statistiche, a sezioni, una voce per riga, coi nomi dei suoni detti a parole."""

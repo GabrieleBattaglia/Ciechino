@@ -407,6 +407,13 @@ def _mira(tavolo, valori):
     assert partita.fase == "volo" and tavolo.fase_della_barra() == "Volo"
 
 
+def _media_globale(tavolo):
+    """La precisione globale media dei tiri arrivati finora (D26), al decimillesimo, dai resoconti:
+    quella che il riepilogo deve portare in classifica (D27). I tiri senza, se ce ne sono, restano fuori."""
+    globali = [m.dati["precisione_globale"] for m in tavolo.ricevuti if m.tipo == "resoconto" and m.dati.get("precisione_globale") is not None]
+    return round(sum(globali) / len(globali), 4)
+
+
 def _volo(tavolo):
     """Il volo, qualche blocco e un battito alla volta, finché il tiro si risolve e i suoi messaggi
     arrivano, quando l'effetto dell'impatto ha finito di suonare (D22); restituisce i messaggi nuovi."""
@@ -600,7 +607,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La durata non conta né la pausa né le attese della palestra, una dopo ogni tiro tranne l'ultimo (D22).
         assert tavolo.in_attesa > 0
         durata = round(fine - inizio - in_pausa - tavolo.in_attesa, 1)
-        riepilogo = {"punteggio": totale, "livello": 2, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "durata_s": durata}
+        riepilogo = {"punteggio": totale, "livello": 2, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "durata_s": durata,
+                     "precisione_globale": _media_globale(tavolo)}
         assert nuovi[1].dati == riepilogo == partita.riepilogo()
         assert nuovi[1].annuncio == f"Partita finita, {testi.intero(totale)} punti."
         # Il suono della classifica segue quello della fine, in fila, staccato: partiti insieme si fonderebbero. Da D24 arriva coi messaggi
@@ -628,8 +636,10 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         assert len(voci) == 1
         assert {chiave: voci[0][chiave] for chiave in ("nome", *riepilogo)} == {"nome": NOME, **riepilogo}
         righe_della_classifica = classifica.righe(voci, nuova=1)
-        nuova = f"1. {NOME}, {testi.intero(totale)} punti, oggi, nuova."
-        assert righe_della_classifica[1] == nuova
+        # D27: la riga della griglia dice tutti i campi della partita, in colonna, e finisce con nuova.
+        nuova = righe_della_classifica[classifica.PRIMA_VOCE]
+        assert nuova.split() == ["1", NOME, testi.intero(totale), "2", str(tiri), str(CENTRI_PER_LIVELLO), testi.percento(riepilogo["precisione_globale"], 1),
+                                 testi.durata_in_cifre(riepilogo["durata_s"]), "0", "nuova"]
         assert _riga_del_cursore(finestra.vista) == (nuova, 0)
         assert _leggi(costanti.FILE_IMPOSTAZIONI)["ultimo_nome"] == NOME
 
@@ -642,8 +652,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         assert posti[CENTRI_PER_LIVELLO - 1] < testo.index("\nLivello 2! Il livello 1 è superato.") < posti[CENTRI_PER_LIVELLO]
         assert posti[-2] < testo.index("\nNella riserva resta l'ultimo colpo") < posti[-1] < testo.index("\nPartita finita: ")
 
-        # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica.
-        assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
+        # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica, a parole.
+        assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [classifica.annuncio(voci[0], 1)]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
         assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. L:" in detto and " G:" in detto) == CENTRI_PER_LIVELLO
 
@@ -713,14 +723,15 @@ def test_una_partita_col_motore_muto(app_wx, preset_finti, messaggi_wx, nomi, vo
                 _riposo(tavolo)
         assert partita.fase == "finita" and [m.tipo for m in nuovi] == ["resoconto", "fine"]
         # Le attese della palestra (D22) non contano nella durata.
-        riepilogo = {"punteggio": totale, "livello": 1, "tiri": COLPI_INIZIALI + 1, "centri": 1, "durata_s": round(tavolo.risolto_alle - inizio - tavolo.in_attesa, 1)}
+        riepilogo = {"punteggio": totale, "livello": 1, "tiri": COLPI_INIZIALI + 1, "centri": 1, "durata_s": round(tavolo.risolto_alle - inizio - tavolo.in_attesa, 1),
+                     "precisione_globale": _media_globale(tavolo)}
         assert partita.riepilogo() == riepilogo == nuovi[-1].dati
         assert len(nomi) == 1
         voci = _leggi(costanti.FILE_CLASSIFICA)["voci"]
         assert [{chiave: voce[chiave] for chiave in ("nome", *riepilogo)} for voce in voci] == [{"nome": NOME, **riepilogo}]
-        nuova = classifica.righe(voci, nuova=1)[1]
+        nuova = classifica.righe(voci, nuova=1)[classifica.PRIMA_VOCE]
         assert _riga_del_cursore(finestra.vista) == (nuova, 0) and finestra.vista.GetValue().endswith("\n" + nuova)
-        assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
+        assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [classifica.annuncio(voci[0], 1)]
         statistiche = _leggi(costanti.FILE_STATISTICHE)
         conti = statistiche["conti"]
         assert (conti["partite_finite"], conti["tiri"], conti["centri"], conti["tiri_a_vuoto"], conti["punti"], conti["ingressi_in_classifica"]) == (

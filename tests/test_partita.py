@@ -669,12 +669,14 @@ def test_tiri_a_vuoto_fino_alla_fine(banco):
     partita = banco.partita(orologio=orologio)
     partita.nuova()
     voci = list(partita._voci.values())
+    globali = []
     for numero in range(1, COLPI_INIZIALI + 1):
         if numero == COLPI_INIZIALI:
             orologio.valore = 160.0
         messaggi = tiro_a_vuoto(banco, partita)
         assert partita.tiri == numero and partita.riserva == COLPI_INIZIALI - numero
         assert messaggi[0].tipo == "resoconto" and not messaggi[0].dati["colpito"]
+        globali.append(messaggi[0].dati["precisione_globale"])
         # D21: il tiro rasoterra e piano cade a pochi metri dal cannone, prima della distanza del
         # bersaglio e sotto la sua altezza: il sommario lo dice, senza numeri, e la legenda dice perché (D24).
         sommario = resoconti.sommario_del_tiro(partita.ultimo_volo, "numeri")
@@ -692,7 +694,9 @@ def test_tiri_a_vuoto_fino_alla_fine(banco):
     assert partita.fase == "finita" and not partita.in_corso()
     assert [m.tipo for m in messaggi] == ["resoconto", "fine"]
     assert messaggi[0].annuncio == f"A vuoto, riserva vuota. {sommario.annuncio}"
-    riepilogo = {"punteggio": 0, "livello": 1, "tiri": COLPI_INIZIALI, "centri": 0, "durata_s": 60.0}
+    # Il riepilogo porta la precisione globale media dei tiri (D26), che va in classifica (D27).
+    riepilogo = {"punteggio": 0, "livello": 1, "tiri": COLPI_INIZIALI, "centri": 0, "durata_s": 60.0,
+                 "precisione_globale": round(sum(globali) / len(globali), 4)}
     assert messaggi[1].dati == riepilogo == partita.riepilogo()
     assert messaggi[1].annuncio == "Partita finita, 0 punti."
     assert banco.contati.count("ultimo_colpo") == 1 and banco.contati.count("partita_finita") == 1

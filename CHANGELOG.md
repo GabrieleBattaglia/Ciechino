@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [0.12.0] - 2026-11-20
+
+La classifica è più ricca, come voleva Gabriele: ogni voce dice, oltre alla posizione, al nome e al punteggio, il livello raggiunto, i tiri sparati, i centri, bonus compresi, la precisione globale media della partita, i tiri a vuoto compresi, il tempo di gioco, senza le pause e senza le attese della palestra, e quanti giorni fa è stata fatta. Ed è una griglia allineata: dopo la riga che dice quante voci ci sono, una riga coi titoli delle colonne, poi una voce per riga, coi campi in colonna, da leggere in braille scorrendo su e giù. Il tempo si scrive come un cronometro, 12:05, e dall'ora in su 01:02:05; la voce appena entrata finisce con la parola nuova. Nella finestra di Ctrl+K la griglia ha un carattere a larghezza fissa, così resta in colonna anche sullo schermo.
+
+Le voci entrate in classifica prima di questa versione non hanno la precisione, che allora non si salvava: restano dove sono, e nella sua colonna dicono n.d. Con la lettura dei resoconti accesa, la sintesi dice la voce nuova a parole, con tutti i suoi campi.
+
 ## [0.11.10] - 2026-11-20
 
 La precisione globale ha una misura nuova, voluta da Gabriele nel terzo collaudo: non più la diagonale del cubo, ma la retta che va dal centro del bersaglio al punto più lontano del cubo, il suo angolo più lontano, da confrontare con la distanza a cui il proiettile è passato dal centro. Per un bersaglio nel centro del cubo quella retta è lunga 43,3 metri, per uno in un angolo 86,6: un tiro passato a 10 metri dal centro del bersaglio vale il 76,9% nel primo caso e l'88,5% nel secondo, e uno passato a 47 metri, che prima valeva ancora il 45,6%, vale lo 0% nel centro del cubo e il 45,7% in un angolo. Un centro al primo livello vale sempre più dell'88,2%. Le precisioni globali già scritte nelle statistiche restano quelle della misura di prima, e un primato nato allora può essere più alto di quanto la misura nuova darebbe allo stesso tiro.

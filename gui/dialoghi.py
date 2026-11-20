@@ -269,18 +269,30 @@ class Lettura(_Dialogo):
     Un testo da leggere in un'area in sola lettura, una voce per riga, con il pulsante Chiudi, che vale
     anche per Esc: la classifica e le statistiche (D11), l'invito al caffè e la proposta
     dell'aggiornamento. pulsanti, se c'è, sostituisce Chiudi con altre coppie di identificativo e testo:
-    l'ultima è quella che chiude.
+    l'ultima è quella che chiude. a_larghezza_fissa scrive il testo in un carattere a larghezza fissa,
+    per una griglia allineata come la classifica (D27), che così resta in colonna anche sullo schermo;
+    al braille e alla voce non cambia niente.
     """
 
-    def __init__(self, genitore, titolo, testo, pulsanti=None, suona=None):
+    def __init__(self, genitore, titolo, testo, pulsanti=None, suona=None, a_larghezza_fissa=False):
         super().__init__(genitore, titolo, suona)
-        self.testo = self.campo(titolo, lambda: wx.TextCtrl(self.pannello, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2, value=testo), 1)
+        self.testo = self.campo(titolo, lambda: self._area(testo, a_larghezza_fissa), 1)
         voci = pulsanti or ((wx.ID_OK, _("&Chiudi")),)
         self.bottoni = self.pulsanti(*voci, predefinito=0, chiudi=len(voci) - 1)
         self.bottoni[-1].Bind(wx.EVT_BUTTON, lambda event: self.chiudi(wx.ID_OK))
         self.Bind(wx.EVT_CHAR_HOOK, self._tasto)
         self.completa(MISURA_DELLA_LETTURA)
         wx.CallAfter(self._al_testo)
+
+    def _area(self, testo, a_larghezza_fissa):
+        if not a_larghezza_fissa:
+            return wx.TextCtrl(self.pannello, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2, value=testo)
+        area = wx.TextCtrl(self.pannello, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
+        # La grandezza resta quella del carattere del sistema, che chi gioca può aver ingrandito; il
+        # testo arriva dopo il carattere, perché il controllo ricco lo scriva tutto con quello.
+        area.SetFont(wx.Font(wx.FontInfo(area.GetFont().GetPointSize()).Family(wx.FONTFAMILY_TELETYPE)))
+        area.SetValue(testo)
+        return area
 
     def _al_testo(self):
         with contextlib.suppress(RuntimeError):

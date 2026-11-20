@@ -344,7 +344,9 @@ BATTITO_MS = 10
 POSTI_IN_CLASSIFICA = 100
 NOME_MINIMO = 1
 NOME_MASSIMO = 20
-FORMATO_CLASSIFICA = 1
+# Il formato 2, dalla 0.12.0 (D27), aggiunge a ogni voce la precisione globale media della partita;
+# le voci del formato 1 si leggono ancora, senza precisione.
+FORMATO_CLASSIFICA = 2
 FORMATO_STATISTICHE = 1
 FILE_CLASSIFICA = "Ciechino - Classifica.json"
 FILE_STATISTICHE = "Ciechino - Statistiche.json"

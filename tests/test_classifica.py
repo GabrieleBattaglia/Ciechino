@@ -13,7 +13,8 @@ import costanti
 
 
 def voce(nome, punteggio, data="2026-11-10T12:00:00", **altro):
-    return {"nome": nome, "punteggio": punteggio, "data": data, "livello": 1, "tiri": 10, "centri": 5, "durata_s": 60.0, **altro}
+    return {"nome": nome, "punteggio": punteggio, "data": data, "livello": 1, "tiri": 10, "centri": 5, "durata_s": 60.0, "precisione_globale": 0.5,
+            **altro}
 
 
 def percorso_predefinito(cartella):
@@ -315,28 +316,82 @@ def test_inserisci_mette_la_data_e_il_nome_di_ripiego():
 
 
 def test_nuova_voce_dal_riepilogo():
-    riepilogo = {"punteggio": 1234, "livello": 3, "tiri": 40, "centri": 22, "durata_s": 312.25}
+    riepilogo = {"punteggio": 1234, "livello": 3, "tiri": 40, "centri": 22, "durata_s": 312.25, "precisione_globale": 0.71349}
     v = classifica.nuova_voce(" Gabry ", riepilogo, data="2026-11-19T18:03:00")
-    assert v == {"nome": "Gabry", "punteggio": 1234, "data": "2026-11-19T18:03:00", "livello": 3, "tiri": 40, "centri": 22, "durata_s": 312.25}
+    assert v == {"nome": "Gabry", "punteggio": 1234, "data": "2026-11-19T18:03:00", "livello": 3, "tiri": 40, "centri": 22, "durata_s": 312.25,
+                 "precisione_globale": 0.7135}
+    # Un riepilogo senza precisione non la inventa (D27).
+    del riepilogo["precisione_globale"]
+    assert classifica.nuova_voce("Gabry", riepilogo)["precisione_globale"] is None
+
+
+def _senza_precisione(v):
+    del v["precisione_globale"]
+    return v
 
 
 def test_righe():
-    voci = [voce("Gabry", 12340, data="2026-11-16T09:00:00"), voce("Vecchio", 50, data="2026-11-18T23:59:00"), voce("Gab", 1, data="2026-11-19T08:00:00")]
+    """D27: la griglia allineata, coi titoli delle colonne, il nome a sinistra e i numeri a destra;
+    la voce vecchia senza precisione dice n.d., la nuova finisce con nuova."""
+    voci = [voce("Gabry", 12340, data="2026-11-16T09:00:00", livello=4, tiri=37, centri=25, durata_s=725.4, precisione_globale=0.7134),
+            _senza_precisione(voce("Vecchio", 50, data="2026-11-18T23:59:00")), voce("Gab", 1, data="2026-11-19T08:00:00")]
     righe = classifica.righe(voci, oggi=datetime(2026, 11, 19, 20, 0), nuova=3)
     assert righe == [
         "Classifica, 3 voci, ordinata per punteggio.",
-        "1. Gabry, 12.340 punti, 3 giorni fa.",
-        "2. Vecchio, 50 punti, 1 giorno fa.",
-        "3. Gab, 1 punto, oggi, nuova.",
+        "Pos Nome     Punti Livello Tiri Centri Precisione Tempo Giorni",
+        "  1 Gabry   12.340       4   37     25      71,3% 12:05      3",
+        "  2 Vecchio     50       1   10      5       n.d. 01:00      1",
+        "  3 Gab          1       1   10      5      50,0% 01:00      0 nuova",
     ]
+    assert righe[classifica.PRIMA_VOCE].startswith("  1 Gabry")
+
+
+def test_righe_in_colonna_coi_nomi_lunghi_e_le_ore():
+    """Ogni colonna è larga quanto il suo testo più lungo: il nome di venti caratteri e un'ora di
+    gioco allargano le loro, e tutte le righe restano lunghe uguali, l'ultima colonna a destra."""
+    voci = [voce("Gabriele Battaglia I", 900000, durata_s=3725.0, precisione_globale=1.0), voce("G", 5, durata_s=0.0)]
+    righe = classifica.righe(voci, oggi=date(2026, 11, 10))
+    assert len({len(riga) for riga in righe[1:]}) == 1
+    assert righe[2].startswith("  1 Gabriele Battaglia I 900.000") and " 100,0% 01:02:05      0" in righe[2]
+    # Una durata che non c'è non è una durata di zero.
+    assert righe[3].endswith(" n.d.      0") and "50,0%" in righe[3]
 
 
 def test_righe_con_la_voce_nuova_e_una_data():
     voci, _dove = classifica.inserisci([voce("Gabry", 100)], voce("Nuova", 200, data="2026-11-19T10:00:00"))
     righe = classifica.righe(voci, oggi=date(2026, 11, 19), nuova=voci[0])
     assert righe[0] == "Classifica, 2 voci, ordinata per punteggio."
-    assert righe[1] == "1. Nuova, 200 punti, oggi, nuova."
-    assert righe[2] == "2. Gabry, 100 punti, 9 giorni fa."
+    assert righe[2].startswith("  1 Nuova") and righe[2].endswith("      0 nuova")
+    assert righe[3].startswith("  2 Gabry") and righe[3].endswith("      9")
+
+
+def test_annuncio_della_voce_nuova():
+    v = voce("Gabry", 8120, livello=3, tiri=30, centri=19, durata_s=581.0, precisione_globale=0.64)
+    assert classifica.annuncio(v, 2) == ("2. Gabry, 8.120 punti, livello 3, 30 tiri, 19 centri, precisione globale media 64,0%, "
+                                          "9 minuti e 41 secondi, nuova.")
+    uno = voce("Gab", 1, tiri=1, centri=1, durata_s=1.0, precisione_globale=None)
+    assert classifica.annuncio(uno, 1) == "1. Gab, 1 punto, livello 1, 1 tiro, 1 centro, precisione non registrata, 1 secondo, nuova."
+
+
+def test_voci_del_formato_uno_senza_precisione(cartella_di_prova):
+    """Le voci nate prima della 0.12.0 non hanno la precisione: restano valide, la loro precisione
+    resta None e non zero, e il salvataggio seguente scrive il formato nuovo senza inventarla."""
+    vecchie = [_senza_precisione(voce("Gabry", 500)), voce("Gab", 300, precisione_globale="tanta"), voce("Gb", 200, precisione_globale=True)]
+    file = percorso_predefinito(cartella_di_prova)
+    file.write_text(json.dumps({"formato": 1, "voci": vecchie}), encoding="utf-8")
+    voci, avviso = classifica.carica()
+    assert avviso is None and [v["precisione_globale"] for v in voci] == [None, None, None]
+    assert all(" n.d. " in riga for riga in classifica.righe(voci, oggi=date(2026, 11, 10))[classifica.PRIMA_VOCE:])
+    assert classifica.salva(voci)
+    contenuto = json.loads(file.read_text(encoding="utf-8"))
+    assert contenuto["formato"] == costanti.FORMATO_CLASSIFICA == 2 and [v["precisione_globale"] for v in contenuto["voci"]] == [None, None, None]
+
+
+def test_precisione_fuori_scala_si_riporta_fra_zero_e_uno(cartella_di_prova):
+    file = percorso_predefinito(cartella_di_prova)
+    file.write_text(json.dumps({"formato": 2, "voci": [voce("Alto", 500, precisione_globale=1.7), voce("Basso", 300, precisione_globale=-0.2)]}),
+                    encoding="utf-8")
+    assert [v["precisione_globale"] for v in classifica.carica()[0]] == [1.0, 0.0]
 
 
 def test_righe_vuote_e_una_voce():

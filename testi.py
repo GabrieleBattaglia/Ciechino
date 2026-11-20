@@ -162,6 +162,17 @@ def durata(secondi):
                    plurale(ore, "{n} ora", "{n} ore") if ore else "", plurale(minuti, "{n} minuto", "{n} minuti") if minuti else ""])
 
 
+def durata_in_cifre(secondi, vuoto=""):
+    """Una durata in cifre, come un cronometro, da formatta_durata di GBUtils: 12:05, e dall'ora in
+    su 01:02:03. vuoto è ciò che si scrive per una durata che non c'è, zero, negativa o non un
+    numero: una durata che non si conosce non è una durata di zero."""
+    from GBUtils import formatta_durata
+
+    if isinstance(secondi, bool) or not isinstance(secondi, int | float) or not math.isfinite(secondi):
+        return vuoto
+    return formatta_durata(secondi, vuoto=vuoto)
+
+
 # Le informazioni e le novità.
 
 def informazioni():

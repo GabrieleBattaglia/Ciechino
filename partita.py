@@ -315,10 +315,14 @@ class Partita:
         return portanti_senza(self.proiettile)
 
     def riepilogo(self):
-        """{"punteggio", "livello", "tiri", "centri", "durata_s"} della partita in corso o dell'ultima;
-        la durata è quella vera, senza le pause, al decimo di secondo."""
+        """{"punteggio", "livello", "tiri", "centri", "durata_s", "precisione_globale"} della partita in
+        corso o dell'ultima; la durata è quella vera, senza le pause, al decimo di secondo, e la
+        precisione globale è la media dei tiri che l'hanno (D26), al decimillesimo, i perduti a zero,
+        o None prima del primo tiro: va nelle statistiche e, da D27, in classifica."""
         durata = self._durata if self._durata is not None else self._durata_adesso()
-        return {"punteggio": self.punti, "livello": self.livello, "tiri": self.tiri, "centri": self.centri, "durata_s": round(durata, 1)}
+        media = round(self._somma_globale / self._tiri_globali, 4) if self._tiri_globali else None
+        return {"punteggio": self.punti, "livello": self.livello, "tiri": self.tiri, "centri": self.centri, "durata_s": round(durata, 1),
+                "precisione_globale": media}
 
     def righe_della_barra(self):
         """Le righe della barra di stato, da resoconti.righe_della_barra."""
@@ -1255,8 +1259,8 @@ class Partita:
         battuti = []
         if self.statistiche is not None:
             prima = self._primati_attuali()
-            media = self._somma_globale / self._tiri_globali if self._tiri_globali else None
-            battuti = self._primati_che_cambiano(self.statistiche.partita_finita({**riepilogo, "motivo": motivo, "precisione_globale": media}), prima)
+            # Il riepilogo porta già la precisione globale media della partita (D26).
+            battuti = self._primati_che_cambiano(self.statistiche.partita_finita({**riepilogo, "motivo": motivo}), prima)
             # Le statistiche non si salvano da sole: la fine di una partita è il momento in cui
             # perderle costerebbe di più.
             self.statistiche.salva()

@@ -2,7 +2,7 @@
 
 Un gioco di tiro accessibile, pensato da un giocatore cieco per chi non vede, e per chi vuole provare a mirare con le orecchie. Il nome è un gioco di parole fra cieco e cecchino.
 
-Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani, e ognuno ha una voce un po' diversa dagli altri. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte un bersaglio normale del suo livello. I cento punteggi migliori restano in classifica.
+Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: la panoramica dice se stanno a destra o a sinistra, la nota quanto sono in alto, il volume quanto sono lontani, e ognuno ha una voce un po' diversa dagli altri. Per sparare scegli tre valori, la direzione, l'alzo e la potenza, fermando con la barra spaziatrice tre suoni che scivolano; poi segui il colpo con l'orecchio, fino all'impatto o fino a terra. I colpi sono una riserva, dieci centri chiudono il livello, i bersagli si rimpiccioliscono, si muovono e si moltiplicano, e ogni tanto passa un bonus che vale cinque volte un bersaglio normale del suo livello. I cento punteggi migliori restano in classifica, una griglia allineata da leggere in braille, che per ogni partita dice anche il livello, i tiri, i centri, la precisione globale media e il tempo di gioco.
 
 ## Scaricare e installare
 
@@ -79,7 +79,7 @@ Il pacchetto si compila con PyInstaller dalla ricetta Ciechino.spec, a cartella,
 
 Ciechino nasce in italiano, ma ogni testo per l'utente passa da lingua.py, con le funzioni _, ngettext e plurale, così si può tradurre senza toccare il programma. babel.cfg dice a pybabel quali file leggere; il modello dei testi si estrae con le parole chiave _, ngettext:1,2 e plurale:2,3, e con i commenti per i traduttori:
 
-    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.11.10 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
+    pybabel extract -F babel.cfg -k _ -k ngettext:1,2 -k plurale:2,3 --add-comments=Traduttori: --project=Ciechino --version=0.12.0 --copyright-holder="Gabriele Battaglia" --msgid-bugs-address=https://github.com/GabrieleBattaglia/Ciechino/issues -o locales/messages.pot .
     pybabel init -i locales/messages.pot -d locales -l en
     pybabel update -i locales/messages.pot -d locales
     pybabel compile -d locales

@@ -724,7 +724,7 @@ def test_la_fine_che_aspetta_il_tonfo_arriva_prima_della_partita_nuova_e_dell_us
 
 def _fine(punteggio):
     return Messaggio("fine", f"Partita finita: {punteggio} punti.", "Partita finita.",
-                     {"punteggio": punteggio, "livello": 2, "tiri": 9, "centri": 5, "durata_s": 61.0})
+                     {"punteggio": punteggio, "livello": 2, "tiri": 9, "centri": 5, "durata_s": 61.0, "precisione_globale": 0.6134})
 
 
 def test_a_partita_finita_il_nome_e_la_classifica_nella_vista(finestra, sentiti, voce_finta, monkeypatch):
@@ -743,13 +743,17 @@ def test_a_partita_finita_il_nome_e_la_classifica_nella_vista(finestra, sentiti,
     assert proposti == [("Gabry", True)]
     voci = _leggi(costanti.FILE_CLASSIFICA)["voci"]
     assert len(voci) == 1 and voci[0]["nome"] == "Gabriele" and voci[0]["punteggio"] == 1234 and voci[0]["centri"] == 5
+    assert voci[0]["precisione_globale"] == 0.6134
     assert _leggi(costanti.FILE_IMPOSTAZIONI)["ultimo_nome"] == "Gabriele"
     statistiche = _leggi(costanti.FILE_STATISTICHE)
     assert statistiche["conti"]["ingressi_in_classifica"] == 1
-    assert finestra.vista.GetValue().endswith("\nPartita finita: 1234 punti.\nClassifica, 1 voce, ordinata per punteggio.\n1. Gabriele, 1.234 punti, oggi, nuova.")
-    assert _riga_del_cursore(finestra.vista) == ("1. Gabriele, 1.234 punti, oggi, nuova.", 0)
+    # D27: la griglia in coda alla vista, col cursore sulla riga della voce nuova; alla sintesi la voce a parole.
+    nuova = "  1 Gabriele 1.234       2    9      5      61,3% 01:01      0 nuova"
+    assert finestra.vista.GetValue().endswith("\nPartita finita: 1234 punti.\nClassifica, 1 voce, ordinata per punteggio.\n"
+                                              f"Pos Nome     Punti Livello Tiri Centri Precisione Tempo Giorni\n{nuova}")
+    assert _riga_del_cursore(finestra.vista) == (nuova, 0)
     assert sentiti == ["in_classifica", "confermato"]
-    assert voce_finta == ["Partita finita.", "1. Gabriele, 1.234 punti, oggi, nuova."]
+    assert voce_finta == ["Partita finita.", "1. Gabriele, 1.234 punti, livello 2, 9 tiri, 5 centri, precisione globale media 61,3%, 1 minuto e 1 secondo, nuova."]
 
 
 def test_la_voce_nuova_in_mezzo_alla_classifica(finestra, monkeypatch):
@@ -760,7 +764,8 @@ def test_la_voce_nuova_in_mezzo_alla_classifica(finestra, monkeypatch):
     finestra.partita.in_arrivo = [_fine(800)]
     finestra._al_battito()
     assert [v["nome"] for v in _leggi(costanti.FILE_CLASSIFICA)["voci"]] == ["Anna", "Gabry", "Bruno"]
-    assert _riga_del_cursore(finestra.vista) == ("2. Gabry, 800 punti, oggi, nuova.", 0)
+    riga, colonna = _riga_del_cursore(finestra.vista)
+    assert colonna == 0 and riga.startswith("  2 Gabry   800 ") and riga.endswith(" nuova")
 
 
 def test_fuori_classifica_e_nome_annullato(finestra, sentiti, monkeypatch):
@@ -891,12 +896,24 @@ def test_gli_avvisi_dei_dati_vanno_anche_alla_sintesi(finestra, voce_finta, monk
 def test_classifica_e_statistiche_si_leggono_nel_dialogo(finestra, sentiti, monkeypatch):
     letti = []
     monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: letti.append((dialogo.GetTitle(), dialogo.testo.GetValue(),
-                                                                                       dialogo.IsMaximized())) or wx.ID_OK)
+                                                                                       dialogo.IsMaximized(), dialogo.testo.GetFont().IsFixedWidth())) or wx.ID_OK)
     finestra._esegui(finestra.mostra_classifica)
     finestra._esegui(finestra.mostra_statistiche)
-    assert letti[0] == ("Classifica", classifica.righe([])[0], True)
-    assert letti[1][0] == "Statistiche" and letti[1][2] and "\n\n" not in letti[1][1] and len(letti[1][1].splitlines()) > 1
+    # La classifica, una griglia (D27), sta in un carattere a larghezza fissa, alla grandezza di quello del sistema.
+    assert letti[0] == ("Classifica", classifica.righe([])[0], True, True)
+    assert letti[1][0] == "Statistiche" and letti[1][2] and "\n\n" not in letti[1][1] and len(letti[1][1].splitlines()) > 1 and not letti[1][3]
     assert sentiti == ["classifica", "statistiche"]
+
+
+def test_la_griglia_della_classifica_arriva_intera_nel_dialogo(finestra, monkeypatch):
+    """Il testo scritto dopo il carattere a larghezza fissa arriva tutto, spazi in testa compresi."""
+    voci = [classifica.nuova_voce(nome, {"punteggio": punti, "livello": 1, "tiri": 10, "centri": 3, "durata_s": 95.0, "precisione_globale": 0.5})
+            for nome, punti in (("Anna", 5000), ("Bruno", 100))]
+    assert classifica.salva(voci)
+    letti = []
+    monkeypatch.setattr(dialoghi.Lettura, "ShowModal", lambda dialogo: letti.append(dialogo.testo.GetValue()) or wx.ID_OK)
+    finestra._esegui(finestra.mostra_classifica)
+    assert letti[0].splitlines() == classifica.righe(voci)
 
 
 def test_nuova_partita_e_pausa(finestra, messaggi, sentiti):
