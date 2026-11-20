@@ -1,2 +1,0 @@
-Collaudo di Ciechino 0.12.0, le due correzioni del terzo collaudo e la classifica ricca della issue 1: cancella le righe superate, annota dopo i due punti quelle con problemi.
-Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py.
