@@ -1,24 +1,2 @@
 Collaudo di Ciechino 0.12.0, le due correzioni del terzo collaudo e la classifica ricca della issue 1: cancella le righe superate, annota dopo i due punti quelle con problemi.
 Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py.
-Passo 1: apri il menu Impostazioni, con Alt e I, e scorrilo con le frecce fino in fondo.
-Domanda 1: le voci sono cinque, Volume, Scheda audio, Proiettile, Leggi i resoconti con la sintesi e Lingua, e Ascolti non c'è più?
-Passo 2: con la freccia destra passa al menu Aiuto, scorrilo fino in fondo, poi premi A.
-Domanda 2: Ascolti c'è una volta sola, dopo Informazioni, e la A apre gli Ascolti col loro suono?
-Passo 3: negli Ascolti vai con Invio al passo 4, La distanza, e leggi la sua ultima frase; poi vai all'ultimo passo, leggilo, e chiudi con Esc.
-Domanda 3: tutte e due le frasi ti mandano a ritrovare gli Ascolti soltanto nel menu Aiuto?
-Passo 4: premi F1 e scorri la guida fino ai menu.
-Domanda 4: il menu Impostazioni ha 5 comandi, senza Ascolti, e Ascolti sta una volta sola, fra gli 8 comandi del menu Aiuto?
-Passo 5: comincia una partita con Spazio e ascolta il bersaglio del primo livello: se somiglia a quello del passo 2 degli Ascolti, in mezzo, a metà altezza e a metà distanza, tienilo per i tiri che seguono; se no, colpiscilo e ascolta il seguente.
-Passo 6: sul bersaglio vicino al centro del cubo tira un colpo molto sbagliato: ferma ognuna delle tre barre durante i suoi bip, così vanno tutte al minimo, e il proiettile cade a pochi metri da te, a sinistra.
-Domanda 5: la G del sommario, nel primo blocco, vale 0% o pochi punti, al più intorno al 10%, invece del 30% e più che dava la misura di prima?
-Passo 7: sullo stesso bersaglio tira un colpo vicino, che lo manchi di pochi metri, poi colpiscilo.
-Domanda 6: la G del colpo vicino sta fra quella del colpo sballato e quella del centro, che supera l'88%: i tre numeri ti dicono quanto ti sei avvicinato?
-Domanda 7: l'ultima riga del resoconto del centro dice dove stava il bersaglio: era vicino al centro del cubo, a circa 55 metri dal cannone, 25 d'altezza e in mezzo?
-Passo 8: se capita un bersaglio verso un angolo del cubo, tutto da un lato e molto in basso o in alto, molto vicino o molto lontano, tira anche su di lui un colpo che lo manchi di pochi metri, come prima.
-Domanda 8: a parità di errore la G vale di più che col bersaglio vicino al centro, perché da un angolo il cubo lasciava sbagliare fino a 86,6 metri invece di 43,3: ti torna questa scala?
-Passo 9: finisci la partita, anche con tiri a vuoto, dopo almeno un centro; scrivi il nome e confermalo con Invio.
-Domanda 9: la sintesi dice la voce nuova a parole, con livello, tiri, centri, precisione globale media e tempo, e nella vista il cursore sta sulla sua riga, che finisce con nuova?
-Passo 10: premi Ctrl+K e scorri la classifica con le frecce su e giù, leggendola col braille.
-Domanda 10: la seconda riga ha i titoli delle colonne, e in braille ogni colonna sta sempre allo stesso punto della riga, così confronti le partite campo per campo?
-Domanda 11: le partite entrate prima di oggi dicono n.d. nella colonna Precisione, e il tempo di gioco scritto come un cronometro, come 12:05, si legge bene?
-Esito:
