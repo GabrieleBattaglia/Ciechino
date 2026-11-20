@@ -2,9 +2,9 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
-## [0.1.0] - 2026-11-19
+## [0.8.0] - 2026-11-20
 
-La nascita di Ciechino, il tiro a segno a orecchio: la prima versione del gioco, con l'installatore e lo zip. Il nome è un gioco di parole fra cieco e cecchino, e l'idea è di Gabriele, che voleva un gioco di mira in cui l'orecchio facesse tutto il lavoro degli occhi.
+Ciechino non è ancora pubblicato: la prima versione pubblica sarà la 1.0.0, e fino ad allora il numero sale a ogni novità e a ogni correzione. La 0.8.0 raccoglie il gioco nato il 19 novembre 2026 e le sette novità venute dai banchi d'ascolto e dal primo collaudo di Gabriele: i suoni del colpo, la forma del proiettile, i bersagli sempre diversi, la mira ritoccata, la scelta della scheda audio, il sommario del tiro e la palestra. Questo blocco racconta il gioco intero, com'è oggi, per chi lo prova per la prima volta. Il nome è un gioco di parole fra cieco e cecchino, e l'idea è di Gabriele, che voleva un gioco di mira in cui l'orecchio facesse tutto il lavoro degli occhi.
 
 Davanti a te, a 30 metri, comincia un cubo di 50 metri per lato, e là dentro cantano i bersagli: ognuno con una voce che vibra attorno alla sua nota, in una di dodici forme, dal seno all'onda quadra, dal dente di sega al trillo, e con il timbro, i dettagli della forma e l'ampiezza dell'oscillazione presi un poco a caso, così due bersagli non suonano mai proprio uguali. Il lato si sente nella panoramica, l'altezza nella nota, da 220 hertz al suolo con un'ottava ogni 16,7 metri circa, la distanza nel volume. La grandezza di un bersaglio si sente nell'ampiezza della sua oscillazione: più è largo il vibrato, più è grande il bersaglio.
 
@@ -21,3 +21,7 @@ La scheda audio la sceglie Ciechino da solo, quella di Windows nel modo più pro
 La classifica tiene i cento punteggi migliori, con il nome, che si chiede soltanto a chi ci entra, e l'età del record in giorni. Le statistiche contano tutto: le partite, i tiri, i valori presi con ogni scivolata, i bersagli forma per forma e timbro per timbro, i bonus, le pause, i suoni, le ultime dieci partite e i primati, dal punteggio più alto alla serie di centri più lunga, che il resoconto annuncia quando li batti.
 
 Ogni azione ha il suo suono, 57 in tutto, in 10 gruppi, e due azioni non ne condividono mai uno: gli effetti del tiro sono di rumore, lunghi e marcati, bianco lo sparo, grave, rosa il centro, azzurro il bonus, marrone il tonfo a terra, e il centro e il bonus finiscono ciascuno col suo jingle, tre note il primo, otto più acute e brillanti il secondo. Nel menu Aiuto ci sono la guida ai comandi, il manuale, le novità, le informazioni, l'offerta di un caffè e le due voci del PUB, il gruppo di supporto. Ciechino si aggiorna da solo, si apre una volta sola, e annota gli errori imprevisti, anche quelli del motore audio, in un registro accanto al programma, da allegare quando chiedi aiuto; se la scheda audio smette di rispondere, lo dice e continua senza suono, finché Ctrl+Maiusc+X non ridà il suono.
+
+## [0.1.0] - 2026-11-19
+
+La nascita di Ciechino, il tiro a segno a orecchio, dal punto 73 di idee.txt di Gabriele: il gioco di base, la finestra, il motore audio, la classifica e le statistiche.
