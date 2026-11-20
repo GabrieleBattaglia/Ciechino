@@ -22,7 +22,7 @@ def valore_scelto(campione_udibile, inizio_buffer, scivolata, compensazione=None
     Prima del buffer, cioè nella pausa fra le barre, lo spazio non conta: (None, "pausa"). Nei
     bip e nel silenzio che li segue sceglie il minimo: (0.0, "minimo"). Nella scala sceglie la
     frazione percorsa, continua, senza gradini: (frazione, "scelto"). Dopo la fine della scala,
-    ma prima che il battito se ne accorga, sceglie il massimo: (1.0, "massimo").
+    nel margine prima che la barra scada, sceglie il massimo: (1.0, "massimo").
     scivolata è una sintesi.Scivolata, o qualunque oggetto con inizio_scivolata,
     campioni_scivolata e, se diversa da FS, la frequenza di campionamento fs."""
     if compensazione is None:
@@ -41,9 +41,10 @@ def valore_scelto(campione_udibile, inizio_buffer, scivolata, compensazione=None
 
 def scaduta(campione_udibile, inizio_buffer, scivolata, margine=None):
     """Vero quando il campione udibile ha passato la fine della scala di margine secondi
-    (MARGINE_DOPO_LA_SCIVOLATA se è None): la scivolata che nessuno ha fermato vale il massimo
-    (D3), e la partita passa alla barra seguente. Qui non si toglie la compensazione del tasto,
-    che riguarda il dito, non il tempo che passa."""
+    (MARGINE_DOPO_LA_SCIVOLATA se è None): la scivolata che nessuno ha fermato è scaduta. Nel gioco,
+    da D25, la barra scaduta ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte, e poi il
+    proiettile è perduto; nel banco della mira, che misura le scelte, vale ancora il massimo di D3.
+    Qui non si toglie la compensazione del tasto, che riguarda il dito, non il tempo che passa."""
     if margine is None:
         margine = MARGINE_DOPO_LA_SCIVOLATA
     fs = getattr(scivolata, "fs", FS)

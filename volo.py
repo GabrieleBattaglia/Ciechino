@@ -17,7 +17,7 @@ import numpy as np
 
 import fisica
 from bersagli import Bersaglio
-from costanti import PASSO_DEL_VOLO, PROIETTILE_DB, RAGGIO_PROIETTILE
+from costanti import DIAGONALE_DEL_CUBO, PASSO_DEL_VOLO, PROIETTILE_DB, RAGGIO_PROIETTILE
 
 # Le misure dell'artigliere si cercano prima sui passi del volo, poi fra i due passi che contengono
 # l'istante giusto, per bisezione, fino a questa finezza in secondi. Non è una taratura del gioco:
@@ -94,7 +94,8 @@ class Volo:
     centri meno il raggio) e scarto (radiale, laterale, verticale) nel punto più vicino, se un
     bersaglio vivo c'era. misure, in fondo e di serie None, così i Volo costruiti senza restano
     validi, sono le Misure dell'artigliere rispetto al bersaglio colpito o al vicino (D21); senza
-    bersagli vivi restano None."""
+    bersagli vivi restano None. Le proprietà distanza_dal_centro e precisione_globale, di D26, si
+    ricavano dai campi."""
 
     traiettoria: fisica.Traiettoria
     partenza: float
@@ -115,6 +116,28 @@ class Volo:
     def fine(self):
         """Il tempo di gioco della fine del volo, da programmare nel motore."""
         return self.partenza + self.durata
+
+    @property
+    def distanza_dal_centro(self):
+        """La distanza più piccola fra il centro del proiettile e quello del bersaglio, nel passaggio più
+        vicino: in un centro distanza_al_centro, in un tiro a vuoto la distanza dalla superficie del
+        vicino più il suo raggio; None senza un bersaglio vivo vicino. È quella del primato del tiro più
+        vicino e della precisione globale di D26."""
+        if self.colpito is not None:
+            return None if self.distanza_al_centro is None else float(self.distanza_al_centro)
+        if self.vicino is not None and self.distanza_dal_vicino is not None:
+            return float(self.distanza_dal_vicino) + float(self.vicino.raggio)
+        return None
+
+    @property
+    def precisione_globale(self):
+        """La precisione globale di D26, da 0 a 1: 1 meno distanza_dal_centro divisa per DIAGONALE_DEL_CUBO,
+        mai sotto zero; quanto il proiettile si è avvicinato al bersaglio considerando l'intero cubo. Un
+        centro sta sopra 1 meno raggio più RAGGIO_PROIETTILE diviso la diagonale. None senza la distanza."""
+        distanza = self.distanza_dal_centro
+        if distanza is None:
+            return None
+        return min(1.0, max(0.0, 1.0 - distanza / DIAGONALE_DEL_CUBO))
 
 
 def _contatto(distanze, vivi, soglia, tempi):

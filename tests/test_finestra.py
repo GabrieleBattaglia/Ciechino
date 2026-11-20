@@ -118,6 +118,12 @@ class PartitaFinta:
         self.in_pausa = not self.in_pausa
         return [Messaggio("info", "Partita in pausa." if self.in_pausa else "La partita riprende.")]
 
+    def annulla_mira(self):
+        """Esc nella mira (D25), come la partita vera: si torna all'ascolto, col messaggio."""
+        self.chiamate.append("annulla_mira")
+        self.fase = "ascolto"
+        return [Messaggio("info", "Mira annullata con Esc.", "Mira annullata.")]
+
     def abbandona(self):
         self.chiamate.append("abbandona")
         if not self.in_corso():
@@ -339,6 +345,34 @@ def test_lo_spazio_porta_i_messaggi_nella_vista(finestra, voce_finta):
     _tasto(finestra, wx.WXK_SPACE)
     assert finestra.vista.GetValue().endswith("\nMira: la direzione.")
     assert voce_finta == ["Direzione."]
+
+
+def test_esc_nella_mira_la_annulla_e_non_va_avanti(finestra, monkeypatch, voce_finta):
+    """D25: Esc, durante la mira, a finestra attiva e senza dialoghi, è della partita, che annulla la mira, e non va avanti; il
+    messaggio va nella vista e alla sintesi. Tenuto giù conta una volta. Fuori dalla mira, con un dialogo aperto, coi
+    modificatori o a finestra non attiva, Esc va avanti come sempre."""
+    assert _tasto(finestra, wx.WXK_ESCAPE).GetSkipped()
+    finestra.partita.fase = "ascolto"
+    assert _tasto(finestra, wx.WXK_ESCAPE).GetSkipped() and finestra.partita.chiamate == []
+    finestra.partita.fase = "mira"
+    finestra._modali = 1
+    assert _tasto(finestra, wx.WXK_ESCAPE).GetSkipped()
+    finestra._modali = 0
+    assert _tasto(finestra, wx.WXK_ESCAPE, controllo=True).GetSkipped() and finestra.partita.chiamate == []
+    monkeypatch.setattr(finestra, "IsActive", lambda: False)
+    assert _tasto(finestra, wx.WXK_ESCAPE).GetSkipped() and finestra.partita.chiamate == []
+    monkeypatch.setattr(finestra, "IsActive", lambda: True)
+    assert not _tasto(finestra, wx.WXK_ESCAPE).GetSkipped()
+    assert finestra.partita.chiamate == ["annulla_mira"] and finestra.partita.fase == "ascolto"
+    assert finestra.vista.GetValue().endswith("\nMira annullata con Esc.") and voce_finta == ["Mira annullata."]
+    # Ripetuto dal tasto tenuto giù, nella mira, non conta, ma resta della partita.
+    finestra.partita.fase = "mira"
+    evento = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    evento.SetEventObject(finestra.vista)
+    evento.SetKeyCode(wx.WXK_ESCAPE)
+    monkeypatch.setattr(evento, "IsAutoRepeat", lambda: True)
+    finestra._tasto(evento)
+    assert not evento.GetSkipped() and finestra.partita.chiamate == ["annulla_mira"]
 
 
 def test_f5_e_f7_portano_il_fuoco_col_loro_suono(finestra, sentiti):
@@ -1668,6 +1702,8 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
     # Gli Ascolti (D23) stanno nel menu Impostazioni e nel menu Aiuto, e la guida li dice tutte e due le volte.
     assert "Il menu Aiuto, con 8 comandi:" in righe and righe.count("Ascolti: dal menu, senza tasto rapido.") == 2
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
+    # Esc nella mira (D25) sta fra i tasti fuori dai menu.
+    assert any(riga.startswith("Esc: durante la mira annulla il tiro") for riga in righe)
     assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
     assert sentiti == ["guida"]
 

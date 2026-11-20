@@ -14,7 +14,9 @@ I conti arrivano da sette strade:
   della finestra lasciata (D14), pause_rifiutate, Ctrl+P fuori dai livelli della palestra, e
   attese_della_palestra, le volte in cui dopo un tiro la partita si è fermata ad aspettare lo spazio
   (D22), e partite_col_seno, partite_col_triangolo e partite_con_la_sega_morbida,
-  le partite cominciate con ogni forma del proiettile (D17); dalla finestra ingressi_in_classifica,
+  le partite cominciate con ogni forma del proiettile (D17), e da D25 mire_annullate, con Esc,
+  barre_ripartite, quelle ricominciate da capo senza lo spazio, e proiettili_perduti, quando una
+  barra è passata PASSAGGI_DELLA_BARRA volte senza lo spazio; dalla finestra ingressi_in_classifica,
   lingua_cambiata, proiettile_cambiato, scheda_cambiata e scheda_non_aperta, le schede audio scelte
   con Ctrl+Maiusc+X e quelle scelte che non c'erano o non si aprivano (D20), mail_al_pub_pronte,
   registri_al_pub, e per gli Ascolti (D23) ascolti_aperti, ascolti_d_avvio, quelli aperti da soli
@@ -24,8 +26,10 @@ I conti arrivano da sette strade:
 - bersaglio_apparso(forma, mobile, bonus, portante=None), per ogni bersaglio che nasce, col timbro
   della sua voce, la portante di D18, che tiro conta anche fra i colpiti;
 - mira(parametro, valore, esito_della_scivolata), per ogni valore preso con le scivolate;
-- tiro(valori, esito), dopo ogni tiro;
-- partita_finita(riepilogo), alla fine di ogni partita, finita a riserva vuota o abbandonata.
+- tiro(valori, esito), dopo ogni tiro, con la precisione globale di D26, che dà la sua media e il
+  primato della migliore;
+- partita_finita(riepilogo), alla fine di ogni partita, finita a riserva vuota o abbandonata, con la
+  precisione globale media dei suoi tiri, che va fra le ultime partite e ha il suo primato.
 tiro e partita_finita restituiscono le chiavi dei primati appena battuti, perché la partita possa
 dirlo; il primo valore di un primato non è un primato battuto.
 
@@ -53,15 +57,17 @@ CHIAVI_DEI_CONTI = ("avvii", "partite_iniziate", "partite_finite", "partite_abba
                     "bonus_colpiti", "bonus_usciti", "livelli_superati", "colpi_guadagnati", "mire_avviate", "pause", "pause_automatiche",
                     "pause_rifiutate", "attese_della_palestra", "partite_col_seno", "partite_col_triangolo", "partite_con_la_sega_morbida", "ingressi_in_classifica", "lingua_cambiata",
                     "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta", "mail_al_pub_pronte", "registri_al_pub",
-                    "ascolti_aperti", "ascolti_d_avvio", "passi_ascoltati", "ascolti_finiti")
+                    "ascolti_aperti", "ascolti_d_avvio", "passi_ascoltati", "ascolti_finiti", "mire_annullate", "barre_ripartite", "proiettili_perduti")
 # Come può finire una scivolata, da mira.valore_scelto: fermata nei bip o subito dopo, scelta nella
-# scala, arrivata al massimo senza lo spazio.
+# scala, presa al massimo con lo spazio appena dopo la fine; da D25 la scivolata che nessuno ferma non
+# dà più il massimo, ma ricomincia da capo.
 ESITI_DELLA_SCIVOLATA = ("minimo", "scelto", "massimo")
 # Come può finire una partita, dal riepilogo.
 MOTIVI = ("riserva_vuota", "abbandonata")
 # I primati: quelli in cui vince il valore più alto e quelli in cui vince il più basso, nell'ordine
 # in cui la pagina li dice.
-PRIMATI_ALTI = ("punteggio", "livello", "serie", "precisione", "punti_in_un_tiro", "centri_in_una_partita", "partita_piu_lunga")
+PRIMATI_ALTI = ("punteggio", "livello", "serie", "precisione", "precisione_globale", "precisione_globale_media", "punti_in_un_tiro", "centri_in_una_partita",
+                "partita_piu_lunga")
 PRIMATI_BASSI = ("vicino", "mancato")
 
 NOMI_DEI_PARAMETRI = {"direzione": _("direzione"), "alzo": _("alzo"), "potenza": _("potenza")}
@@ -123,8 +129,10 @@ def nuovi_dati(adesso):
         "salvato": None,
         "conti": dict.fromkeys(CHIAVI_DEI_CONTI, 0),
         "tempo_di_gioco": 0.0,
-        # Le somme per le medie: la precisione dei centri che l'hanno, i punteggi delle partite.
-        "somme": {"precisione": 0.0, "centri_misurati": 0, "punteggi": 0},
+        # Le somme per le medie: la precisione dei centri che l'hanno, i punteggi delle partite, e da D26 la
+        # precisione globale dei tiri che l'hanno e la sua media delle partite che ne hanno una.
+        "somme": {"precisione": 0.0, "centri_misurati": 0, "punteggi": 0, "precisione_globale": 0.0, "tiri_col_globale": 0, "globale_delle_partite": 0.0,
+                  "partite_col_globale": 0},
         "mira": {parametro: _nuova_mira() for parametro in costanti.PARAMETRI},
         "forme": {forma: _nuova_coppia() for forma in costanti.FORME_LFO},
         # I timbri dei bersagli, le portanti estratte a caso da D18, apparsi e colpiti.
@@ -164,7 +172,15 @@ def _partita_pulita(valore):
     motivo = valore.get("motivo")
     return {"quando": valore["quando"], "punteggio": _contatore(valore.get("punteggio")), "livello": _contatore(valore.get("livello")),
             "tiri": _contatore(valore.get("tiri")), "centri": _contatore(valore.get("centri")), "durata_s": _quantita(valore.get("durata_s")),
-            "motivo": motivo if motivo in MOTIVI else MOTIVI[0]}
+            "motivo": motivo if motivo in MOTIVI else MOTIVI[0], "precisione_globale": _frazione(valore.get("precisione_globale"))}
+
+
+def _frazione(valore):
+    """Una frazione da 0 a 1, come la precisione globale media di una partita (D26), al decimillesimo; None
+    se non c'è o non è un numero da 0 a 1, come nelle partite di prima di D26."""
+    if not numero_valido(valore) or not 0 <= valore <= 1:
+        return None
+    return round(float(valore), 4)
 
 
 def completa(grezzi, adesso):
@@ -181,7 +197,9 @@ def completa(grezzi, adesso):
     dati["tempo_di_gioco"] = _quantita(grezzi.get("tempo_di_gioco"))
     somme = grezzi.get("somme") if isinstance(grezzi.get("somme"), dict) else {}
     dati["somme"] = {"precisione": _quantita(somme.get("precisione")), "centri_misurati": _contatore(somme.get("centri_misurati")),
-                     "punteggi": _contatore(somme.get("punteggi"))}
+                     "punteggi": _contatore(somme.get("punteggi")), "precisione_globale": _quantita(somme.get("precisione_globale")),
+                     "tiri_col_globale": _contatore(somme.get("tiri_col_globale")), "globale_delle_partite": _quantita(somme.get("globale_delle_partite")),
+                     "partite_col_globale": _contatore(somme.get("partite_col_globale"))}
     if isinstance(grezzi.get("mira"), dict):
         for parametro, valore in grezzi["mira"].items():
             dati["mira"][str(parametro)] = _mira_pulita(valore)
@@ -332,8 +350,10 @@ class Statistiche:
     def tiro(self, valori, esito):
         """Un tiro sparato. valori sono la direzione, l'alzo e la potenza, da 0 a 1; esito è
         {"colpito", "bonus", "forma", "portante", "mobile", "precisione", "punti",
-        "distanza_dal_vicino", "serie"}, con precisione e distanza None quando non ci sono; la
-        portante, il timbro del bersaglio colpito, può mancare. Restituisce i primati battuti."""
+        "distanza_dal_vicino", "serie", "precisione_globale"}, con precisione, distanza e precisione
+        globale None quando non ci sono; la portante, il timbro del bersaglio colpito, e la precisione
+        globale di D26 possono mancare. Il proiettile perduto di D25 arriva come un tiro a vuoto senza
+        distanza né precisione globale. Restituisce i primati battuti."""
         e = esito if isinstance(esito, dict) else {}
         battuti = []
         self.conta("tiri")
@@ -369,6 +389,14 @@ class Statistiche:
                 battuti.append("vicino")
             if not colpito and self._primato("mancato", distanza, piu_alto=False):
                 battuti.append("mancato")
+        globale = e.get("precisione_globale")
+        if numero_valido(globale):
+            g = min(1.0, max(0.0, float(globale)))
+            somme = self.dati["somme"]
+            somme["precisione_globale"] = round(somme["precisione_globale"] + g, 6)
+            somme["tiri_col_globale"] += 1
+            if self._primato("precisione_globale", g):
+                battuti.append("precisione_globale")
         serie = e.get("serie")
         if numero_valido(serie) and serie > 0 and self._primato("serie", round(serie)):
             battuti.append("serie")
@@ -376,20 +404,29 @@ class Statistiche:
 
     def partita_finita(self, riepilogo):
         """Una partita conclusa: riepilogo è {"punteggio", "livello", "tiri", "centri",
-        "durata_s", "motivo"}, con motivo «riserva_vuota» o «abbandonata». Restituisce i primati
-        battuti."""
+        "durata_s", "motivo", "precisione_globale"}, con motivo «riserva_vuota» o «abbandonata», e la
+        precisione globale media dei suoi tiri (D26), da 0 a 1, che può mancare o essere None.
+        Restituisce i primati battuti."""
         r = riepilogo if isinstance(riepilogo, dict) else {}
         motivo = r.get("motivo") if r.get("motivo") in MOTIVI else MOTIVI[0]
         self.conta("partite_abbandonate" if motivo == "abbandonata" else "partite_finite")
         partita = {"quando": self._iso(), "punteggio": _contatore(r.get("punteggio")), "livello": _contatore(r.get("livello")),
-                   "tiri": _contatore(r.get("tiri")), "centri": _contatore(r.get("centri")), "durata_s": _quantita(r.get("durata_s")), "motivo": motivo}
+                   "tiri": _contatore(r.get("tiri")), "centri": _contatore(r.get("centri")), "durata_s": _quantita(r.get("durata_s")), "motivo": motivo,
+                   "precisione_globale": _frazione(r.get("precisione_globale"))}
         self.dati["tempo_di_gioco"] = _somma(self.dati["tempo_di_gioco"], partita["durata_s"])
-        self.dati["somme"]["punteggi"] += partita["punteggio"]
+        somme = self.dati["somme"]
+        somme["punteggi"] += partita["punteggio"]
         battuti = []
         for chiave, valore in (("punteggio", partita["punteggio"]), ("livello", partita["livello"]), ("centri_in_una_partita", partita["centri"]),
                                ("partita_piu_lunga", partita["durata_s"])):
             if valore > 0 and self._primato(chiave, valore):
                 battuti.append(chiave)
+        media = partita["precisione_globale"]
+        if media is not None:
+            somme["globale_delle_partite"] = round(somme["globale_delle_partite"] + media, 6)
+            somme["partite_col_globale"] += 1
+            if self._primato("precisione_globale_media", media):
+                battuti.append("precisione_globale_media")
         self.dati["ultime"] = [*self.dati["ultime"], partita][-costanti.ULTIME_PARTITE:]
         return battuti
 
@@ -547,9 +584,22 @@ class Pagina:
         ]
         if somme["centri_misurati"]:
             righe.append(_("Precisione media dei centri: {percentuale}.").format(percentuale=testi.percento(somme["precisione"] / somme["centri_misurati"])))
+        if somme["tiri_col_globale"]:
+            # Traduttori: la precisione globale (D26), quanto i tiri si sono avvicinati al bersaglio nell'intero cubo, in media su tutti i tiri; percentuale è come «91,3%».
+            righe.append(_("Precisione globale media dei tiri: {percentuale}.").format(
+                percentuale=testi.percento(somme["precisione_globale"] / somme["tiri_col_globale"], 1)))
+        if somme["partite_col_globale"]:
+            # Traduttori: la media, sulle partite, della precisione globale media di ogni partita (D26).
+            righe.append(_("Precisione globale media per partita: {percentuale}.").format(
+                percentuale=testi.percento(somme["globale_delle_partite"] / somme["partite_col_globale"], 1)))
         if centri and self.c("punti"):
             righe.append(_("Punti per centro, in media: {n}.").format(n=testi.numero(self.c("punti") / centri)))
         righe.append(self._voce(_("Mire avviate: {n}."), self.c("mire_avviate")))
+        # Traduttori: da qui, la mira di D25: le mire annullate con Esc, il proiettile che resta nella riserva; le barre ricominciate da capo
+        # perché nessuno le ha fermate con lo spazio; i proiettili perduti, quando una barra è passata tutte le sue volte senza lo spazio.
+        righe.append(self._voce(_("Mire annullate con Esc: {n}."), self.c("mire_annullate")))
+        righe.append(self._voce(_("Barre della mira ripartite da capo senza lo spazio: {n}."), self.c("barre_ripartite")))
+        righe.append(self._voce(_("Proiettili perduti, con una barra mai fermata dallo spazio: {n}."), self.c("proiettili_perduti")))
         return righe
 
     # 4.
@@ -573,7 +623,8 @@ class Pagina:
         ]
         for chiave, frase in (("scelto", _("{parametro}, scelti con lo spazio nella scivolata: {n}, {percentuale}.")),
                               ("minimo", _("{parametro}, fermati al minimo nei bip: {n}, {percentuale}.")),
-                              ("massimo", _("{parametro}, arrivati al massimo senza lo spazio: {n}, {percentuale}."))):
+                              # Traduttori: il massimo si prende con lo spazio premuto appena finita la scivolata, prima che la barra ricominci (D25).
+                              ("massimo", _("{parametro}, presi al massimo con lo spazio appena finita la scivolata: {n}, {percentuale}."))):
             if m[chiave]:
                 righe.append(frase.format(parametro=nome, n=testi.intero(m[chiave]), percentuale=testi.percento(m[chiave] / presi)))
         valori = sum(m["classi"])
@@ -643,6 +694,9 @@ class Pagina:
             "livello": (_("Livello più alto raggiunto: {valore}, {quando}."), testi.intero),
             "serie": (_("Serie più lunga di centri consecutivi: {valore}, {quando}."), testi.intero),
             "precisione": (_("Il centro più preciso: {valore}, {quando}."), testi.percento),
+            # Traduttori: i due primati della precisione globale (D26); valore è come «97,3%».
+            "precisione_globale": (_("La precisione globale migliore in un tiro: {valore}, {quando}."), lambda x: testi.percento(x, 1)),
+            "precisione_globale_media": (_("La precisione globale media migliore in una partita: {valore}, {quando}."), lambda x: testi.percento(x, 1)),
             "punti_in_un_tiro": (_("Più punti in un tiro: {valore}, {quando}."), self._punti),
             "centri_in_una_partita": (_("Più centri in una partita: {valore}, {quando}."), testi.intero),
             "partita_piu_lunga": (_("La partita più lunga: {valore}, {quando}."), testi.durata),
@@ -665,12 +719,17 @@ class Pagina:
         motivi = {"riserva_vuota": _("finita a riserva vuota"), "abbandonata": _("abbandonata")}
         righe = []
         for partita in reversed(self.d["ultime"]):
+            valori = {"quando": _maiuscola(testi.data_lunga(partita["quando"], ora=True)), "punti": self._punti(partita["punteggio"]),
+                      "livello": testi.intero(partita["livello"]), "centri": plurale(partita["centri"], "{n} centro", "{n} centri", come=testi.intero(partita["centri"])),
+                      "tiri": plurale(partita["tiri"], "{n} tiro", "{n} tiri", come=testi.intero(partita["tiri"])), "durata": testi.durata(partita["durata_s"]),
+                      "motivo": motivi.get(partita["motivo"], partita["motivo"])}
+            if partita.get("precisione_globale") is not None:
+                # Traduttori: una delle ultime partite con la precisione globale media dei suoi tiri (D26), globale come «88,4%»; il resto come nella riga senza.
+                righe.append(_("{quando}: {punti}, livello {livello}, {centri} su {tiri}, precisione globale media {globale}, {durata}, {motivo}.").format(
+                    globale=testi.percento(partita["precisione_globale"], 1), **valori))
+                continue
             # Traduttori: una delle ultime partite: «Giovedì 19 novembre 2026 alle 18:03: 1.230 punti, livello 3, 12 centri su 20 tiri, 4 minuti e 12 secondi, abbandonata.».
-            righe.append(_("{quando}: {punti}, livello {livello}, {centri} su {tiri}, {durata}, {motivo}.").format(
-                quando=_maiuscola(testi.data_lunga(partita["quando"], ora=True)), punti=self._punti(partita["punteggio"]),
-                livello=testi.intero(partita["livello"]), centri=plurale(partita["centri"], "{n} centro", "{n} centri", come=testi.intero(partita["centri"])),
-                tiri=plurale(partita["tiri"], "{n} tiro", "{n} tiri", come=testi.intero(partita["tiri"])), durata=testi.durata(partita["durata_s"]),
-                motivo=motivi.get(partita["motivo"], partita["motivo"])))
+            righe.append(_("{quando}: {punti}, livello {livello}, {centri} su {tiri}, {durata}, {motivo}.").format(**valori))
         return righe
 
     # 8.

@@ -3,7 +3,8 @@ Le prove di resoconti.py: le frasi dei tiri, dei livelli, dei bonus, dei primati
 delle direzioni e degli scarti, i singolari e i plurali, le righe della barra, il sommario di D21 ai
 tre gradi della palestra, coi segni, le soglie, le misure che mancano e i confini fra i livelli,
 l'annuncio con l'esito prima del sommario, i messaggi e la barra della palestra delle attese di D22,
-e nessun separatore grafico.
+la riga del sommario a blocchi per il display braille di D24, il proiettile perduto e Esc nella mira di
+D25, la precisione globale di D26, e nessun separatore grafico.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 I voli sono costruiti a mano, coi numeri tondi che le frasi devono dire; i numeri che dipendono dalle
@@ -21,8 +22,10 @@ import resoconti
 from bersagli import Bersaglio
 from costanti import (
     AIUTO_MANCATO_FINO_AL_LIVELLO,
+    BLOCCO_DEL_BRAILLE,
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
+    PASSAGGI_DELLA_BARRA,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     SOMMARIO_SOGLIA_INCLINAZIONE,
@@ -78,35 +81,59 @@ def misure(laterale=13.2, verticale=-2.4, profondita=1.0, inclinazione=-31.4, ar
 
 
 VALORI = (0.64, 0.45, 0.5)
-# Il sommario coi numeri delle misure di serie, e quello a parole.
-NUMERI = "Dal bersaglio: laterale +13,2 metri, verticale -2,4, profondità +1,0, inclinazione -31,4 gradi."
-PAROLE = "Dal bersaglio: a destra, sotto, lungo, in discesa."
+
+
+def blocchi(primo, secondo):
+    """La riga in due blocchi di D24: primo, spazi fino al carattere BLOCCO_DEL_BRAILLE compreso, poi secondo; se primo non ci sta,
+    secondo dopo uno spazio."""
+    return primo.ljust(BLOCCO_DEL_BRAILLE) + secondo if len(primo) < BLOCCO_DEL_BRAILLE else f"{primo} {secondo}"
+
+
+# La legenda del sommario coi numeri (D24), con la voce della precisione globale (D26), e quella delle parole.
+LEGENDA = "L laterale, V verticale, P profondità, in metri; I inclinazione, in gradi; dal bersaglio"
+LEGENDA_CON_G = f"{LEGENDA}; G precisione globale"
+DAL_BERSAGLIO = "Dal bersaglio: lato, altezza, profondità, inclinazione."
+# Le precisioni globali dei voli costruiti a mano (D26): il centro a mezzo metro dal centro del bersaglio, il tiro a vuoto a 2,3 metri
+# dalla superficie del bersaglio di 3,6 metri, sulla diagonale del cubo di 86,6 metri.
+G_DEL_CENTRO = "99,4%"
+G_DEL_MANCATO = "93,2%"
+# Il sommario coi numeri delle misure di serie, e quello a parole, nel tiro a vuoto: la riga e l'annuncio. I valori coi numeri e G non
+# stanno insieme nei 40 caratteri, e G apre il secondo blocco.
+VALORI_NUMERI = "L: +13,2 V: -2,4 P: +1,0 I: -31,4"
+NUMERI = blocchi(VALORI_NUMERI, f"G: {G_DEL_MANCATO}. {LEGENDA_CON_G}.")
+NUMERI_ANNUNCIO = f"{VALORI_NUMERI} G: {G_DEL_MANCATO}"
+PAROLE_SOLE = "A destra, sotto, lungo, in discesa."
+PAROLE = blocchi(PAROLE_SOLE, f"Precisione globale {G_DEL_MANCATO}. {DAL_BERSAGLIO}")
+PAROLE_ANNUNCIO = f"{PAROLE_SOLE} Precisione globale {G_DEL_MANCATO}."
 # La riga del mancato di D6 con le misure di serie, nell'ordine del sommario.
 MANCATO = "Il bersaglio più vicino è stato mancato di 2,3 metri: rispetto al suo centro il tiro è passato a destra di 13,2 metri, sotto di 2,4 metri e lungo di 1 metro."
 
 
 def test_resoconto_di_un_centro():
+    # Un volo senza le misure non ha il sommario: la precisione globale di D26 va nella riga dell'esito, e nell'annuncio.
     messaggio = raccogli(resoconti.resoconto_del_tiro(12, 3, volo(bersaglio()), VALORI, punti=230, totale=1230, riserva=8))
     assert messaggio.tipo == "resoconto"
     assert messaggio.testo.split("\n") == [
-        "Tiro 12, livello 3: colpito un bersaglio, forma dente di sega, raggio 3,6 metri, fermo; 230 punti, precisione 64%, totale 1.230 punti.",
+        f"Tiro 12, livello 3: colpito un bersaglio, forma dente di sega, raggio 3,6 metri, fermo; 230 punti, precisione 64%, precisione globale {G_DEL_CENTRO}, "
+        "totale 1.230 punti.",
         "Mira: direzione 12,4 gradi a destra, 64% della scala; alzo 38,2 gradi, 45%; potenza 27,5 metri al secondo, 50%.",
         "Traiettoria: altezza massima 23,4 metri; impatto a 56,2 metri dal cannone, 3,1 metri a destra del centro, dopo 2,8 secondi di volo.",
         "Il bersaglio stava a 48,3 metri dal cannone, a 22,1 metri d'altezza, 5,2 metri a sinistra del centro.",
     ]
-    assert messaggio.annuncio == "Colpito, 230 punti."
-    assert messaggio.dati == {"tiro": 12, "livello": 3, "colpito": True, "bonus": False, "punti": 230, "totale": 1230, "riserva": 8, "precisione": 0.64}
+    assert messaggio.annuncio == f"Colpito, 230 punti. Precisione globale {G_DEL_CENTRO}."
+    assert messaggio.dati == {"tiro": 12, "livello": 3, "colpito": True, "bonus": False, "punti": 230, "totale": 1230, "riserva": 8, "precisione": 0.64,
+                              "precisione_globale": pytest.approx(1 - 0.5 / (50 * 3 ** 0.5))}
 
 
 def test_resoconto_di_un_bonus_e_di_un_mobile():
     bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0))
     messaggio = raccogli(resoconti.resoconto_del_tiro(7, 4, volo(bonus, precisione=0.5), VALORI, punti=1150, totale=2380, riserva=12))
     assert messaggio.testo.split("\n")[0] == (f"Tiro 7, livello 4: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 50%, "
-                                              f"{COLPI_BONUS} colpi in più, totale 2.380 punti.")
-    assert messaggio.annuncio == "Colpito il bonus, 1.150 punti."
+                                              f"precisione globale {G_DEL_CENTRO}, {COLPI_BONUS} colpi in più, totale 2.380 punti.")
+    assert messaggio.annuncio == f"Colpito il bonus, 1.150 punti. Precisione globale {G_DEL_CENTRO}."
     assert messaggio.dati["bonus"]
     uno = raccogli(resoconti.resoconto_del_tiro(7, 4, volo(bonus), VALORI, punti=1, totale=1, riserva=1, colpi_bonus=1))
-    assert "; 1 punto, precisione 64%, 1 colpo in più, totale 1 punto." in uno.testo
+    assert f"; 1 punto, precisione 64%, precisione globale {G_DEL_CENTRO}, 1 colpo in più, totale 1 punto." in uno.testo
     mobile = bersaglio(raggio=2.0, forma="triangolo", velocita=(2.3, 0.0, 0.0))
     assert resoconti.descrizione_del_bersaglio(mobile) == "forma triangolo, raggio 2 metri, mobile a 2,3 metri al secondo"
     assert resoconti.descrizione_del_bersaglio(bersaglio(raggio=1.0, forma="quadra")) == "forma onda quadra, raggio 1 metro, fermo"
@@ -115,24 +142,24 @@ def test_resoconto_di_un_bonus_e_di_un_mobile():
 def test_resoconto_di_un_tiro_a_vuoto_con_l_aiuto():
     messaggio = raccogli(resoconti.resoconto_del_tiro(4, 1, mancato(), VALORI, riserva=8))
     assert messaggio.testo.split("\n") == [
-        "Tiro 4, livello 1: a vuoto; nella riserva restano 8 colpi.",
+        f"Tiro 4, livello 1: a vuoto, precisione globale {G_DEL_MANCATO}; nella riserva restano 8 colpi.",
         "Mira: direzione 12,4 gradi a destra, 64% della scala; alzo 38,2 gradi, 45%; potenza 27,5 metri al secondo, 50%.",
         "Traiettoria: altezza massima 23,4 metri; a terra a 56,2 metri dal cannone, 3,1 metri a destra del centro, dopo 2,8 secondi di volo.",
         "Il bersaglio più vicino è stato mancato di 2,3 metri: rispetto al suo centro il tiro è passato a sinistra di 0,8 metri, sopra di 1,7 metri e lungo di 1,2 metri.",
     ]
-    assert messaggio.annuncio == "A vuoto, riserva 8, sopra di 1,7 metri."
+    assert messaggio.annuncio == f"A vuoto, riserva 8, sopra di 1,7 metri. Precisione globale {G_DEL_MANCATO}."
     assert not messaggio.dati["colpito"] and messaggio.dati["riserva"] == 8
 
 
 def test_segni_opposti_e_singolari():
     messaggio = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(scarto=(-3.4, 0.5, -0.2), distanza=1.0, azimut=-7.0, laterale_finale=-1.0), VALORI, riserva=1))
     righe = messaggio.testo.split("\n")
-    assert righe[0] == "Tiro 1, livello 1: a vuoto; nella riserva resta 1 colpo."
+    assert righe[0] == "Tiro 1, livello 1: a vuoto, precisione globale 94,7%; nella riserva resta 1 colpo."
     assert righe[1].startswith("Mira: direzione 7 gradi a sinistra, 64% della scala;")
     assert ", 1 metro a sinistra del centro," in righe[2]
     assert righe[3] == ("Il bersaglio più vicino è stato mancato di 1 metro: rispetto al suo centro il tiro è passato a destra di 0,5 metri, sotto di 0,2 metri "
                         "e corto di 3,4 metri.")
-    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri."
+    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri. Precisione globale 94,7%."
     assert resoconti.scarti((0.04, -0.03, 2.0)) == ["sopra di 2 metri"]
     # Lo scarto arriva nell'ordine di fisica.scomponi, e si dice in quello del sommario (D21); le
     # misure che mancano non si dicono.
@@ -162,47 +189,60 @@ def test_segni_opposti_e_singolari():
 def test_tiro_a_vuoto_senza_aiuto_e_a_riserva_vuota():
     oltre = raccogli(resoconti.resoconto_del_tiro(30, AIUTO_MANCATO_FINO_AL_LIVELLO + 1, mancato(), VALORI, riserva=8))
     assert len(oltre.testo.split("\n")) == 3 and "mancato" not in oltre.testo
-    assert oltre.annuncio == "A vuoto, riserva 8."
+    assert oltre.annuncio == f"A vuoto, riserva 8. Precisione globale {G_DEL_MANCATO}."
     forzato = raccogli(resoconti.resoconto_del_tiro(30, AIUTO_MANCATO_FINO_AL_LIVELLO + 1, mancato(), VALORI, riserva=8, aiuto=True))
     assert len(forzato.testo.split("\n")) == 4
     vuota = raccogli(resoconti.resoconto_del_tiro(10, 1, mancato(), VALORI, riserva=0))
-    assert vuota.testo.split("\n")[0] == "Tiro 10, livello 1: a vuoto; la riserva è vuota."
-    assert vuota.annuncio == "A vuoto, riserva vuota."
-    # Un tiro senza bersagli vivi vicini non ha la riga del mancato.
+    assert vuota.testo.split("\n")[0] == f"Tiro 10, livello 1: a vuoto, precisione globale {G_DEL_MANCATO}; la riserva è vuota."
+    assert vuota.annuncio == f"A vuoto, riserva vuota. Precisione globale {G_DEL_MANCATO}."
+    # Un tiro senza bersagli vivi vicini non ha la riga del mancato, né la precisione globale.
     solo = raccogli(resoconti.resoconto_del_tiro(2, 1, volo(), VALORI, riserva=5))
-    assert len(solo.testo.split("\n")) == 3 and solo.annuncio == "A vuoto, riserva 5."
+    assert len(solo.testo.split("\n")) == 3 and solo.annuncio == "A vuoto, riserva 5." and solo.dati["precisione_globale"] is None
+    assert solo.testo.split("\n")[0] == "Tiro 2, livello 1: a vuoto; nella riserva restano 5 colpi."
 
 
 def test_sommario_coi_numeri_in_testa_al_resoconto():
     """D21, i primi livelli: il sommario coi numeri è la prima riga del resoconto; la parte verbosa che
-    segue resta quella senza sommario, riga per riga, e i dati non cambiano. L'annuncio dice prima
-    l'esito, poi il sommario, e l'esito non ripete lo scarto principale, che il sommario dice già."""
+    segue resta quella senza sommario, riga per riga, salvo la precisione globale di D26, che senza il
+    sommario sta nella riga dell'esito; i dati non cambiano. Da D24 la riga ha i valori con le loro
+    iniziali nei primi 40 caratteri e la legenda dal 41°. L'annuncio dice prima l'esito, poi i valori,
+    senza la legenda, e l'esito non ripete lo scarto principale, che il sommario dice già."""
     tiro = mancato(misure=misure())
     for livello in range(1, SOMMARIO_NUMERI_FINO_AL_LIVELLO + 1):
         senza = resoconti.resoconto_del_tiro(4, livello, tiro, VALORI, riserva=8, palestra="niente")
         con = raccogli(resoconti.resoconto_del_tiro(4, livello, tiro, VALORI, riserva=8))
-        assert con.testo.split("\n") == [NUMERI, *senza.testo.split("\n")]
+        righe, righe_senza = con.testo.split("\n"), senza.testo.split("\n")
+        assert righe[0] == NUMERI and righe[0][BLOCCO_DEL_BRAILLE:].startswith(f"G: {G_DEL_MANCATO}. L laterale, ")
+        assert righe[1] == f"Tiro 4, livello {livello}: a vuoto; nella riserva restano 8 colpi."
+        assert righe_senza[0] == f"Tiro 4, livello {livello}: a vuoto, precisione globale {G_DEL_MANCATO}; nella riserva restano 8 colpi."
+        assert righe[2:] == righe_senza[1:]
         assert con.dati == senza.dati
         if livello <= AIUTO_MANCATO_FINO_AL_LIVELLO:
             # La riga del mancato di D6 dice le misure del sommario, nel suo ordine.
-            assert con.testo.split("\n")[-1] == MANCATO
-            assert senza.annuncio == "A vuoto, riserva 8, a destra di 13,2 metri."
-        assert con.annuncio == f"A vuoto, riserva 8. {NUMERI}"
-    # Anche nei centri: di quanto il proiettile è passato lontano dal centro del bersaglio colpito.
+            assert righe[-1] == MANCATO
+            assert senza.annuncio == f"A vuoto, riserva 8, a destra di 13,2 metri. Precisione globale {G_DEL_MANCATO}."
+        assert con.annuncio == f"A vuoto, riserva 8. {NUMERI_ANNUNCIO}"
+    # Anche nei centri: di quanto il proiettile è passato lontano dal centro del bersaglio colpito. Coi valori corti, la
+    # precisione globale sta nel primo blocco, se ci lascia almeno uno spazio prima del secondo.
     centro = raccogli(resoconti.resoconto_del_tiro(12, 1, volo(bersaglio(), misure=misure(0.3, 0.04, -0.06, 12.0)), VALORI, punti=230, totale=1230, riserva=8))
     righe = centro.testo.split("\n")
-    assert righe[0] == "Dal bersaglio: laterale +0,3 metri, verticale 0,0, profondità -0,1, inclinazione +12,0 gradi."
-    assert righe[1].startswith("Tiro 12, livello 1: colpito un bersaglio, ") and len(righe) == 5
-    assert centro.annuncio == f"Colpito, 230 punti. {righe[0]}"
+    assert len("L: +0,3 V: 0,0 P: -0,1 I: +12,0 G: 99,4%") == BLOCCO_DEL_BRAILLE
+    assert righe[0] == blocchi("L: +0,3 V: 0,0 P: -0,1 I: +12,0", f"G: {G_DEL_CENTRO}. {LEGENDA_CON_G}.")
+    assert righe[1].startswith("Tiro 12, livello 1: colpito un bersaglio, ") and "globale" not in righe[1] and len(righe) == 5
+    assert centro.annuncio == f"Colpito, 230 punti. L: +0,3 V: 0,0 P: -0,1 I: +12,0 G: {G_DEL_CENTRO}"
+    pieno = raccogli(resoconti.resoconto_del_tiro(13, 1, volo(bersaglio(), misure=misure(0.0, 0.0, 0.0, -45.8)), VALORI, punti=230, totale=1460, riserva=8))
+    assert pieno.testo.split("\n")[0] == blocchi(f"L: 0,0 V: 0,0 P: 0,0 I: -45,8 G: {G_DEL_CENTRO}", f"{LEGENDA_CON_G}.")
+    assert pieno.annuncio == f"Colpito, 230 punti. L: 0,0 V: 0,0 P: 0,0 I: -45,8 G: {G_DEL_CENTRO}"
     # E nel bonus, dove l'annuncio ha le sue parole.
     bonus = bersaglio(raggio=2.9, forma="seno", bonus=True, velocita=(3.9, 0.0, 0.0))
     preso = raccogli(resoconti.resoconto_del_tiro(7, 2, volo(bonus, misure=misure()), VALORI, punti=1150, totale=2380, riserva=12))
-    assert preso.testo.split("\n")[:2] == [NUMERI, f"Tiro 7, livello 2: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 64%, "
-                                                  f"{COLPI_BONUS} colpi in più, totale 2.380 punti."]
-    assert preso.annuncio == f"Colpito il bonus, 1.150 punti. {NUMERI}"
+    assert preso.testo.split("\n")[:2] == [blocchi(VALORI_NUMERI, f"G: {G_DEL_CENTRO}. {LEGENDA_CON_G}."),
+                                            f"Tiro 7, livello 2: colpito il bonus, forma seno, raggio 2,9 metri; 1.150 punti, precisione 64%, "
+                                            f"{COLPI_BONUS} colpi in più, totale 2.380 punti."]
+    assert preso.annuncio == f"Colpito il bonus, 1.150 punti. {VALORI_NUMERI} G: {G_DEL_CENTRO}"
     # A riserva vuota l'esito resta il suo, e il sommario lo segue.
     vuota = raccogli(resoconti.resoconto_del_tiro(10, 1, tiro, VALORI, riserva=0))
-    assert vuota.annuncio == f"A vuoto, riserva vuota. {NUMERI}"
+    assert vuota.annuncio == f"A vuoto, riserva vuota. {NUMERI_ANNUNCIO}"
 
 
 def test_segni_del_sommario():
@@ -215,9 +255,9 @@ def test_segni_del_sommario():
     assert resoconti.con_segno(-0.06) == "-0,1" and resoconti.con_segno(0.06) == "+0,1"
     assert resoconti.con_segno(1234.56) == "+1.234,6"
     riga = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(misure=misure(-7.0, 0.0, -0.04, 0.0)), VALORI, riserva=9)).testo.split("\n")[0]
-    assert riga == "Dal bersaglio: laterale -7,0 metri, verticale 0,0, profondità 0,0, inclinazione 0,0 gradi."
-    assert resoconti.riga_del_sommario(volo(misure=misure(0.0, 25.5, -40.3, 87.2)), "numeri") == (
-        "Dal bersaglio: laterale 0,0 metri, verticale +25,5, profondità -40,3, inclinazione +87,2 gradi.")
+    assert riga == blocchi(f"L: -7,0 V: 0,0 P: 0,0 I: 0,0 G: {G_DEL_MANCATO}", f"{LEGENDA_CON_G}.")
+    # Senza un bersaglio vicino non c'è la precisione globale, e nemmeno la sua voce nella legenda.
+    assert resoconti.riga_del_sommario(volo(misure=misure(0.0, 25.5, -40.3, 87.2)), "numeri") == blocchi("L: 0,0 V: +25,5 P: -40,3 I: +87,2", f"{LEGENDA}.")
     # Il meno è il trattino, che NVDA legge meno e il braille mostra in una cella: niente meno tipografico.
     assert chr(0x2212) not in riga and riga.count("-") == 1
 
@@ -225,59 +265,72 @@ def test_segni_del_sommario():
 def test_sommario_a_parole_e_le_soglie(monkeypatch):
     """D21, i livelli di mezzo: soltanto le parole, nell'ordine laterale, verticale, profondità e
     inclinazione; sotto la sua soglia un asse va bene, dalla soglia in su ha la sua direzione."""
+    secondo = f"Precisione globale {G_DEL_MANCATO}. {DAL_BERSAGLIO}"
+
     def parole(*valori):
-        return raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(misure=misure(*valori)), VALORI, riserva=9, palestra="parole")).testo.split("\n")[0]
+        """Il primo blocco della riga a parole; il secondo è sempre la precisione globale e il punto di vista (D24, D26)."""
+        riga = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(misure=misure(*valori)), VALORI, riserva=9, palestra="parole")).testo.split("\n")[0]
+        assert riga.endswith(secondo)
+        primo = riga[:-len(secondo)].rstrip()
+        assert riga == blocchi(primo, secondo)
+        return primo
 
     laterale, verticale, profondita, inclinazione = SOMMARIO_SOGLIA_LATERALE, SOMMARIO_SOGLIA_VERTICALE, SOMMARIO_SOGLIA_PROFONDITA, SOMMARIO_SOGLIA_INCLINAZIONE
-    assert parole() == PAROLE
-    assert parole(-2 * laterale, 2 * verticale, -2 * profondita, 2 * inclinazione) == "Dal bersaglio: a sinistra, sopra, corto, in salita."
-    giuste = "Dal bersaglio: in linea, all'altezza giusta, alla distanza giusta, in cima."
+    assert parole() == PAROLE_SOLE
+    assert raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(misure=misure()), VALORI, riserva=9, palestra="parole")).testo.split("\n")[0] == PAROLE
+    assert parole(-2 * laterale, 2 * verticale, -2 * profondita, 2 * inclinazione) == "A sinistra, sopra, corto, in salita."
+    giuste = "In linea, all'altezza giusta, alla distanza giusta, in cima."
     assert parole(0.99 * laterale, -0.99 * verticale, 0.99 * profondita, -0.99 * inclinazione) == giuste
     assert parole(0.0, 0.0, 0.0, 0.0) == giuste
     # Sulla soglia l'asse non va più bene.
-    assert parole(laterale, -verticale, profondita, -inclinazione) == PAROLE
-    assert parole(-laterale, verticale, -profondita, inclinazione) == "Dal bersaglio: a sinistra, sopra, corto, in salita."
+    assert parole(laterale, -verticale, profondita, -inclinazione) == PAROLE_SOLE
+    assert parole(-laterale, verticale, -profondita, inclinazione) == "A sinistra, sopra, corto, in salita."
     assert resoconti.parole_delle_misure(misure()) == ["a destra", "sotto", "lungo", "in discesa"]
     assert resoconti.parole_delle_misure(misure(arriva=False)) == [None, None, "lungo", None]
     assert resoconti.parole_delle_misure(misure(ricade=False)) == ["a destra", "sotto", None, "in discesa"]
     # Le soglie sono quelle di costanti.py: alzate, i numeri di prima vanno bene; a zero, ogni scarto ha la sua direzione.
     monkeypatch.setattr(resoconti, "SOMMARIO_SOGLIA_LATERALE", 20.0)
     monkeypatch.setattr(resoconti, "SOMMARIO_SOGLIA_INCLINAZIONE", 45.0)
-    assert parole() == "Dal bersaglio: in linea, sotto, lungo, in cima."
+    assert parole() == "In linea, sotto, lungo, in cima."
     for nome in ("SOMMARIO_SOGLIA_LATERALE", "SOMMARIO_SOGLIA_VERTICALE", "SOMMARIO_SOGLIA_PROFONDITA", "SOMMARIO_SOGLIA_INCLINAZIONE"):
         monkeypatch.setattr(resoconti, nome, 0.0)
-    assert parole(0.01, -0.01, 0.01, -0.01) == PAROLE
+    assert parole(0.01, -0.01, 0.01, -0.01) == PAROLE_SOLE
     assert parole(0.0, 0.0, 0.0, 0.0) == giuste
 
 
 def test_sommario_con_le_misure_che_mancano():
-    """D21: una misura che non esiste si dice a parole, non con un numero. Il tiro che cade prima della
-    distanza del bersaglio non ha laterale, verticale né inclinazione; quello che, scendendo, resta
-    sempre sotto il centro del bersaglio non ha la profondità. La riga del mancato tace le misure che
-    mancano, e l'annuncio resta l'esito più il sommario."""
+    """D21: una misura che non esiste non ha un numero. Il tiro che cade prima della distanza del
+    bersaglio non ha laterale, verticale né inclinazione; quello che, scendendo, resta sempre sotto il
+    centro del bersaglio non ha la profondità. Da D24 al grado dei numeri la misura che manca ha la sua
+    iniziale e la parola manca, e la legenda dice perché; a parole si dice come prima. La riga del
+    mancato tace le misure che mancano, e l'annuncio resta l'esito più il primo blocco."""
     def sommari(**quali):
         tiro = mancato(misure=misure(-0.6, 3.2, -12.34, 41.0, **quali))
         return resoconti.riga_del_sommario(tiro, "numeri"), resoconti.riga_del_sommario(tiro, "parole")
 
-    assert sommari(ricade=False) == ("Dal bersaglio: laterale -0,6 metri, verticale +3,2, profondità non misurabile, inclinazione +41,0 gradi.",
-                                     "Dal bersaglio: a sinistra, sopra, profondità non misurabile, in salita.")
-    assert sommari(arriva=False) == ("Dal bersaglio: cade prima della sua distanza, profondità -12,3 metri.",
-                                     "Dal bersaglio: cade prima della sua distanza, corto.")
-    nessuna = "Dal bersaglio: cade prima della sua distanza, profondità non misurabile."
-    assert sommari(arriva=False, ricade=False) == (nessuna, nessuna)
+    sotto = "P manca: scendendo, il tiro resta sempre sotto il centro del bersaglio"
+    prima = "L, V e I mancano: il tiro cade prima della distanza del bersaglio"
+    globale = f"Precisione globale {G_DEL_MANCATO}. {DAL_BERSAGLIO}"
+    assert sommari(ricade=False) == (blocchi("L: -0,6 V: +3,2 P: manca I: +41,0", f"G: {G_DEL_MANCATO}. {LEGENDA_CON_G}; {sotto}."),
+                                     blocchi("A sinistra, sopra, profondità non misurabile, in salita.", globale))
+    assert sommari(arriva=False) == (blocchi("L: manca V: manca P: -12,3 I: manca", f"G: {G_DEL_MANCATO}. {LEGENDA_CON_G}; {prima}."),
+                                     blocchi("Cade prima della sua distanza, corto.", globale))
+    assert sommari(arriva=False, ricade=False) == (blocchi("L: manca V: manca P: manca I: manca", f"G: {G_DEL_MANCATO}. {LEGENDA_CON_G}; {prima}; {sotto}."),
+                                                   blocchi("Cade prima della sua distanza, profondità non misurabile.", globale))
     corto = raccogli(resoconti.resoconto_del_tiro(3, 1, mancato(misure=misure(profondita=-12.34, arriva=False)), VALORI, riserva=8))
     righe = corto.testo.split("\n")
-    assert righe[0] == "Dal bersaglio: cade prima della sua distanza, profondità -12,3 metri."
+    assert righe[0] == sommari(arriva=False)[0]
     assert righe[-1] == "Il bersaglio più vicino è stato mancato di 2,3 metri: rispetto al suo centro il tiro è passato corto di 12,3 metri."
-    assert corto.annuncio == f"A vuoto, riserva 8. {righe[0]}"
+    assert corto.annuncio == f"A vuoto, riserva 8. L: manca V: manca P: -12,3 I: manca G: {G_DEL_MANCATO}"
     niente = raccogli(resoconti.resoconto_del_tiro(3, 1, mancato(misure=misure(arriva=False, ricade=False)), VALORI, riserva=8))
     assert niente.testo.split("\n")[-1] == "Il bersaglio più vicino è stato mancato di 2,3 metri."
-    assert niente.annuncio == f"A vuoto, riserva 8. {nessuna}"
+    assert niente.annuncio == f"A vuoto, riserva 8. L: manca V: manca P: manca I: manca G: {G_DEL_MANCATO}"
     # Al grado delle parole, con l'aiuto di D6 chiesto a mano, lo scarto principale resta nell'esito,
     # perché le parole non ne dicono la misura.
     aiutato = raccogli(resoconti.resoconto_del_tiro(3, 1, mancato(misure=misure(-0.6, 3.2, -12.34, 41.0, ricade=False)), VALORI, riserva=8, palestra="parole",
                                                     aiuto=True))
-    assert aiutato.annuncio == "A vuoto, riserva 8, sopra di 3,2 metri. Dal bersaglio: a sinistra, sopra, profondità non misurabile, in salita."
+    assert aiutato.annuncio == (f"A vuoto, riserva 8, sopra di 3,2 metri. A sinistra, sopra, profondità non misurabile, in salita. "
+                                f"Precisione globale {G_DEL_MANCATO}.")
 
 
 def test_la_palestra_ai_confini_dei_livelli():
@@ -295,11 +348,11 @@ def test_la_palestra_ai_confini_dei_livelli():
     for livello in (numeri + 1, parole):
         messaggio = resoconto(livello)
         assert messaggio.testo.split("\n")[:2] == [PAROLE, f"Tiro 5, livello {livello}: a vuoto; nella riserva restano 8 colpi."]
-        assert messaggio.annuncio.startswith("A vuoto, riserva 8") and messaggio.annuncio.endswith(f". {PAROLE}")
+        assert messaggio.annuncio.startswith("A vuoto, riserva 8") and messaggio.annuncio.endswith(f". {PAROLE_ANNUNCIO}")
     oltre = resoconto(parole + 1)
-    assert oltre.testo.split("\n")[0] == f"Tiro 5, livello {parole + 1}: a vuoto; nella riserva restano 8 colpi."
-    assert oltre.annuncio.startswith("A vuoto, riserva 8") and "Dal bersaglio" not in oltre.testo and "Dal bersaglio" not in oltre.annuncio
-    # Senza sommario l'annuncio è quello di prima di D21.
+    # Senza sommario la precisione globale di D26 sta nella riga dell'esito, e l'annuncio è l'esito più lei.
+    assert oltre.testo.split("\n")[0] == f"Tiro 5, livello {parole + 1}: a vuoto, precisione globale {G_DEL_MANCATO}; nella riserva restano 8 colpi."
+    assert oltre.annuncio == f"A vuoto, riserva 8. Precisione globale {G_DEL_MANCATO}." and "L: " not in oltre.testo and "Dal bersaglio" not in oltre.testo
     assert oltre.annuncio == resoconti.resoconto_del_tiro(5, parole + 1, mancato(), VALORI, riserva=8).annuncio
     # palestra vince sul livello, in tutti e due i versi.
     assert resoconto(parole + 10, palestra="numeri").testo.split("\n")[0] == NUMERI
@@ -361,6 +414,10 @@ def test_primati():
     assert resoconti.riga_del_primato("partita_piu_lunga", 252) == "Nuovo primato: la partita più lunga, 4 minuti e 12 secondi."
     assert resoconti.riga_del_primato("partita_piu_lunga") == "Nuovo primato: la partita più lunga."
     assert resoconti.riga_del_primato("tiri_lunghi", 3.5) == "Nuovo primato: tiri lunghi, 3,5."
+    # I due primati della precisione globale (D26), col decimale.
+    assert resoconti.riga_del_primato("precisione_globale", 0.9734) == "Nuovo primato: la precisione globale migliore in un tiro, 97,3%."
+    assert resoconti.riga_del_primato("precisione_globale_media", 0.8) == "Nuovo primato: la precisione globale media migliore in una partita, 80,0%."
+    assert resoconti.primato_scritto("precisione_globale", 0.97341) == resoconti.primato_scritto("precisione_globale", 0.97349)
 
 
 def test_primato_scritto():
@@ -411,10 +468,17 @@ def test_righe_della_barra():
     assert resoconti.righe_della_barra("ascolto", livello=3, punti=1230, riserva=8, centri_del_livello=4, bersagli=2, bonus=True) == [
         "Livello 3, 1.230 punti", f"Riserva 8, centri 4 su {CENTRI_PER_LIVELLO}", "Bersagli in volo: 2 e il bonus", "Ascolto: Spazio per mirare"]
     assert resoconti.righe_della_barra("ascolto", livello=1, punti=1, bersagli=1)[0] == "Livello 1, 1 punto"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="alzo", sottofase="conto")[-1] == "Mira: alzo, bip"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="potenza", sottofase="scivolata")[-1] == "Mira: potenza, scivolata"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="pausa")[-1] == "Mira: direzione, pausa"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione")[-1] == "Mira: direzione"
+    # Nella mira la riga dice che Esc la annulla (D25), nei 40 caratteri del display braille.
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="alzo", sottofase="conto")[-1] == "Mira: alzo, bip; Esc annulla"
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="potenza", sottofase="scivolata")[-1] == "Mira: potenza, scivolata; Esc annulla"
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="pausa")[-1] == "Mira: direzione, pausa; Esc annulla"
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione")[-1] == "Mira: direzione; Esc annulla"
+    assert len(resoconti.riga_della_fase("mira", parametro="direzione", sottofase="scivolata")) <= BLOCCO_DEL_BRAILLE
+    # Dal secondo passaggio della barra il passaggio va nel secondo blocco, dal carattere 41.
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="scivolata", passaggio=1)[-1] == (
+        "Mira: direzione, scivolata; Esc annulla")
+    riga = resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="scivolata", passaggio=PASSAGGI_DELLA_BARRA)[-1]
+    assert riga == blocchi("Mira: direzione, scivolata; Esc annulla", f"passaggio {PASSAGGI_DELLA_BARRA} di {PASSAGGI_DELLA_BARRA}")
     assert resoconti.righe_della_barra("volo", livello=1, bersagli=1)[-1] == "Volo"
     assert resoconti.righe_della_barra("volo", in_pausa=True, livello=1, bersagli=1)[-1] == "In pausa: Ctrl+P per riprendere"
     assert resoconti.righe_della_barra("finita", livello=2, punti=500, riserva=0, centri_del_livello=3) == [
@@ -449,6 +513,40 @@ def test_i_messaggi_della_palestra():
     assert resoconti.pausa_solo_in_palestra(1000).testo.endswith("fino al livello 1.000.")
 
 
+def test_in_blocchi():
+    """D24: il secondo blocco comincia dal carattere seguente BLOCCO_DEL_BRAILLE; un primo blocco che non ci sta, con almeno uno
+    spazio, si allunga, e il secondo lo segue dopo uno spazio; senza secondo blocco resta il primo."""
+    assert resoconti.in_blocchi("abc", "def") == "abc" + " " * (BLOCCO_DEL_BRAILLE - 3) + "def"
+    assert resoconti.in_blocchi("abc", "def").index("def") == BLOCCO_DEL_BRAILLE
+    pieno = "x" * BLOCCO_DEL_BRAILLE
+    assert resoconti.in_blocchi(pieno, "def") == f"{pieno} def"
+    assert resoconti.in_blocchi("x" * (BLOCCO_DEL_BRAILLE - 1), "def") == "x" * (BLOCCO_DEL_BRAILLE - 1) + " def"
+    assert resoconti.in_blocchi("abc", "") == "abc" and resoconti.in_blocchi("abc", "d", larghezza=5) == "abc  d"
+
+
+def test_il_proiettile_perduto_e_la_mira_annullata():
+    """D25: il resoconto del proiettile perduto dice la barra e i passaggi, conta come un tiro a vuoto e non ha precisione globale;
+    la mira annullata con Esc dice che il proiettile resta nella riserva."""
+    perduto = raccogli(resoconti.proiettile_perduto(6, 2, "alzo", 5, 7, totale=430))
+    assert perduto.tipo == "resoconto" and perduto.testo.split("\n") == [
+        "Tiro 6, livello 2: proiettile perduto; nella riserva restano 7 colpi.",
+        "La barra dell'alzo è passata 5 volte senza lo Spazio: il colpo non è partito, e il proiettile conta come un tiro a vuoto."]
+    assert perduto.annuncio == "Proiettile perduto, riserva 7."
+    assert perduto.dati == {"tiro": 6, "livello": 2, "colpito": False, "bonus": False, "punti": 0, "totale": 430, "riserva": 7, "precisione": None,
+                            "precisione_globale": None, "perduto": True, "parametro": "alzo", "passaggi": 5}
+    ultimo = raccogli(resoconti.proiettile_perduto(1, 1, "direzione", 1, 0))
+    assert ultimo.testo.split("\n") == ["Tiro 1, livello 1: proiettile perduto; la riserva è vuota.",
+                                        "La barra della direzione è passata 1 volta senza lo Spazio: il colpo non è partito, e il proiettile conta come un "
+                                        "tiro a vuoto."]
+    assert ultimo.annuncio == "Proiettile perduto, riserva vuota."
+    assert raccogli(resoconti.proiettile_perduto(2, 1, "potenza", 5, 1)).testo.split("\n")[0] == "Tiro 2, livello 1: proiettile perduto; nella riserva resta 1 colpo."
+    annullata = raccogli(resoconti.mira_annullata(10))
+    assert (annullata.tipo, annullata.annuncio, annullata.dati) == ("info", "Mira annullata.", {"riserva": 10})
+    assert annullata.testo == "Mira annullata con Esc: il proiettile resta nella riserva, che ha 10 colpi, e i bersagli tornano a cantare. Spazio per mirare di nuovo."
+    in_pausa = raccogli(resoconti.mira_annullata(1, in_pausa=True))
+    assert in_pausa.testo == "Mira annullata con Esc: il proiettile resta nella riserva, che ha 1 colpo, e la partita resta in pausa. Ctrl+P per riprendere."
+
+
 def test_messaggio_di_tipo_sconosciuto():
     with pytest.raises(ValueError):
         Messaggio("strano", "testo")
@@ -476,6 +574,9 @@ def _campionario():
                                                          {"punteggio": 1234567, "livello": 12, "centri_in_una_partita": 120, "partita_piu_lunga": 4000.0}),
         resoconti.partita_abbandonata(riepilogo), resoconti.in_pausa(), resoconti.ripresa(), resoconti.in_pausa(nella_mira=True), resoconti.nessuna_partita(),
         resoconti.pausa_solo_in_palestra(3), resoconti.attesa_della_palestra(0), resoconti.attesa_della_palestra(1), resoconti.attesa_della_palestra(4),
+        resoconti.proiettile_perduto(3, 4, "potenza", PASSAGGI_DELLA_BARRA, 6), resoconti.proiettile_perduto(3, 4, "direzione", 1, 0),
+        resoconti.mira_annullata(12), resoconti.mira_annullata(1, in_pausa=True),
+        resoconti.resoconto_del_tiro(10, SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, volo(bersaglio()), VALORI, punti=200, totale=400, riserva=7),
     ]
     testi_ = [*TESTI]
     for messaggio in messaggi:
@@ -485,6 +586,8 @@ def _campionario():
                                                   sottofase="scivolata"))
     for ferma, nasceranno in ((False, 0), (True, 0), (True, 1), (True, 4)):
         testi_.append(resoconti.riga_dell_attesa(ferma, nasceranno))
+    for passaggio in range(1, PASSAGGI_DELLA_BARRA + 1):
+        testi_.append(resoconti.riga_della_fase("mira", parametro="potenza", sottofase="scivolata", passaggio=passaggio))
     return testi_
 
 

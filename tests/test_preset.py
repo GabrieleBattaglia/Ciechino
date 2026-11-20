@@ -23,7 +23,7 @@ import pytest
 from GBUtils import Acusticator, parse_banda, scomponi_nota
 
 import suoni
-from costanti import FS
+from costanti import FS, PASSAGGI_DELLA_BARRA
 from strumenti import crea_preset, elenco_suoni
 
 # Gli eventi della 0.1.0, come li elenca docs/progetto.txt: per il gioco, poi per la finestra.
@@ -44,6 +44,8 @@ EVENTI_DEL_CONTRATTO = (
     "scheda_audio", "scheda_non_aperta",
     # Gli Ascolti, il tutorial audio (D23): il suono della loro apertura, dai menu o da soli all'avvio.
     "ascolti",
+    # Le barre che aspettano lo spazio (D25): Esc che annulla la mira, e il proiettile perduto.
+    "mira_annullata", "proiettile_perduto",
 )
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98
@@ -287,6 +289,25 @@ def test_il_suono_degli_ascolti(creata):
     panorami = [quartina[2] for quartina in creata.dati[nome]["score"] if quartina[0] != "p"]
     assert panorami[0] < 0 < panorami[1] and panorami[-1] == 0
     assert "Ascolti" in suoni.AZIONI["ascolti"]
+
+
+def test_i_suoni_della_mira_annullata_e_del_proiettile_perduto(creata):
+    """D25: la mira annullata con Esc sta con la mira, il respiro di ciechino_mira_avviata che si lascia andare, nello stesso rumore
+    marrone, con la banda che scende invece di salire; il proiettile perduto sta coi tiri, rumore bianco come lo sparo che non c'è.
+    Le descrizioni dicono la durata vera, e le azioni dicono Esc e i passaggi."""
+    gruppi = dict(suoni.GRUPPI)
+    assert "mira_annullata" in gruppi["La mira"] and "proiettile_perduto" in gruppi["Il tiro e i suoi esiti"]
+    for evento, millesimi in (("mira_annullata", 180), ("proiettile_perduto", 600)):
+        nome = suoni.EVENTI[evento]
+        assert nome == f"ciechino_{evento}"
+        assert round(crea_preset.durata(creata.dati[nome]["score"]) * 1000) == millesimi, evento
+        assert f"in {millesimi} ms" in creata.dati[nome]["descrizione"], evento
+    annullata, avviata = creata.dati["ciechino_mira_annullata"], creata.dati["ciechino_mira_avviata"]
+    assert annullata["kind"] == avviata["kind"] in KIND_DI_RUMORE
+    inizio, fine = _altezze(annullata["score"][0][0], True)
+    assert fine < inizio
+    assert creata.dati["ciechino_proiettile_perduto"]["kind"] == creata.dati[suoni.EVENTI["sparo"]]["kind"]
+    assert "Esc" in suoni.AZIONI["mira_annullata"] and str(PASSAGGI_DELLA_BARRA) in suoni.AZIONI["proiettile_perduto"]
 
 
 def test_sparo_colpiti_e_terra_sono_di_rumore(creata):

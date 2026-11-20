@@ -316,7 +316,8 @@ def test_righe_piene():
     assert "Direzione, valori presi: 1." in righe
     assert "Direzione, scelti con lo spazio nella scivolata: 1, 100%." in righe
     assert "Alzo, fermati al minimo nei bip: 1, 100%." in righe
-    assert "Potenza, arrivati al massimo senza lo spazio: 1, 100%." in righe
+    # Da D25 il massimo si prende soltanto con lo spazio, appena finita la scivolata.
+    assert "Potenza, presi al massimo con lo spazio appena finita la scivolata: 1, 100%." in righe
     assert "Direzione, valore medio: 55% della scala." in righe
     assert "Direzione, valori per fasce della scala: da 50 a 60%: 1." in righe
     assert "Bersagli mobili: 1 apparso, 0 colpiti, 0%." in righe
@@ -378,6 +379,59 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     # Nessuno di loro finisce negli altri conti, che restano per le chiavi nuove.
     assert not any("altri conti" in r for r in righe)
     assert [r for r in righe if r.startswith("Sezione ")][-1] == "Sezione 8 di 8, i suoni."
+
+
+def test_la_mira_di_d25_con_le_sue_etichette():
+    """D25: le mire annullate con Esc, le barre ripartite senza lo spazio e i proiettili perduti stanno nei tiri, dopo le mire avviate."""
+    s = nuove()
+    s.conta("mire_avviate", 9)
+    s.conta("mire_annullate", 2)
+    s.conta("barre_ripartite", 7)
+    s.conta("proiettili_perduti", 1)
+    righe = s.righe()
+    mire = righe.index("Mire avviate: 9.")
+    assert righe[mire + 1:mire + 4] == ["Mire annullate con Esc: 2.", "Barre della mira ripartite da capo senza lo spazio: 7.",
+                                        "Proiettili perduti, con una barra mai fermata dallo spazio: 1."]
+    assert not any("altri conti" in r for r in righe)
+
+
+def test_la_precisione_globale(cartella_di_prova):
+    """D26: la precisione globale di ogni tiro dà la media dei tiri e il primato della migliore; quella media di ogni partita va fra
+    le ultime partite, dà la media per partita e il suo primato. Un tiro o una partita senza, come il proiettile perduto o le
+    partite di prima di D26, non contano nelle medie, e i dati di prima si leggono."""
+    orologio = Orologio()
+    s = statistiche.Statistiche(ora=orologio)
+    assert s.tiro((0.5, 0.5, 0.5), esito(precisione_globale=0.95)) == []
+    assert s.tiro((0.1, 0.1, 0.1), esito(colpito=False, distanza_dal_vicino=9.0, precisione_globale=0.8)) == []
+    assert s.tiro((0.5, 0.5, 0.5), esito(precisione=0.6, precisione_globale=0.975, distanza_dal_vicino=0.4)) == ["precisione", "vicino", "precisione_globale"]
+    assert s.tiro((0.2, 0.2, 0.2), esito(colpito=False, distanza_dal_vicino=None, precisione_globale=None)) == []
+    somme = s.dati["somme"]
+    assert somme["tiri_col_globale"] == 3 and abs(somme["precisione_globale"] - 2.725) < 1e-9
+    assert s.dati["primati"]["precisione_globale"]["valore"] == 0.975
+    assert s.partita_finita({"punteggio": 300, "livello": 1, "tiri": 4, "centri": 2, "durata_s": 60.0, "motivo": "abbandonata",
+                             "precisione_globale": 0.90833333}) == []
+    assert s.partita_finita({"punteggio": 100, "livello": 1, "tiri": 1, "centri": 1, "durata_s": 10.0, "motivo": "riserva_vuota",
+                             "precisione_globale": 0.95}) == ["precisione_globale_media"]
+    s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": None})
+    s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": 1.7})
+    assert [p["precisione_globale"] for p in s.dati["ultime"]] == [0.9083, 0.95, None, None]
+    assert somme["partite_col_globale"] == 2 and abs(somme["globale_delle_partite"] - 1.8583) < 1e-9
+    righe = s.righe()
+    assert "Precisione globale media dei tiri: 90,8%." in righe
+    assert "Precisione globale media per partita: 92,9%." in righe
+    assert "La precisione globale migliore in un tiro: 97,5%, giovedì 19 novembre 2026." in righe
+    assert "La precisione globale media migliore in una partita: 95,0%, giovedì 19 novembre 2026." in righe
+    assert "Giovedì 19 novembre 2026 alle 18:03: 100 punti, livello 1, 1 centro su 1 tiro, precisione globale media 95,0%, 10 secondi, finita a riserva vuota." in righe
+    assert "Giovedì 19 novembre 2026 alle 18:03: 0 punti, livello 1, 0 centri su 1 tiro, 5 secondi, finita a riserva vuota." in righe
+    # I file di prima di D26, senza le somme nuove e senza la precisione delle ultime partite, si leggono da zero.
+    grezzi = json.loads(json.dumps(s.dati))
+    for chiave in ("precisione_globale", "tiri_col_globale", "globale_delle_partite", "partite_col_globale"):
+        del grezzi["somme"][chiave]
+    for partita in grezzi["ultime"]:
+        del partita["precisione_globale"]
+    letto = statistiche.Statistiche(dati=grezzi, ora=orologio)
+    assert letto.dati["somme"]["tiri_col_globale"] == 0 and all(p["precisione_globale"] is None for p in letto.dati["ultime"])
+    assert letto.righe()
 
 
 def test_ogni_chiave_dei_conti_ha_la_sua_riga():

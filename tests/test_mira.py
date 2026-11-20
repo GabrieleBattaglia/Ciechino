@@ -1,5 +1,6 @@
 """
-Le prove di mira.py: i quattro esiti di valore_scelto, la compensazione del tasto e la scadenza.
+Le prove di mira.py: i quattro esiti di valore_scelto, la compensazione del tasto e la scadenza, che da D25
+fa ricominciare la barra invece di darle il massimo.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
 """
@@ -81,3 +82,14 @@ def test_scaduta():
     assert mira.scaduta(fine + margine, INIZIO, Finta())
     assert mira.scaduta(fine, INIZIO, Finta(), margine=0.0)
     assert set(mira.ESITI) == {"pausa", "minimo", "scelto", "massimo"}
+
+
+def test_il_massimo_vale_fino_alla_scadenza():
+    """D25: dopo la fine della scala, e finché la barra non scade, lo spazio prende il massimo; dalla scadenza la partita fa
+    ricominciare la barra, e il massimo senza spazio non c'è più. Le due funzioni si danno il cambio senza buchi."""
+    fine = INIZIO + 11_000
+    margine = MARGINE_DOPO_LA_SCIVOLATA * FS
+    for campione in (fine, fine + margine / 2, fine + margine - 1):
+        assert mira.valore_scelto(campione, INIZIO, Finta(), compensazione=0.0) == (1.0, "massimo")
+        assert not mira.scaduta(campione, INIZIO, Finta())
+    assert mira.scaduta(fine + margine, INIZIO, Finta())

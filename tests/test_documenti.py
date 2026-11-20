@@ -18,6 +18,9 @@ tabella dei menu della finestra, senza aprirla.
 Col sommario del resoconto (D21) e la palestra delle attese (D22) il manuale dice fino a quale livello vanno i
 numeri, le parole, le attese e la pausa di Ctrl+P, con le soglie del sommario e la grazia dello spazio: anche
 questi si confrontano con costanti.py, e l'avviso di Ctrl+P fuori dalla palestra con quello di resoconti.py.
+Dal secondo collaudo (D24, D25 e D26) il manuale dice il secondo di silenzio prima del resoconto, i blocchi di
+40 caratteri del sommario con la sua legenda, i passaggi delle barre, Esc nella mira col suo messaggio e la
+precisione globale con la diagonale del cubo; e ogni versione ha il suo blocco nel CHANGELOG.
 """
 
 import re
@@ -31,14 +34,22 @@ import testi
 from bersagli import raggio_del_livello, velocita_del_livello
 from costanti import (
     ALZO_FREQUENZE,
+    BLOCCO_DEL_BRAILLE,
+    COLPI_INIZIALI,
+    DIAGONALE_DEL_CUBO,
     ESCURSIONE_A_CASO,
     FORME_LFO,
     GRAZIA_DELL_ATTESA,
     LIVELLO_DEI_BONUS,
     PALESTRA_FINO_AL_LIVELLO,
+    PASSAGGI_DELLA_BARRA,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
     RAGGIO_BONUS_FATTORE,
+    RAGGIO_INIZIALE,
+    RAGGIO_MINIMO,
+    RAGGIO_PROIETTILE,
+    RITARDO_DEL_RESOCONTO,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     SOMMARIO_SOGLIA_INCLINAZIONE,
@@ -63,6 +74,8 @@ ORDINALI = ("", "primo", "secondo", "terzo", "quarto", "quinto", "sesto", "setti
 # valore nuovo va scritto anche qui, e nel manuale.
 SOGLIE_A_PAROLE = {0.5: "Uno scarto sotto il mezzo metro"}
 GRAZIE_A_PAROLE = {0.5: "o nel mezzo secondo che segue"}
+# Come il manuale dice il ritardo del resoconto dopo l'effetto (D24).
+RITARDI_A_PAROLE = {1.0: "dopo un secondo di silenzio"}
 # Gli elementi HTML che non si chiudono.
 VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
@@ -129,9 +142,12 @@ def _manuale():
 
 
 def test_il_changelog_dice_quanti_sono_i_suoni():
-    blocco = _blocco_della_versione(_leggi("CHANGELOG.md"), VERSIONE)
-    trovato = re.search(r"(\d+) in tutto, in (\d+) gruppi", blocco)
-    assert trovato, "il blocco della versione non dice più quanti sono i suoni: «N in tutto, in M gruppi»"
+    """Il blocco più recente del CHANGELOG che dice quanti sono i suoni, «N in tutto, in M gruppi», dice i numeri veri: una versione
+    senza suoni nuovi, come la 0.11.0, non lo ripete."""
+    changelog = _leggi("CHANGELOG.md")
+    assert re.search(rf"^## \[{re.escape(VERSIONE)}\]", changelog, re.MULTILINE), f"nel CHANGELOG manca il blocco della {VERSIONE}"
+    trovato = re.search(r"(\d+) in tutto, in (\d+) gruppi", changelog)
+    assert trovato, "il CHANGELOG non dice più quanti sono i suoni: «N in tutto, in M gruppi»"
     assert (int(trovato.group(1)), int(trovato.group(2))) == (len(suoni.EVENTI), len(suoni.GRUPPI))
 
 
@@ -264,7 +280,52 @@ def test_il_manuale_e_il_changelog_dicono_gli_ascolti():
     frase = frase_della_prima_apertura()
     assert frase in manuale and "Esc" in frase and "Impostazioni" in frase and "Aiuto" in frase
     assert "sala briefing dei suoni" in manuale
-    assert "Ascolti" in _blocco_della_versione(_leggi("CHANGELOG.md"), VERSIONE) and "Ascolti" in _leggi("README.md")
+    assert "Ascolti" in _blocco_della_versione(_leggi("CHANGELOG.md"), "0.9.0") and "Ascolti" in _leggi("README.md")
+
+
+def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
+    """D24, D25 e D26 nel manuale coi valori veri: il ritardo del resoconto, i blocchi del display braille con la legenda di
+    resoconti.py, i passaggi delle barre, Esc nella mira col messaggio della vista, la diagonale del cubo e le precisioni globali
+    minime dei centri al primo livello e coi bersagli più piccoli; e un blocco del CHANGELOG per ogni versione del collaudo."""
+    import resoconti
+    from bersagli import Bersaglio
+    from fisica import Traiettoria
+    from volo import Misure, Volo
+
+    manuale = _leggi("manuale.html")
+    assert RITARDO_DEL_RESOCONTO in RITARDI_A_PAROLE, f"il ritardo di {RITARDO_DEL_RESOCONTO} secondi va detto nel manuale, e in RITARDI_A_PAROLE"
+
+    def minima(raggio):
+        return testi.percento(1 - (raggio + RAGGIO_PROIETTILE) / DIAGONALE_DEL_CUBO, 1)
+
+    # La legenda vera, da un tiro a vuoto costruito a mano con un bersaglio vicino, così c'è anche la G.
+    bersaglio = Bersaglio(numero=1, forma="seno", raggio=2.0, partenza=(0.0, 20.0, 50.0))
+    misure = Misure(arrivo=2.0, laterale=1.9, verticale=15.8, inclinazione=-18.5, ricaduta=2.5, profondita=24.7)
+    volo = Volo(traiettoria=Traiettoria(0.0, 40.0, 30.0), partenza=0.0, durata=3.0, colpito=None, punto_finale=(0.0, 0.0, 70.0), precisione=None,
+                distanza_al_centro=None, vicino=bersaglio, distanza_dal_vicino=13.0, scarto=None, altezza_massima=25.0, gittata=70.0, laterale_finale=0.0,
+                misure=misure)
+    sommario = resoconti.sommario_del_tiro(volo, "numeri")
+    legenda = sommario.secondo.split(". ", 1)[1].rstrip(".")
+    frasi = [
+        RITARDI_A_PAROLE[RITARDO_DEL_RESOCONTO],
+        f"a blocchi di {BLOCCO_DEL_BRAILLE} caratteri",
+        f"{sommario.primo}; dopo",
+        legenda,
+        f"Ogni barra suona al più {A_PAROLE[PASSAGGI_DELLA_BARRA]} volte in tutto",
+        f"Se anche il {ORDINALI[PASSAGGI_DELLA_BARRA]} passaggio finisce senza spazio",
+        resoconti.mira_annullata(COLPI_INIZIALI).testo,
+        '<li><kbd>Esc</kbd>: durante la mira annulla il tiro',
+        f"sulla diagonale del cubo, {testi.numero(DIAGONALE_DEL_CUBO)} metri",
+        f"sopra il {minima(RAGGIO_INIZIALE)}",
+        f"sopra il {minima(RAGGIO_MINIMO)}",
+        '<h3 id="precisione-globale">La precisione globale</h3>',
+    ]
+    mancanti = [frase for frase in frasi if frase not in manuale]
+    assert not mancanti, f"frasi del secondo collaudo che il manuale non dice: {mancanti}"
+    changelog = _leggi("CHANGELOG.md")
+    for versione in ("0.9.1", "0.9.2", "0.10.0", "0.11.0"):
+        assert _blocco_della_versione(changelog, versione).strip()
+    assert "Esc" in _blocco_della_versione(changelog, "0.10.0") and "precisione globale" in _blocco_della_versione(changelog, "0.11.0")
 
 
 def test_niente_separatori_grafici_nei_documenti():

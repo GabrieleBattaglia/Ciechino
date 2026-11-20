@@ -60,6 +60,7 @@ from costanti import (
     METRI_PER_OTTAVA,
     MOLTIPLICATORE_BONUS,
     PARAMETRI,
+    PASSAGGI_DELLA_BARRA,
     PAUSA_FRA_BARRE,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
@@ -350,8 +351,12 @@ def _testo_mira():
                                                                            alto=testi.intero(ALZO_FREQUENZE[1])),
         # Traduttori: durata è come «3 secondi», tacche un numero, come 10.
         _("Ognuna comincia con tre bip, ciascuna coi suoi, e scivola per {durata}, con {tacche} tacche che salgono, una ogni decimo della scala. "
-          "Qui nessuno la ferma: arriva al massimo, e senti lo scatto del valore preso, come in partita quando non premi lo spazio. In partita lo "
-          "spazio ferma ogni scivolata sul valore che senti in quell'istante.").format(durata=testi.durata(SCIVOLATA_DURATA), tacche=TACCHE),
+          "Qui nessuno la ferma: arriva in fondo, e lo scatto del valore preso passa alla seguente.").format(durata=testi.durata(SCIVOLATA_DURATA),
+                                                                                                         tacche=TACCHE),
+        # Traduttori: passaggi è un numero, come 5: quante volte al più suona una barra della mira in partita (D25).
+        _("In partita lo spazio ferma ogni scivolata sul valore che senti in quell'istante; una barra che arriva in fondo senza lo spazio "
+          "ricomincia da capo, al più {passaggi} volte, e poi il proiettile è perduto. Esc annulla la mira, e il proiettile resta nella "
+          "riserva.").format(passaggi=PASSAGGI_DELLA_BARRA),
     )
 
 
@@ -520,8 +525,9 @@ def _suono_dei_timbri(regia, inizio):
 
 
 def _suono_della_mira(regia, inizio):
-    """Come in partita: il respiro della mira, poi ogni barra dopo PAUSA_FRA_BARRE, che arriva al massimo,
-    e lo scatto del valore preso quando la scivolata è scaduta, MARGINE_DOPO_LA_SCIVOLATA dopo la sua fine."""
+    """Come in partita: il respiro della mira, poi ogni barra dopo PAUSA_FRA_BARRE, che arriva in fondo, e
+    lo scatto del valore preso quando la scivolata è scaduta, MARGINE_DOPO_LA_SCIVOLATA dopo la sua fine,
+    che qui fa passare alla barra seguente; in partita, da D25, la barra scaduta ricomincerebbe."""
     ascolto = Ascolto("mira", inizio, inizio)
     fs = regia.motore.fs
     regia.effetto(ascolto, "mira_avviata", inizio)

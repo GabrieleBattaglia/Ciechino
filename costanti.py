@@ -29,6 +29,10 @@ CUBO_DISTANZA = 30.0
 CUBO_X = (-CUBO_LATO / 2, CUBO_LATO / 2)
 CUBO_Y = (0.0, CUBO_LATO)
 CUBO_Z = (CUBO_DISTANZA, CUBO_DISTANZA + CUBO_LATO)
+# La diagonale del cubo, il lato per la radice di tre, circa 86,6 metri: la misura della precisione
+# globale di D26, scelta da Gabriele il 20 novembre 2026, che dice quanto il proiettile si è avvicinato
+# al bersaglio considerando l'intero cubo di spazio.
+DIAGONALE_DEL_CUBO = CUBO_LATO * 3 ** 0.5
 # Il centro di un bersaglio sta almeno a questa altezza, e sempre col bersaglio tutto dentro il cubo.
 ALTEZZA_MINIMA_BERSAGLIO = 3.0
 # Il raggio del proiettile, che conta nel contatto col bersaglio.
@@ -113,8 +117,14 @@ COMPENSAZIONE_DEL_TASTO = 0.0
 ATTENUAZIONE_IN_MIRA_DB = -9.0
 # Ogni cambio di guadagno di una voce si fa con una rampa di tanti secondi, contro i click.
 RAMPA_DEL_GUADAGNO = 0.05
-# Dopo la fine udibile di una scivolata non fermata, tanti secondi prima di prendere il massimo.
+# Dopo la fine udibile di una scivolata non fermata, tanti secondi in cui lo spazio prende ancora il
+# massimo; passati questi, da D25 la barra ricomincia da capo, col suo secondo di silenzio e i suoi bip.
 MARGINE_DOPO_LA_SCIVOLATA = 0.05
+# Quante volte al più suona ogni barra della mira, il primo passaggio compreso, se nessuno la ferma con lo
+# spazio (D25, scelta di Gabriele del 20 novembre 2026: «5 in tutto per ciascuna delle 3 barre»): se anche
+# l'ultimo passaggio finisce senza spazio, il colpo non parte e il proiettile è perduto, come un tiro a
+# vuoto. Le ripartenze dopo una pausa non contano.
+PASSAGGI_DELLA_BARRA = 5
 
 # I bersagli: il suono è una portante la cui frequenza oscilla con un LFO di pochi hertz attorno
 # all'altezza del centro; l'escursione copre le altezze da y meno il raggio a y più il raggio,
@@ -253,8 +263,13 @@ PALESTRA_FINO_AL_LIVELLO = 3
 GRAZIA_DELL_ATTESA = 0.5
 # Il resoconto di ogni tiro compare nella vista, e va alla sintesi, quando l'effetto dell'impatto, il
 # jingle, l'impatto o il tonfo, ha finito di suonare (D22), in tutti i livelli; e dopo altri tanti
-# secondi di silenzio, da tarare ascoltando.
-RITARDO_DEL_RESOCONTO = 0.0
+# secondi di silenzio: un secondo dal collaudo di Gabriele del 20 novembre 2026, «metterei un secondo
+# di silenzio» (D24).
+RITARDO_DEL_RESOCONTO = 1.0
+# Il display braille si legge a blocchi di tanti caratteri (D24): la riga del sommario mette i numeri
+# nel primo blocco e la legenda dal carattere seguente, e la riga della mira nella barra di stato fa lo
+# stesso col passaggio della barra.
+BLOCCO_DEL_BRAILLE = 40
 
 # Gli Ascolti, il tutorial audio chiesto da Gabriele il 20 novembre 2026 (D23): nel menu Impostazioni e nel menu
 # Aiuto, un passo alla volta, il test stereo, il bersaglio che si muove nel cubo, i punti a caso, la grandezza, le

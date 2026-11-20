@@ -39,6 +39,12 @@ livello del tiro: dopo ogni tiro la partita passa nella fase «attesa», col tem
 l'effetto, gli avvisi in fila e il resoconto, si ferma e tace come in pausa, finché lo spazio non la
 fa ripartire, chiamando i bersagli nuovi dopo un centro o riportando all'ascolto dopo un tiro a vuoto.
 Soltanto nella palestra Ctrl+P mette la pausa; quella automatica della finestra c'è sempre.
+Da D25, dal secondo collaudo di Gabriele del 20 novembre 2026, ogni barra della mira aspetta lo spazio:
+quella che finisce senza ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte in tutto, e se anche
+l'ultima finisce senza il proiettile è perduto, come un tiro a vuoto, col suo suono e il suo resoconto.
+Esc, con annulla_mira, annulla la mira e conserva il proiettile. Da D24 il resoconto arriva un secondo
+dopo la fine dell'effetto, e da D26 ogni tiro ha la sua precisione globale, che la partita somma per la
+media delle statistiche.
 """
 
 import functools
@@ -66,6 +72,7 @@ from costanti import (
     MOLTIPLICATORE_BONUS,
     PALESTRA_FINO_AL_LIVELLO,
     PARAMETRI,
+    PASSAGGI_DELLA_BARRA,
     PAUSA_FRA_BARRE,
     PREMIO_PRECISIONE,
     PROBABILITA_BONUS,
@@ -208,7 +215,9 @@ class Partita:
     La palestra delle attese (D22): nella fase «attesa» attesa_ferma dice se la partita si è già
     fermata e aspetta lo spazio, e nasceranno quanti bersagli nuovi chiamerà lo spazio, zero dopo un
     tiro a vuoto o un centro sul bonus. messaggi_in_attesa dà subito i messaggi che aspettano la fine
-    dell'effetto dell'impatto, per la finestra che si chiude o comincia una partita nuova."""
+    dell'effetto dell'impatto, per la finestra che si chiude o comincia una partita nuova.
+    La mira di D25: passaggio è il passaggio della barra in corso, da 1 a PASSAGGI_DELLA_BARRA, o None
+    fuori dalla mira; annulla_mira è Esc."""
 
     def __init__(self, motore, suoni, statistiche=None, rng=None, orologio=None, proiettile=None):
         self.motore = motore
@@ -239,6 +248,11 @@ class Partita:
         self.ultimo_volo = None
         self.bonus = None
         self.inizio_barra = None
+        # Il passaggio della barra in corso (D25): 1 la prima volta, uno di più a ogni ripartenza senza spazio.
+        self.passaggio = None
+        # La precisione globale dei tiri della partita (D26), sommata per la media delle statistiche.
+        self._somma_globale = 0.0
+        self._tiri_globali = 0
         # Le voci dei bersagli, una per bersaglio: Bersaglio si confronta per identità, quindi fa da chiave.
         self._voci = {}
         self._voce_barra = None
@@ -313,7 +327,8 @@ class Partita:
         parametro = PARAMETRI[self.barra] if self.barra is not None else None
         return resoconti.righe_della_barra(self.fase, in_pausa=self.in_pausa, livello=self.livello, punti=self.punti, riserva=self.riserva,
                                            centri_del_livello=self.centri_del_livello, bersagli=normali, bonus=bonus, parametro=parametro,
-                                           sottofase=self.sottofase, attesa_ferma=self.attesa_ferma, nasceranno=self.nasceranno)
+                                           sottofase=self.sottofase, attesa_ferma=self.attesa_ferma, nasceranno=self.nasceranno,
+                                           passaggio=self.passaggio if self.fase == "mira" else None)
 
     # I comandi.
 
@@ -336,7 +351,9 @@ class Partita:
         self.punti = self.tiri = self.centri = self.serie = self.centri_del_livello = 0
         self.valori = []
         self.ultimo_volo = None
-        self.barra = self.sottofase = self.inizio_barra = None
+        self.barra = self.sottofase = self.inizio_barra = self.passaggio = None
+        self._somma_globale = 0.0
+        self._tiri_globali = 0
         self._azzera_la_pausa()
         self._serie_detta = False
         self._numero = 0
@@ -456,6 +473,31 @@ class Partita:
             return self._consegna(self._riprendi())
         return []
 
+    def annulla_mira(self):
+        """Esc nella mira (D25, dal collaudo di Gabriele del 20 novembre 2026: «Esc annulla lo sparo in corso
+        e il proiettile viene conservato»): la barra in corso tace, i valori già presi si perdono, la
+        riserva non cambia, e si torna all'ascolto, coi bersagli di nuovo a guadagno pieno e il tempo di
+        gioco che riprende dal prossimo campione sicuro; suona mira_annullata, si conta in mire_annullate,
+        e il messaggio lo dice. Non è una fase d'ascolto nuova: non nasce un bonus. Nella mira messa in
+        pausa con Ctrl+P la mira si annulla lo stesso, e la pausa resta: alla ripresa si torna ad
+        ascoltare. Fuori dalla mira non fa niente, e restituisce una lista vuota."""
+        if self.fase != "mira":
+            return []
+        if self._voce_barra is not None:
+            self.motore.ferma(self._voce_barra)
+        self._voce_barra = None
+        self.barra = self.sottofase = self.inizio_barra = self.passaggio = None
+        self.valori = []
+        self.fase = "ascolto"
+        if not self.in_pausa:
+            k = self.motore.prossimo_campione()
+            for voce in self._voci_di_gioco():
+                self.motore.guadagno_voce(voce, 1.0)
+            self.motore.fai_scorrere_tempo(k)
+        self.suoni.suona("mira_annullata")
+        self._conta("mire_annullate")
+        return self._consegna([resoconti.mira_annullata(self.riserva, in_pausa=self.in_pausa)])
+
     def abbandona(self):
         """Lascia la partita in corso: ferma le voci di gioco, la conta come abbandonata e torna a
         «pronta». I messaggi dell'ultimo tiro che aspettavano la fine del suo effetto vengono prima,
@@ -509,7 +551,8 @@ class Partita:
         self._pausa_automatica = False
         self._segna_il_fermo()
         if self.fase == "mira":
-            self._avvia_barra(self.barra, k)
+            # La ripartenza dopo una pausa non è un passaggio nuovo della barra (D25).
+            self._avvia_barra(self.barra, k, self.passaggio)
             return []
         rimandati, self._avvisi_rimandati = self._avvisi_rimandati, []
         for evento in rimandati:
@@ -832,17 +875,19 @@ class Partita:
         self._avvia_barra(0, k)
         return []
 
-    def _avvia_barra(self, indice, k):
+    def _avvia_barra(self, indice, k, passaggio=1):
         """La barra indice comincia dopo PAUSA_FRA_BARRE di silenzio dal campione k: il buffer parte a
-        pausa finita, e la partita si ricorda dove, per il conto di mira.valore_scelto. Se gli avvisi
-        in fila dopo l'impatto, come il livello nuovo o l'ultimo colpo, o la coda dell'effetto stesso,
-        suonano ancora a pausa finita, la pausa si allunga fino alla loro fine, stacco compreso: la
-        mira avviata subito dopo l'impatto non copre i bip con gli effetti lunghi di D16. E se i messaggi
-        del tiro aspettano ancora la fine dell'effetto (D22), come fuori dalla palestra quando lo spazio
-        avvia la mira mentre l'effetto suona, la pausa si conta da quando arrivano: la voce del resoconto
-        parte nel secondo di silenzio, e non sopra i bip. Lo spazio nella pausa allungata non conta, come
-        nell'altra."""
+        pausa finita, e la partita si ricorda dove, per il conto di mira.valore_scelto. passaggio è il
+        passaggio della barra (D25), 1 la prima volta; la ripresa da una pausa ridà quello di prima. Se
+        gli avvisi in fila dopo l'impatto, come il livello nuovo o l'ultimo colpo, o la coda dell'effetto
+        stesso, suonano ancora a pausa finita, la pausa si allunga fino alla loro fine, stacco compreso:
+        la mira avviata subito dopo l'impatto non copre i bip con gli effetti lunghi di D16. E se i
+        messaggi del tiro aspettano ancora la fine dell'effetto (D22), come fuori dalla palestra quando
+        lo spazio avvia la mira mentre l'effetto suona, la pausa si conta da quando arrivano: la voce del
+        resoconto parte nel secondo di silenzio, e non sopra i bip. Lo spazio nella pausa allungata non
+        conta, come nell'altra."""
         self.barra = indice
+        self.passaggio = passaggio
         self.sottofase = "pausa"
         pausa = round(PAUSA_FRA_BARRE * self.motore.fs)
         inizio = max(k + pausa, self._fine_degli_avvisi)
@@ -853,15 +898,21 @@ class Partita:
 
     def _spazio_nella_mira(self):
         """Lo spazio nella mira vale secondo il campione udibile; nella pausa non conta e non suona,
-        così assorbe i doppi colpi e le ripetizioni del tasto che arrivano con NVDA."""
-        valore, esito = mira.valore_scelto(self.motore.campione_udibile(), self.inizio_barra, self._scivolata())
+        così assorbe i doppi colpi e le ripetizioni del tasto che arrivano con NVDA. Lo spazio che arriva
+        dopo la scadenza della barra, prima che il battito se ne accorga, la fa scadere come il battito
+        (D25): ricomincia, e lo spazio cade nella sua pausa, o il proiettile è perduto."""
+        udibile = self.motore.campione_udibile()
+        if mira.scaduta(udibile, self.inizio_barra, self._scivolata()):
+            return self._scade()
+        valore, esito = mira.valore_scelto(udibile, self.inizio_barra, self._scivolata())
         if esito == "pausa":
             return []
         return self._prendi(valore, esito)
 
     def _battito_della_mira(self):
-        """Aggiorna la parte della barra che si sente, e prende il massimo della scivolata che nessuno
-        ha fermato (D3). A partita ferma la barra è ferma, e non scade."""
+        """Aggiorna la parte della barra che si sente, e si accorge della scivolata che nessuno ha
+        fermato (D25): la barra ricomincia, o il proiettile è perduto. A partita ferma la barra è ferma,
+        e non scade."""
         if self.in_pausa:
             return []
         udibile = self.motore.campione_udibile()
@@ -874,12 +925,27 @@ class Partita:
         else:
             self.sottofase = "scivolata"
         if mira.scaduta(udibile, self.inizio_barra, barra):
-            return self._prendi(1.0, "massimo")
+            return self._scade()
         return []
+
+    def _scade(self):
+        """La barra in corso è finita senza lo spazio, passato MARGINE_DOPO_LA_SCIVOLATA dalla fine della
+        scivolata (D25, dal collaudo di Gabriele del 20 novembre 2026: «ti chiedo di aspettare lo spazio su
+        ogni barra parametrica, se non arriva questa si ripete da capo»). Fino a PASSAGGI_DELLA_BARRA
+        passaggi ricomincia da capo, col suo secondo di silenzio, i bip e la scivolata, e si conta in
+        barre_ripartite; dopo l'ultimo il proiettile è perduto. I messaggi sono quelli che restituisce."""
+        if self._voce_barra is not None:
+            self.motore.ferma(self._voce_barra)
+        self._voce_barra = None
+        if self.passaggio is not None and self.passaggio < PASSAGGI_DELLA_BARRA:
+            self._conta("barre_ripartite")
+            self._avvia_barra(self.barra, self.motore.prossimo_campione(), self.passaggio + 1)
+            return []
+        return self._proiettile_perduto()
 
     def _prendi(self, valore, esito):
         """Un valore preso: si registra, la scivolata si ferma, suona valore_preso, si conta, e la mira
-        passa alla barra seguente o allo sparo."""
+        passa alla barra seguente, al suo primo passaggio, o allo sparo."""
         parametro = PARAMETRI[self.barra]
         self.valori.append(float(valore))
         if self._voce_barra is not None:
@@ -892,6 +958,42 @@ class Partita:
             self._avvia_barra(self.barra + 1, self.motore.prossimo_campione())
             return []
         return self._spara()
+
+    def _proiettile_perduto(self):
+        """L'ultimo passaggio di una barra è finito senza lo spazio (D25): il colpo non parte e il
+        proiettile è perduto, come un tiro a vuoto, per scelta di Gabriele. Suona proiettile_perduto, in
+        fila dopo gli avvisi che suonano ancora; i bersagli tornano a guadagno pieno; il tiro si conta,
+        nei tiri della partita e fra i tiri a vuoto delle statistiche, la riserva perde un colpo e la
+        serie si chiude. Poi come dopo ogni tiro a vuoto: il resoconto, che arriva alla fine del suono più
+        RITARDO_DEL_RESOCONTO, l'ultimo colpo, la fine a riserva vuota, l'attesa nella palestra o, fuori,
+        l'ascolto col tempo che riprende e il bonus che può nascere. Non c'è volo: ultimo_volo torna None,
+        e il tiro non ha né misure né precisione globale."""
+        parametro, passaggi = PARAMETRI[self.barra], self.passaggio or PASSAGGI_DELLA_BARRA
+        self.barra = self.sottofase = self.inizio_barra = self.passaggio = None
+        k = self.motore.prossimo_campione()
+        for voce in self._voci_di_gioco():
+            self.motore.guadagno_voce(voce, 1.0)
+        voce = self._avviso("proiettile_perduto")
+        fine_dell_effetto = voce.inizio + len(voce.buffer) if voce is not None else k
+        self._conta("proiettili_perduti")
+        self.ultimo_volo = None
+        self.tiri += 1
+        self.riserva = max(0, self.riserva - 1)
+        self.serie = 0
+        self._serie_detta = False
+        livello_del_tiro = self.livello
+        palestra = nella_palestra(livello_del_tiro)
+        if not palestra:
+            # Fuori dalla palestra si torna subito ad ascoltare, e il tempo riprende come dopo lo sparo.
+            self.motore.fai_scorrere_tempo(k)
+        messaggi = [resoconti.proiettile_perduto(self.tiri, livello_del_tiro, parametro, passaggi, self.riserva, totale=self.punti)]
+        if self.statistiche is not None:
+            esito = {"colpito": False, "bonus": False, "forma": None, "portante": None, "mobile": False, "precisione": None, "punti": 0,
+                     "distanza_dal_vicino": None, "serie": 0, "precisione_globale": None}
+            self.statistiche.tiro(list(self.valori), esito)
+        messaggi.extend(self._controlla_il_bonus())
+        self._seguito_del_tiro(messaggi, [], None, palestra, 0, fine_dell_effetto)
+        return []
 
     # Il tiro.
 
@@ -990,6 +1092,11 @@ class Partita:
         self._fine_degli_avvisi = max(self._fine_degli_avvisi, fine_dell_effetto + self._stacco())
         livello_del_tiro = self.livello
         palestra = nella_palestra(livello_del_tiro)
+        globale = volo.precisione_globale
+        if globale is not None:
+            # La media della precisione globale della partita, per le statistiche (D26).
+            self._somma_globale += globale
+            self._tiri_globali += 1
         punti = 0
         colpi_bonus = 0
         if colpito is not None:
@@ -1025,6 +1132,15 @@ class Partita:
                 nasceranno = 1
             else:
                 self._nuovo_bersaglio()
+        self._seguito_del_tiro(messaggi, battuti, colpito, palestra, nasceranno, fine_dell_effetto)
+        return []
+
+    def _seguito_del_tiro(self, messaggi, battuti, colpito, palestra, nasceranno, fine_dell_effetto):
+        """Il seguito di ogni tiro, quello risolto e il proiettile perduto di D25: i primati battuti, poi
+        la fine a riserva vuota, anche nella palestra, senza attesa; altrimenti l'ultimo colpo dopo un tiro
+        a vuoto, e l'attesa nella palestra o, fuori, la nuova fase d'ascolto col bonus che può nascere.
+        Tutti i messaggi, quelli ricevuti e questi, aspettano in fila la fine dell'effetto, più
+        RITARDO_DEL_RESOCONTO, e li dà il battito (D22, D24)."""
         primati = resoconti.primati_battuti(battuti, self._valori_dei_primati(battuti))
         if primati is not None:
             messaggi.append(primati)
@@ -1047,24 +1163,18 @@ class Partita:
                 else:
                     messaggi.extend(self._forse_un_bonus())
         self._rimanda(messaggi, fine_dell_effetto + round(RITARDO_DEL_RESOCONTO * self.motore.fs))
-        return []
 
     def _statistiche_del_tiro(self, volo, punti):
         """Il tiro nelle statistiche, e i primati battuti da dire. La distanza del primato è dal centro
-        del bersaglio, come la dice la pagina delle statistiche: nel centro quella del volo, nel tiro a
-        vuoto la distanza dalla superficie del più vicino più il suo raggio."""
+        del bersaglio, come la dice la pagina delle statistiche, volo.distanza_dal_centro: nel centro
+        quella del volo, nel tiro a vuoto la distanza dalla superficie del più vicino più il suo raggio.
+        Con lei va la precisione globale di D26."""
         if self.statistiche is None:
             return []
         colpito = volo.colpito
-        if colpito is not None:
-            distanza = volo.distanza_al_centro
-        elif volo.vicino is not None and volo.distanza_dal_vicino is not None:
-            distanza = volo.distanza_dal_vicino + volo.vicino.raggio
-        else:
-            distanza = None
         esito = {"colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "forma": colpito.forma if colpito is not None else None,
-                 "portante": colpito.portante if colpito is not None else None, "mobile": bool(colpito is not None and colpito.mobile), "precisione": volo.precisione, "punti": punti, "distanza_dal_vicino": distanza,
-                 "serie": self.serie}
+                 "portante": colpito.portante if colpito is not None else None, "mobile": bool(colpito is not None and colpito.mobile), "precisione": volo.precisione,
+                 "punti": punti, "distanza_dal_vicino": volo.distanza_dal_centro, "serie": self.serie, "precisione_globale": volo.precisione_globale}
         prima = self._primati_attuali()
         battuti = self._primati_che_cambiano(self.statistiche.tiro(list(self.valori), esito), prima)
         if "serie" in battuti:
@@ -1132,12 +1242,13 @@ class Partita:
         self._ferma_voci()
         self._durata = self._durata_adesso()
         self._azzera_la_pausa()
-        self.barra = self.sottofase = None
+        self.barra = self.sottofase = self.passaggio = None
         riepilogo = self.riepilogo()
         battuti = []
         if self.statistiche is not None:
             prima = self._primati_attuali()
-            battuti = self._primati_che_cambiano(self.statistiche.partita_finita({**riepilogo, "motivo": motivo}), prima)
+            media = self._somma_globale / self._tiri_globali if self._tiri_globali else None
+            battuti = self._primati_che_cambiano(self.statistiche.partita_finita({**riepilogo, "motivo": motivo, "precisione_globale": media}), prima)
             # Le statistiche non si salvano da sole: la fine di una partita è il momento in cui
             # perderle costerebbe di più.
             self.statistiche.salva()

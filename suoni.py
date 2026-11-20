@@ -30,7 +30,7 @@ strumenti/elenco_suoni.py, resta leggero.
 
 import sys
 
-from costanti import FS, NOME
+from costanti import FS, NOME, PASSAGGI_DELLA_BARRA
 from lingua import _
 
 # Gli eventi, gruppo per gruppo: ogni gruppo ha il suo titolo e i suoi eventi con il preset della
@@ -50,6 +50,8 @@ GRUPPI = [
         # altezza, e lo scatto che scende, mentre i bip delle scivolate salgono.
         "mira_avviata": "ciechino_mira_avviata",
         "valore_preso": "ciechino_valore_preso",
+        # Esc nella mira (D25): il respiro della mira lasciato andare, e il proiettile resta nella riserva.
+        "mira_annullata": "ciechino_mira_annullata",
     }),
     (_("Il tiro e i suoi esiti"), {
         # Tutti di rumore, ciascuno col suo colore: bianco lo sparo, rosa il bersaglio colpito,
@@ -58,6 +60,9 @@ GRUPPI = [
         "colpito": "ciechino_colpito",
         "colpito_bonus": "ciechino_colpito_bonus",
         "a_terra": "ciechino_a_terra",
+        # Il proiettile perduto (D25), quando una barra passa tutte le sue volte senza lo spazio: la miccia che si
+        # spegne, di rumore come gli esiti del tiro, ma senza il colpo.
+        "proiettile_perduto": "ciechino_proiettile_perduto",
     }),
     (_("I livelli e i bersagli bonus"), {
         "livello_su": "ciechino_livello_su",
@@ -144,11 +149,15 @@ AZIONI = {
     "in_classifica": _("a partita finita il punteggio entra nella classifica dei migliori: suona dopo la fine, e quando tace si apre la finestra del nome"),
     "fuori_classifica": _("a partita finita il punteggio non entra nella classifica dei migliori: suona dopo la fine"),
     "mira_avviata": _("lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del gioco si ferma e i bersagli si sentono più piano"),
-    "valore_preso": _("la mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio o alla fine della scivolata"),
+    "valore_preso": _("la mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio"),
+    "mira_annullata": _("Esc durante la mira la annulla: il colpo non parte, il proiettile resta nella riserva e i bersagli tornano a cantare"),
     "sparo": _("dopo il terzo valore della mira parte il colpo dal cannone"),
     "colpito": _("il proiettile colpisce un bersaglio, e il suono viene dal punto dell'impatto"),
     "colpito_bonus": _("il proiettile colpisce un bersaglio bonus, e il suono viene dal punto dell'impatto"),
     "a_terra": _("il proiettile arriva a terra senza aver colpito niente, e il suono viene dal punto dove cade"),
+    # Traduttori: n è un numero, quante volte suona al più una barra della mira (D25).
+    "proiettile_perduto": _("una barra della mira è passata {n} volte senza lo spazio: il colpo non parte, e il proiettile è perduto come un tiro a "
+                            "vuoto").format(n=PASSAGGI_DELLA_BARRA),
     "livello_su": _("i centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi"),
     "bonus_appare": _("compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce"),
     "bonus_uscito": _("il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito"),

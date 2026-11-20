@@ -47,6 +47,7 @@ import fisica
 import motore_audio
 import partita as modulo_partita
 import percorsi
+import resoconti
 import suoni
 import testi
 from costanti import AIUTO_MANCATO_FINO_AL_LIVELLO, CENTRI_PER_LIVELLO, COLPI_INIZIALI, COLPI_PER_LIVELLO, COMPENSAZIONE_DEL_TASTO, PARAMETRI
@@ -60,7 +61,9 @@ SEME = 2026
 NOME = "Gabriele"
 # Il sommario di D21 del tiro a vuoto voluto, rasoterra e piano, che cade a pochi metri dal cannone:
 # né alla distanza né all'altezza del bersaglio, e così nessuna misura.
-VUOTO = "Dal bersaglio: cade prima della sua distanza, profondità non misurabile."
+# Da D24 la riga comincia coi valori, ognuno con la sua iniziale: qui mancano tutti, e la precisione globale di D26, che c'è, non
+# ci sta nel primo blocco e apre il secondo.
+VUOTO = "L: manca V: manca P: manca I: manca"
 # Il buffer finto di ogni preset: breve e costante, così ogni effetto finisce presto e non resta voce.
 LUNGHEZZA_FINTA = 256
 AMPIEZZA_FINTA = 0.1
@@ -222,6 +225,9 @@ class Tavolo:
         # e l'ora del battito che ha risolto l'ultimo tiro, che i messaggi seguono alla fine dell'effetto.
         self.in_attesa = 0.0
         self.risolto_alle = None
+        # L'ora del battito che ha fermato la partita nell'attesa della palestra: da D24 può essere quello stesso che porta i
+        # messaggi del tiro, un secondo dopo l'effetto.
+        self.fermo_dal = None
         # I messaggi dell'ultimo battito, o comando, che ne ha portati.
         self.ultimo_lotto = []
         self.suonati = []
@@ -271,11 +277,19 @@ class Tavolo:
 
     def battito(self):
         self.finestra._al_battito()
+        if self.partita.fase == "attesa" and self.partita.attesa_ferma:
+            if self.fermo_dal is None:
+                self.fermo_dal = self.adesso()
+        else:
+            self.fermo_dal = None
 
     def cursore_sul_nuovo(self):
         """Il cursore della vista sta all'inizio del primo messaggio dell'ultimo battito, o comando, che ne
-        ha portati: di solito il resoconto del tiro, e sotto, in ordine, il livello, il bonus o l'ultimo colpo."""
-        assert _riga_del_cursore(self.finestra.vista) == (self.ultimo_lotto[0].testo.splitlines()[0], 0)
+        ha portati: di solito il resoconto del tiro, e sotto, in ordine, il livello, il bonus o l'ultimo colpo.
+        La vista va a capo da sé, e una riga lunga, come quella del sommario con la sua legenda (D24), si
+        legge a pezzi: la riga del cursore è l'inizio di quella del messaggio."""
+        riga, colonna = _riga_del_cursore(self.finestra.vista)
+        assert colonna == 0 and riga and self.ultimo_lotto[0].testo.splitlines()[0].startswith(riga)
 
     # Il tempo del motore.
 
@@ -377,17 +391,17 @@ def _mira(tavolo, valori):
     for indice, valore in enumerate(valori):
         nome = NOMI_DEI_PARAMETRI[PARAMETRI[indice]]
         assert partita.fase == "mira" and partita.barra == indice
-        assert tavolo.fase_della_barra() == f"Mira: {nome}, pausa"
+        assert tavolo.fase_della_barra() == f"Mira: {nome}, pausa; Esc annulla"
         tavolo.porta_udibile_a(partita.inizio_barra - 1)
         tavolo.battito()
-        assert tavolo.fase_della_barra() == f"Mira: {nome}, pausa"
+        assert tavolo.fase_della_barra() == f"Mira: {nome}, pausa; Esc annulla"
         tavolo.porta_udibile_a(_nel_conto(partita))
         tavolo.battito()
-        assert tavolo.fase_della_barra() == f"Mira: {nome}, bip"
+        assert tavolo.fase_della_barra() == f"Mira: {nome}, bip; Esc annulla"
         if valore:
             tavolo.porta_udibile_a(_campione_del_valore(partita, valore))
             tavolo.battito()
-            assert tavolo.fase_della_barra() == f"Mira: {nome}, scivolata"
+            assert tavolo.fase_della_barra() == f"Mira: {nome}, scivolata; Esc annulla"
         tavolo.spazio()
         assert partita.valori[-1] == pytest.approx(valore, abs=1e-9)
     assert partita.fase == "volo" and tavolo.fase_della_barra() == "Volo"
@@ -435,7 +449,7 @@ def _fuori_dall_attesa(tavolo):
     tavolo.battito()
     assert partita.fase == "attesa" and partita.attesa_ferma
     assert tavolo.fase_della_barra() in ("Palestra: Spazio per il bersaglio nuovo", "Palestra: Spazio per tornare all'ascolto")
-    dal = tavolo.adesso()
+    dal = tavolo.fermo_dal
     # La grazia si conta dal campione udibile a cui la partita si è fermata, che può cadere fra due campioni:
     # un campione prima non basta, uno dopo sì, anche con gli arrotondamenti dell'orologio finto.
     grazia = partita._attesa_dal + round(costanti.GRAZIA_DELL_ATTESA * tavolo.motore.fs)
@@ -465,11 +479,13 @@ def _centro(tavolo, numero, totale):
     resoconto = nuovi[0]
     assert resoconto.tipo == "resoconto" and resoconto.dati["tiro"] == numero and resoconto.dati["colpito"]
     assert resoconto.dati["punti"] == punti and resoconto.dati["totale"] == totale == partita.punti
-    # Al livello 1 il resoconto comincia col sommario dei numeri (D21), che nell'annuncio segue l'esito.
+    # Al livello 1 il resoconto comincia col sommario dei numeri (D21), coi valori nel primo blocco e la legenda dal carattere 41 (D24),
+    # e la precisione globale (D26); nell'annuncio l'esito, poi il primo blocco, senza la legenda.
     sommario, esito = resoconto.testo.splitlines()[:2]
-    assert sommario.startswith("Dal bersaglio: laterale ") and sommario.endswith(" gradi.")
+    atteso = resoconti.sommario_del_tiro(volo, "numeri")
+    assert sommario == atteso.riga and sommario.startswith("L: ") and "L laterale, V verticale" in sommario and " G: " in atteso.annuncio
     assert esito.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
-    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {sommario}"
+    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {atteso.annuncio}"
     tavolo.cursore_sul_nuovo()
     return totale, nuovi
 
@@ -557,11 +573,11 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             assert AIUTO_MANCATO_FINO_AL_LIVELLO >= 2 and "Il bersaglio più vicino è stato mancato di " in resoconto.testo
             # Al livello 2 il sommario c'è ancora, coi numeri (D21); il tiro rasoterra cade prima della
             # distanza del bersaglio e sotto la sua altezza, e il sommario lo dice senza numeri.
-            assert resoconto.testo.splitlines()[0] == VUOTO
+            assert resoconto.testo.splitlines()[0] == resoconti.riga_del_sommario(partita.ultimo_volo, "numeri") and resoconto.testo.startswith(VUOTO)
             # Anche il livello 2 è della palestra (D22): dopo il tiro a vuoto lo spazio riporta all'ascolto.
             if partita.riserva > 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "info"] and partita.fase == "attesa"
-                assert resoconto.annuncio == f"A vuoto, riserva {partita.riserva}. {VUOTO}"
+                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}. {VUOTO} G: ")
                 assert nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
             elif partita.riserva == 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "avviso", "info"] and nuovi[1].annuncio == "Ultimo colpo."
@@ -573,7 +589,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
 
         # La fine: il resoconto, la fine col riepilogo, il nome e la classifica in coda alla vista.
         assert partita.fase == "finita" and not partita.in_corso()
-        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio == f"A vuoto, riserva vuota. {VUOTO}"
+        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.startswith(f"A vuoto, riserva vuota. {VUOTO} G: ")
         tiri = CENTRI_PER_LIVELLO + riserva
         # La durata non conta né la pausa né le attese della palestra, una dopo ogni tiro tranne l'ultimo (D22).
         assert tavolo.in_attesa > 0
@@ -581,9 +597,10 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         riepilogo = {"punteggio": totale, "livello": 2, "tiri": tiri, "centri": CENTRI_PER_LIVELLO, "durata_s": durata}
         assert nuovi[1].dati == riepilogo == partita.riepilogo()
         assert nuovi[1].annuncio == f"Partita finita, {testi.intero(totale)} punti."
-        # Il suono della classifica segue quello della fine, in fila, staccato: partiti insieme si fonderebbero.
+        # Il suono della classifica segue quello della fine, in fila, staccato: partiti insieme si fonderebbero. Da D24 arriva coi messaggi
+        # della fine, un secondo dopo il tonfo, quando la fine può aver già finito di suonare.
         fine_della_partita, ingresso = tavolo.voce("partita_finita"), tavolo.voce("in_classifica")
-        assert ingresso.inizio == fine_della_partita.inizio + LUNGHEZZA_FINTA + round(modulo_partita.STACCO_FRA_GLI_AVVISI * motore.fs)
+        assert ingresso.inizio >= fine_della_partita.inizio + LUNGHEZZA_FINTA + round(modulo_partita.STACCO_FRA_GLI_AVVISI * motore.fs)
         # Il nome si chiede quando il suono dell'ingresso è finito: intanto la finestra lo aspetta come un
         # dialogo aperto, e lo spazio, che va avanti verso la vista, non comincia una partita nuova.
         assert nomi == [] and finestra._dialogo_aperto()
@@ -622,7 +639,7 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica.
         assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [nuova]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
-        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. Dal bersaglio: laterale " in detto) == CENTRI_PER_LIVELLO
+        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. L: " in detto and " G: " in detto) == CENTRI_PER_LIVELLO
 
         # Le statistiche, sul disco, coi numeri della partita.
         statistiche = _leggi(costanti.FILE_STATISTICHE)
@@ -767,7 +784,7 @@ def test_un_dialogo_e_un_alt_tab_fermano_la_partita_e_la_riprendono(app_wx, pres
         assert partita.fase == "mira" and partita.barra == 0
         tavolo.porta_udibile_a(_campione_del_valore(partita, 0.5))
         tavolo.battito()
-        assert tavolo.fase_della_barra() == "Mira: direzione, scivolata"
+        assert tavolo.fase_della_barra() == "Mira: direzione, scivolata; Esc annulla"
         dentro = []
 
         def legge_a_lungo(dialogo):
@@ -785,7 +802,7 @@ def test_un_dialogo_e_un_alt_tab_fermano_la_partita_e_la_riprendono(app_wx, pres
         # Chiuso il dialogo, con la finestra attiva, il battito riprende la partita: la barra riparte da capo.
         tavolo.battito()
         assert not partita.in_pausa and partita.fase == "mira" and partita.barra == 0 and partita.valori == []
-        assert partita.inizio_barra > motore.campione_udibile() and tavolo.fase_della_barra() == "Mira: direzione, pausa"
+        assert partita.inizio_barra > motore.campione_udibile() and tavolo.fase_della_barra() == "Mira: direzione, pausa; Esc annulla"
         _mira(tavolo, (0.0, 0.0, 0.0))
         nuovi = _volo(tavolo)
         assert nuovi[0].tipo == "resoconto" and partita.riserva == riserva - 1
@@ -809,6 +826,64 @@ def test_un_dialogo_e_un_alt_tab_fermano_la_partita_e_la_riprendono(app_wx, pres
         assert not {"pausa", "ripresa"} & {nome for nome, _voce in tavolo.suonati[suonati:]}
         assert "In pausa" not in finestra.vista.GetValue() and messaggi_wx == []
         assert finestra.statistiche.dati["conti"]["pause_automatiche"] == 2 and finestra.statistiche.dati["conti"].get("pause", 0) == 0
+    finally:
+        _chiudi(finestra)
+    assert motore.chiuso
+
+
+def test_esc_e_il_proiettile_perduto_nella_finestra_vera(app_wx, preset_finti, messaggi_wx, nomi, voce_finta, monkeypatch):
+    """D25 coi pezzi veri sul flusso finto. Esc dalla vista, durante la mira, annulla il tiro e non va avanti: la partita torna
+    all'ascolto con la riserva intatta, col suo suono e il suo messaggio; fuori dalla mira Esc va avanti. Poi le barre lasciate
+    andare ricominciano, e la barra di stato dice il passaggio nel secondo blocco del display braille; dopo l'ultimo passaggio
+    il proiettile è perduto, e il resoconto arriva nella vista e alla sintesi, dopo il suo suono e il secondo di D24."""
+    motore, flusso = motore_finto()
+    finestra = FinestraPrincipale(fabbrica_della_partita=_fabbrica([]), motore=motore)
+    try:
+        finestra.Show()
+        tavolo = Tavolo(finestra, monkeypatch, flusso=flusso)
+        partita = tavolo.partita
+        tavolo.spazio()
+        _riposo(tavolo)
+        riserva = partita.riserva
+        tavolo.spazio()
+        assert partita.fase == "mira" and tavolo.fase_della_barra() == "Mira: direzione, pausa; Esc annulla"
+        assert not _tasto(finestra, wx.WXK_ESCAPE).GetSkipped()
+        assert partita.fase == "ascolto" and partita.riserva == riserva and tavolo.fase_della_barra() == "Ascolto: Spazio per mirare"
+        assert tavolo.ultimo_lotto[-1].annuncio == "Mira annullata." and voce_finta[-1] == "Mira annullata." and tavolo.suonati[-1][0] == "mira_annullata"
+        tavolo.cursore_sul_nuovo()
+        assert _tasto(finestra, wx.WXK_ESCAPE).GetSkipped() and partita.fase == "ascolto"
+        # La mira seguente, lasciata andare: ogni passaggio scaduto fa ricominciare la barra, fino all'ultimo.
+        tavolo.spazio()
+        passaggi = costanti.PASSAGGI_DELLA_BARRA
+        for passaggio in range(1, passaggi + 1):
+            assert partita.fase == "mira" and partita.barra == 0 and partita.passaggio == passaggio
+            barra = partita.scivolate[PARAMETRI[partita.barra]]
+            tavolo.porta_udibile_a(partita.inizio_barra + barra.fine_scivolata + costanti.MARGINE_DOPO_LA_SCIVOLATA * motore.fs)
+            tavolo.battito()
+            if passaggio < passaggi:
+                riga = tavolo.fase_della_barra()
+                assert riga[:costanti.BLOCCO_DEL_BRAILLE].rstrip() == "Mira: direzione, pausa; Esc annulla"
+                assert riga[costanti.BLOCCO_DEL_BRAILLE:] == f"passaggio {passaggio + 1} di {passaggi}"
+        assert partita.fase == "attesa" and partita.riserva == riserva - 1 and partita.tiri == 1 and tavolo.suonati[-1][0] == "proiettile_perduto"
+        assert tavolo.fase_della_barra() == "Palestra: ascolta l'esito del tiro"
+        da = len(tavolo.ricevuti)
+        for _blocco in range(SECONDI_MASSIMI * costanti.FS // costanti.AUDIO_BLOCCO):
+            if len(tavolo.ricevuti) > da:
+                break
+            tavolo.avanza(1)
+            tavolo.battito()
+        resoconto = tavolo.ricevuti[da]
+        assert resoconto.tipo == "resoconto" and resoconto.dati["perduto"]
+        assert resoconto.testo.splitlines() == [f"Tiro 1, livello 1: proiettile perduto; nella riserva restano {riserva - 1} colpi.",
+                                                f"La barra della direzione è passata {passaggi} volte senza lo Spazio: il colpo non è partito, e il proiettile "
+                                                "conta come un tiro a vuoto."]
+        assert voce_finta[-1] == resoconto.annuncio == f"Proiettile perduto, riserva {riserva - 1}."
+        tavolo.cursore_sul_nuovo()
+        _riposo(tavolo)
+        conti = finestra.statistiche.dati["conti"]
+        assert (conti["mire_annullate"], conti["barre_ripartite"], conti["proiettili_perduti"], conti["tiri"], conti["tiri_a_vuoto"]) == (
+            1, passaggi - 1, 1, 1, 1)
+        assert finestra.statistiche.dati["suoni"]["proiettile_perduto"] == 1 and messaggi_wx == []
     finally:
         _chiudi(finestra)
     assert motore.chiuso
@@ -919,12 +994,11 @@ def test_il_livello_nuovo_e_il_bonus_suonano_in_fila(app_wx, preset_finti, messa
         assert [m.tipo for m in nuovi] == ["resoconto", "livello", "bonus"]
         livello, bonus = tavolo.voce("livello_su"), tavolo.voce("bonus_appare")
         assert bonus.inizio == livello.inizio + LUNGHEZZA_FINTA + round(modulo_partita.STACCO_FRA_GLI_AVVISI * motore.fs)
-        assert partita.dopo_gli_avvisi() == bonus.inizio + LUNGHEZZA_FINTA + round(modulo_partita.STACCO_FRA_GLI_AVVISI * motore.fs)
+        assert partita._fine_degli_avvisi == bonus.inizio + LUNGHEZZA_FINTA + round(modulo_partita.STACCO_FRA_GLI_AVVISI * motore.fs)
         assert voce_finta[-2:] == [nuovi[1].annuncio, nuovi[2].annuncio]
         tavolo.cursore_sul_nuovo()
         assert tavolo.barra()[2] == f"Bersagli in volo: {len(partita.bersagli) - 1} e il bonus"
-        # Passati gli avvisi, un suono nuovo parte subito.
-        flusso.avanza_fino(partita.dopo_gli_avvisi())
+        # I messaggi arrivano un secondo dopo l'effetto (D24): gli avvisi sono già passati, e un suono nuovo parte subito.
         assert partita.dopo_gli_avvisi() is None
     finally:
         _chiudi(finestra)
@@ -983,7 +1057,7 @@ def test_la_palestra_e_i_menu_nella_finestra_vera(app_wx, messaggi_wx, nomi, voc
         _menu(finestra, finestra.pausa)
         assert not partita.in_pausa and [nome for nome, _voce in tavolo.suonati[suonati:]] == ["pausa", "ripresa"]
 
-        # Un centro nella palestra: il resoconto aspetta la fine del jingle.
+        # Un centro nella palestra: il resoconto aspetta la fine del jingle, più il secondo di silenzio di D24.
         _bersaglio, valori = _valori_sul_centro(tavolo)
         _mira(tavolo, valori)
         evento = partita._evento_impatto
@@ -992,21 +1066,21 @@ def test_la_palestra_e_i_menu_nella_finestra_vera(app_wx, messaggi_wx, nomi, voc
             tavolo.avanza(1)
             tavolo.battito()
         assert len(tavolo.ricevuti) == da and partita.fase == "attesa" and tavolo.fase_della_barra() == "Palestra: ascolta l'esito del tiro"
-        fine_del_jingle = evento.campione + len(lungo)
-        tavolo.porta_udibile_a(fine_del_jingle - 1)
+        arrivo = evento.campione + len(lungo) + round(costanti.RITARDO_DEL_RESOCONTO * motore.fs)
+        tavolo.porta_udibile_a(arrivo - 1)
         tavolo.battito()
         assert len(tavolo.ricevuti) == da
-        tavolo.porta_udibile_a(fine_del_jingle)
+        tavolo.porta_udibile_a(arrivo)
         tavolo.battito()
         nuovi = tavolo.ricevuti[da:]
         assert [m.tipo for m in nuovi] == ["resoconto", "info"] and nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che chiama il bersaglio nuovo."
         assert voce_finta[-1] == nuovi[0].annuncio and finestra.vista.GetValue().endswith("\n" + nuovi[-1].testo)
         tavolo.cursore_sul_nuovo()
-        # Lo spazio mentre gli avvisi e lo stacco suonano ancora non conta e non suona.
+        # Lo spazio prima che la partita si fermi non conta e non suona.
         suonati = len(tavolo.suonati)
         tavolo.spazio()
         assert partita.fase == "attesa" and len(tavolo.suonati) == suonati
-        tavolo.porta_udibile_a(partita._fine_degli_avvisi)
+        assert partita._fine_degli_avvisi <= motore.campione_udibile()
         _fuori_dall_attesa(tavolo)
         assert len(partita.bersagli) == 1 and partita.attesa_ferma is False
         # In gioco fin qui: dall'inizio, meno il menu tenuto aperto e l'attesa della palestra.

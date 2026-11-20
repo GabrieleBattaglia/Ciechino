@@ -126,6 +126,15 @@ PRESET = {
                         "morbido, e scende, mentre i bip della mira salgono. Va bene per un valore fissato, una scelta presa o un fermo "
                         "che scatta."),
     },
+    # Esc nella mira (D25), il 20 novembre 2026: il respiro di ciechino_mira_avviata lasciato andare.
+    "ciechino_mira_annullata": {
+        "score": [["500-2400.150-900", 0.18, 0.0, [0.2, -0.15]]],
+        "kind": 7,
+        "adsr": [5.0, 0.0, 100.0, 60.0],
+        "descrizione": ("Ciechino, Esc annulla la mira, e il proiettile resta nella riserva: il respiro trattenuto di ciechino_mira_avviata "
+                        "che si lascia andare, un soffio di rumore marrone con la banda che scende da 500-2400 a 150-900 Hz e si spegne, al "
+                        "centro, in 180 ms. Va bene per un'azione annullata, un sospiro di sollievo o un'attenzione che si scioglie."),
+    },
     # Il tiro e i suoi esiti. Dal banco del volo del 19 novembre 2026 (D16): tutti e quattro più lunghi e più marcati, lo
     # sparo più grave e con un decadimento più lungo, il tonfo con un rilascio più lungo, e i due colpiti col loro jingle,
     # di bande strettissime di rumore, tre note il normale e otto il bonus, che resta più brillante.
@@ -174,6 +183,17 @@ PRESET = {
                         "brevi fruscii più piano, uno fra 400 e 2400 Hz e uno con la banda che scende da 300-1800 a 180-1000 Hz; 780 "
                         "ms, al centro, perché il gioco lo colloca nel punto dove cade. Va bene per un tiro a vuoto, un oggetto pesante "
                         "che cade o un colpo nel terreno."),
+    },
+    # Il proiettile perduto (D25), il 20 novembre 2026: una barra della mira è passata cinque volte senza lo spazio, e il colpo
+    # non parte. Rumore bianco come lo sparo, perché è lo sparo che non c'è: la miccia che sfrigola e si spegne senza il colpo.
+    "ciechino_proiettile_perduto": {
+        "score": [["4000-10000.2500-8000", 0.3, 0.0, [0.0, 0.25]], ["p", 0.05, 0.0, -0.5], ["400-1600.150-500", 0.25, 0.0, [0.15, -0.35]]],
+        "kind": 5,
+        "adsr": [5.0, 10.0, 80.0, 30.0],
+        "descrizione": ("Ciechino, una barra della mira è passata cinque volte senza lo spazio, e il proiettile è perduto: lo sparo che non "
+                        "c'è, rumore bianco, una miccia che sfrigola acuta e cresce, con la banda che scende da 4000-10000 a 2500-8000 Hz, "
+                        "poi, dopo una breve pausa, un soffio sordo che si spegne, da 400-1600 a 150-500 Hz, senza il colpo, al centro, in "
+                        "600 ms. Va bene per un colpo che fa cilecca, una miccia spenta o un'occasione sprecata."),
     },
     # I livelli e i bersagli bonus.
     "ciechino_livello_su": {

@@ -2,6 +2,26 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [0.11.0] - 2026-11-20
+
+Arriva la precisione globale, chiesta da Gabriele: ogni resoconto dice quanto il proiettile si è avvicinato al bersaglio considerando l'intero cubo, in percentuale con un decimale. Si misura dal centro del bersaglio, colpito o passato più vicino, sulla diagonale del cubo, 86,6 metri: un centro al primo livello vale sempre più del 94%, e la precisione di prima, quella che raddoppia i punti, resta com'è. Nei primi tre livelli sta nel sommario coi numeri, come G, nei tre seguenti accanto alle parole, e dopo nella riga dell'esito; la voce e il braille la dicono sempre.
+
+Le statistiche contano la precisione globale media dei tiri e quella per partita, le ultime partite dicono la loro media, e due primati nuovi, la precisione globale migliore in un tiro e la media migliore in una partita, si annunciano quando li batti.
+
+## [0.10.0] - 2026-11-20
+
+Le barre della mira aspettano la barra spaziatrice: quella che arriva in fondo senza che tu la fermi non vale più il massimo, ma ricomincia da capo, col suo secondo di silenzio e i suoi bip. Ogni barra suona al più cinque volte; se anche la quinta passa senza spazio, il colpo non parte e il proiettile è perduto, come un tiro a vuoto, con un suono suo, la miccia che si spegne, e il suo resoconto. Lo spazio premuto appena finita la scivolata vale ancora il massimo.
+
+Durante la mira Esc annulla il tiro: il proiettile resta nella riserva, i bersagli tornano a cantare, e c'è un suono anche per questo, il respiro che si lascia andare. La barra di stato lo ricorda, e dal secondo giro di una barra dice quale giro suona; la guida F1 lo dice. I suoni sono adesso 60 in tutto, in 10 gruppi, e le statistiche contano le mire annullate, le barre ripartite e i proiettili perduti.
+
+## [0.9.2] - 2026-11-20
+
+La riga del sommario si legge meglio sul display braille: comincia coi numeri, ciascuno con la sua iniziale, come L: +1,9 V: +15,8 P: +24,7 I: -18,5, tutti nei primi 40 caratteri, e dal quarantunesimo una legenda breve dice che cosa vuol dire ogni lettera. Una misura che non c'è si dice con la sua lettera e la parola manca, e la legenda spiega perché. Nei livelli delle parole le parole vengono prima, e la legenda dopo. La voce e il braille dicono l'esito e i numeri, senza la legenda.
+
+## [0.9.1] - 2026-11-20
+
+Il resoconto del tiro arriva un secondo dopo la fine del suono dell'impatto, come ha chiesto Gabriele: il jingle o il tonfo si sentono per intero, e poi un attimo di silenzio prima della voce.
+
 ## [0.9.0] - 2026-11-20
 
 Arrivano gli Ascolti, il tutorial audio chiesto da Gabriele: nel menu Impostazioni e nel menu Aiuto, una finestra racconta un passo alla volta come suona lo spazio di Ciechino, e la barra spaziatrice fa sentire il passo, quante volte vuoi, Invio passa al seguente, Esc chiude. Si comincia col test stereo, che ti dice se cuffie o altoparlanti sono nel verso giusto; poi un bersaglio al centro del cubo va a sinistra e a destra, scende a terra e sale al soffitto, viene vicino al massimo e va lontano al massimo, e salta in tre punti a caso, che dopo l'ascolto il testo ti dice in metri, così controlli l'orecchio.

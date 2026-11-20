@@ -1,14 +1,48 @@
-Collaudo di Ciechino 0.1.0, il sommario e la palestra: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Collaudo di Ciechino 0.11.0, gli Ascolti e il secondo collaudo: cancella le righe superate, annota dopo i due punti quelle con problemi.
 Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py. Per arrivare presto ai livelli alti, prima del collaudo ClaudIA porta CENTRI_PER_LIVELLO di costanti.py da 10 a 2, e alla fine lo rimette a 10, senza committarlo: si sale di livello ogni 2 centri.
-Passo 1: al primo livello tira un centro, un colpo lungo e uno debole che cade prima del bersaglio, poi un tiro teso che passa poco sotto il bersaglio; dopo ogni tiro ascolta l'effetto fino in fondo, leggi il resoconto con la voce e col braille, poi F7 per la barra, e infine premi lo spazio.
-Domanda 1: il resoconto compare appena finito il jingle o il tonfo, senza pausa, e non sopra: va bene così, o vuoi un po' di silenzio prima che compaia?
-* metterei un secondo di silenzio.
-
-Domanda 2: il sommario coi numeri, Dal bersaglio, arriva dopo l'esito, si legge bene in braille, la voce dice più e meno, e i segni ti portano alla correzione giusta, anche nei tiri tesi, che arrivano salendo e possono dire lungo di molti metri?
-* Sposta i dati numerici più importanti nei primi 40 caratteri della riga e completa poi le altre info dopo.
-
-Domanda 4: dopo il tiro teso a vuoto, la riga del mancato dice gli stessi numeri del sommario, anche lungo di molti metri con un mancato di pochi centimetri: ti va bene, o lì vuoi lo scarto nel punto più vicino?
-* No se lo scarto viene già riportato prima, mi va bene un report numerico e uno più verbale, l'importante è che ci siano tutte le informazioni. Il punto di vista che preferisco è quello del bersaglio.
-* Alcune prove non arrivo a farle perchè devo allenarmi per diventare più bravo ma confido che tutto funzioni come deve.
-* Modifica: ti chiedo di aspettare lo spazio su ogni barra parametrica, se non arriva questa si ripete da capo. Dopo 5 ripetizioni per ciascuna barra, il colpo viene annullato e il proiettile perduto. Esc annulla lo sparo in corso e il proiettle viene conservato.
-* Nel report di fine tiro, riesci a darmi una sorta di percentuale di precisione globale? Sommando la bontà generale del tiro mi stimi la precisione globale. 100%-dimensione_del_proiettile% èindica ovviamente colpito e poi subentra l'altra percentuale che ci dice quanto bene è stato preso, questa invece ci dice quanto il proiettile si è avvicinato considerando l'intero cubo di spazio. Spero di essermi spiegato bene.
+Passo 1: dal menu Impostazioni scegli Ascolti, con Alt, I e S.
+Domanda 1: il suono dell'apertura, un do a sinistra, lo stesso a destra e una scivolata al centro, si distingue dagli altri suoni dei menu?
+Domanda 2: all'apertura NVDA legge il nome dell'area, Ascolti, e la prima riga, quella del passo 1 di 13, il test stereo?
+Passo 2: leggi il testo con le frecce fino in fondo.
+Domanda 3: le tre righe di Spazio, Invio ed Esc in fondo sono chiare, sulla barra braille e a voce?
+Passo 3: premi Spazio sul test stereo, in cuffia e poi con gli altoparlanti.
+Domanda 4: il suono parte tutto a sinistra e arriva tutto a destra, con la sosta ai due capi?
+Passo 4: con Leggi i resoconti accesa, premi Invio.
+Domanda 5: la sintesi legge subito il passo 2, senza i tasti, e il cursore è sulla prima riga?
+Passo 5: spegni Leggi i resoconti, riapri gli Ascolti e premi Invio.
+Domanda 6: senza la sintesi NVDA non legge il passo nuovo da sé: ti basta leggerlo con le frecce, o vuoi un suono o una lettura al cambio di passo?
+Passo 6: premi Spazio sulla tratta orizzontale.
+Domanda 7: la velocità della tratta, 8 metri al secondo, si segue bene, o è troppo lenta o troppo svelta?
+Domanda 8: a 55 metri la parete del cubo suona a metà strada verso il lato: il testo lo spiega abbastanza?
+Domanda 9: dal test stereo, a -9 decibel, al bersaglio della tratta, intorno ai -24, il volume cala parecchio: il salto ti disturba, o vuoi il test stereo più piano?
+Passo 7: premi Spazio sull'altezza e sulla distanza.
+Domanda 10: a terra e al soffitto la nota si capisce, e i 9 decibel fra il vicino e il lontano bastano a ritarare l'orecchio sulla distanza?
+Passo 8: premi Spazio sui punti a caso, e aspetta la fine del terzo.
+Domanda 11: la rivelazione dei punti arriva alla sintesi e il cursore ci va sopra?
+Domanda 12: allo spazio i punti restano gli stessi, per riascoltarli sapendo dove sono: va bene, o li vuoi nuovi a ogni spazio?
+Passo 9: premi Spazio sulla grandezza.
+Domanda 13: la crescita da mezzo metro a 5 metri e poi a 10 si sente, e il gigante a 10 metri basta?
+Passo 10: premi Spazio sulle due parti delle forme e sui timbri.
+Domanda 14: due secondi e mezzo per forma e il silenzio fra l'una e l'altra bastano a riconoscerle coi nomi del testo?
+Passo 11: premi Spazio sulla mira, sul volo, sui colpi e sul bonus.
+Domanda 15: la mira, lo sparo, il volo e il tonfo suonano come in partita, col proiettile che hai scelto?
+Domanda 16: i jingle del centro e del bonus, vicino e lontano, si distinguono, e i 14 secondi del bonus non sono troppi?
+Passo 12: tieni giù lo spazio su un passo, poi tieni giù Invio appena aperti gli Ascolti.
+Domanda 17: il suono riparte una volta sola, e l'Invio tenuto giù non salta il primo passo?
+Passo 13: comincia una partita, apri gli Ascolti dal menu Aiuto, con Alt, A e A, premi Spazio e poi Esc a metà del suono.
+Domanda 18: con gli Ascolti aperti la partita tace, e con Esc tutto tace subito e la partita riprende?
+Domanda 19: le lettere dei menu, la S in Impostazioni, dove la A è di Scheda audio, e la A in Aiuto, ti vanno bene?
+Passo 14: al primo livello tira un centro, poi un colpo debole che cade prima del bersaglio; dopo ogni tiro ascolta l'effetto fino in fondo, poi leggi la prima riga del resoconto col display, scorrendo anche al secondo blocco.
+Domanda 20: il secondo di silenzio fra la fine del jingle o del tonfo e la voce va bene, o lo vuoi più lungo o più corto?
+Domanda 21: la riga del sommario comincia coi valori, L, V, P, I e G, e dal quarantunesimo carattere la legenda: il secondo blocco comincia proprio all'inizio della seconda schermata del display, e la voce dice bene iniziali, due punti e segni?
+Domanda 22: nel colpo debole la riga dice L: manca, V: manca e I: manca, e la legenda spiega perché: la parola manca ti va bene, o vuoi un altro segno?
+Domanda 23: la precisione globale, G, sta nel primo blocco quando i valori sono corti, altrimenti apre il secondo: ti va bene che si sposti, e la percentuale con un decimale ti dice quanto ti avvicini?
+Passo 15: avvia la mira e lascia passare la direzione due volte senza spazio, leggendo la barra di stato con F7; poi fermala e prendi gli altri valori.
+Domanda 24: la barra che ricomincia si riconosce, col secondo di silenzio e i bip, e passaggio 2 di 5, dal quarantunesimo carattere della barra di stato, si legge bene sul display?
+Passo 16: avvia la mira e lascia passare la direzione cinque volte senza spazio.
+Domanda 25: il suono del proiettile perduto, una miccia che sfrigola e si spegne senza lo sparo, si distingue dagli effetti del tiro, e il resoconto dice chiaro perché il colpo è perso?
+Passo 17: avvia la mira, prendi la direzione e premi Esc durante l'alzo; poi avvia la mira, metti la pausa con Ctrl+P e premi Esc.
+Domanda 26: Esc annulla subito, col respiro che si lascia andare, e il messaggio dice che il proiettile resta; nella pausa la mira si annulla e la pausa resta: ti va bene così?
+Passo 18: gioca fino al settimo livello, e leggi un resoconto del quinto e uno del settimo.
+Domanda 27: dal quarto al sesto le parole stanno nel primo blocco e la precisione globale apre il secondo; dal settimo la precisione globale sta nella riga dell'esito: ti va bene?
+Esito:

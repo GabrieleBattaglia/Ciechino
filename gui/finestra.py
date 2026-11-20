@@ -11,7 +11,8 @@ le frecce trova subito l'ultimo resoconto e, risalendo, tutti quelli di prima. L
 messaggio va alla sintesi, con GBsintesi, se l'impostazione lo vuole.
 Lo spazio è il comando del gioco: si prende alla pressione nel gancio dei tasti della finestra,
 EVT_CHAR_HOOK, che wx chiama prima dei controlli e dei tasti rapidi dei menu, e non va avanti, così il
-carattere non arriva all'area di testo e NVDA non lo ripete. Un timer di BATTITO_MS fa avanzare la
+carattere non arriva all'area di testo e NVDA non lo ripete; nella mira, allo stesso modo, Esc la
+annulla e conserva il proiettile (D25). Un timer di BATTITO_MS fa avanzare la
 partita, porta i suoi messaggi nella vista e rinfresca la barra, che si riscrive soltanto quando cambia,
 tenendo il cursore sulla stessa riga e nella stessa colonna.
 La finestra possiede il motore audio, i suoni, le statistiche e le impostazioni; la partita la crea con
@@ -391,6 +392,9 @@ class FinestraPrincipale(wx.Frame):
             # Traduttori: il nome del tasto, come lo dice la guida.
             (_("Spazio"), _("comincia la partita, avvia la mira e ferma le tre scivolate, della direzione, dell'alzo e della potenza; nei livelli "
                             "della palestra, dopo ogni tiro, fa ripartire la partita, che aspetta ferma")),
+            # Traduttori: Esc nella mira (D25); fuori dalla mira chiude le finestre interne, come sempre.
+            ("Esc", _("durante la mira annulla il tiro: il colpo non parte, il proiettile resta nella riserva e i bersagli tornano a cantare; "
+                      "nelle finestre interne le chiude")),
             ("F5", _("porta il fuoco nella vista della partita")),
             ("F7", _("porta il fuoco nella barra di stato")),
         )
@@ -671,8 +675,10 @@ class FinestraPrincipale(wx.Frame):
         Il gancio dei tasti della finestra, che wx chiama alla pressione, prima dei controlli e dei tasti
         rapidi dei menu. Lo spazio senza modificatori, a finestra attiva e senza dialoghi aperti, è della
         partita e si ferma qui, senza Skip: il carattere non arriva all'area di testo, e NVDA non lo
-        ripete. Lo spazio tenuto giù conta una volta sola, alla prima pressione. F5 e F7 portano il fuoco.
-        Ogni altro tasto prosegue come sempre, verso i controlli e i tasti rapidi.
+        ripete. Lo spazio tenuto giù conta una volta sola, alla prima pressione. Esc, durante la mira e alle
+        stesse condizioni dello spazio, annulla la mira (D25); fuori dalla mira, e nei dialoghi, prosegue
+        come prima. F5 e F7 portano il fuoco. Ogni altro tasto prosegue come sempre, verso i controlli e i
+        tasti rapidi.
         Un tasto che arriva qui dice anche che nessun menu è aperto, perché il menu aperto si tiene la
         tastiera: dove Windows non sa dire dei menu, un evento di chiusura perso finisce qui (D22).
         """
@@ -682,6 +688,10 @@ class FinestraPrincipale(wx.Frame):
             if codice == wx.WXK_SPACE and self._spazio_per_la_partita():
                 if not event.IsAutoRepeat():
                     self._esegui(self.spazio)
+                return
+            if codice == wx.WXK_ESCAPE and self._spazio_per_la_partita() and getattr(self.partita, "fase", None) == "mira":
+                if not event.IsAutoRepeat():
+                    self._esegui(self.annulla_la_mira)
                 return
             if codice in TASTI_DEL_FUOCO and not self._finestra_modale_aperta():
                 self._esegui(self.vai_alla_vista if codice == wx.WXK_F5 else self.vai_alla_barra)
@@ -695,6 +705,10 @@ class FinestraPrincipale(wx.Frame):
         self._ricevi(self.partita.spazio())
         if nuova and self.partita.in_corso():
             self._riavvia_il_battito()
+
+    def annulla_la_mira(self):
+        """Esc nella mira (D25): la partita annulla la mira, col suo suono, e il proiettile resta nella riserva."""
+        self._ricevi(self.partita.annulla_mira())
 
     def _riavvia_il_battito(self):
         """Il timer del battito riparte, se si era fermato: lo ferma soltanto un battito guasto, e una partita nuova merita un'altra prova."""
