@@ -95,7 +95,8 @@ def test_durata_a_parole():
 def test_informazioni():
     righe = testi.informazioni().split("\n")
     assert righe[0] == f"Ciechino, il tiro a segno a orecchio, versione {version.__version__}, rilasciata {testi.data_lunga(version.__date__)}."
-    assert "giovedì 19 novembre 2026" in righe[0]
+    # La data lunga ha il giorno della settimana: la prova non si lega alla versione del momento.
+    assert testi.data_lunga("2026-11-19") == "giovedì 19 novembre 2026"
     assert righe[1] == f"Autori: {version.__author__}."
     assert any("GNU GPL versione 3" in riga for riga in righe)
     assert righe[-1].endswith("https://github.com/GabrieleBattaglia/Ciechino")
