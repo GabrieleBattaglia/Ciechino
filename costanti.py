@@ -91,14 +91,20 @@ DURATA_DELLA_SCALA = 3.0
 VELOCITA_DELLA_MIRA = 1.0 / DURATA_DELLA_SCALA
 # Il puntatore (D31, dalla 2.0.1; Gabriele il 22 novembre 2026: «Quando muovo il mirino, gli altri
 # parametri devono rimanere nel suono di puntamento: volume e altezza se muovo il pan eccetera. In pratica
-# quel suono è il mio puntatore.»): una voce sola, in PUNTATORE_FORMA, che suona mentre almeno un valore
-# si muove e porta sempre tutti e tre: la direzione nella panoramica, da tutto a sinistra a tutto a
+# quel suono è il mio puntatore.»): una voce sola che porta sempre tutti e tre i valori: la direzione
+# nella panoramica, da tutto a sinistra a tutto a
 # destra; l'alzo nell'altezza, da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] hertz, quattro ottave, su scala
 # esponenziale; la potenza nel volume, linearmente in decibel, da POTENZA_DB_MINIMO sotto PUNTATORE_DB
 # fino a PUNTATORE_DB, così anche al minimo il puntatore si sente. Fino alla 2.0.0 ogni valore aveva la
 # voce della sua scivolata di D19, e gli altri due tacevano.
+# Dalla 2.0.3 (D32) il puntatore ha il timbro del proiettile, che nessun bersaglio usa, così non si fonde
+# con loro: nella 2.0.1 era in triangolo, e vicino alla nota di un bersaglio in triangolo l'orecchio lo
+# sentiva da un punto sbagliato. E suona per tutta la mira, dallo spazio allo sparo: pieno mentre almeno
+# un valore si muove, PUNTATORE_FERMO_DB più piano coi valori fermi, col volume che segue sempre la
+# potenza. Gabriele: «invece di silenziare completamente il puntatore quando è fermo, potresti lasciare
+# attiva la nota del puntatore ma molto bassa di volume.»
 PUNTATORE_DB = -9.0
-PUNTATORE_FORMA = "triangolo"
+PUNTATORE_FERMO_DB = -18.0
 ALZO_FREQUENZE = (150.0, 2400.0)
 POTENZA_DB_MINIMO = -20.0
 # Le tacche: ogni valore ne suona una a ogni decimo della scala che attraversa, in tutte e due le

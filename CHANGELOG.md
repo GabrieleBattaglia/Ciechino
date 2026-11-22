@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [2.0.3] - 2026-11-22
+
+Il puntatore della mira prende adesso il timbro del tuo proiettile, quello che scegli con Proiettile nel menu Impostazioni, il seno se non l'hai cambiato. Nella 2.0.1 era in onda triangolare, il timbro di molti bersagli: muovendo l'alzo vicino alla nota di un bersaglio in triangolo, l'orecchio poteva fondere i due suoni e sentire il puntatore da un punto sbagliato, come ha notato Gabriele. Il timbro del proiettile nessun bersaglio lo usa, e puntatore e proiettile non suonano mai insieme.
+
+Durante la mira, dallo spazio fino al colpo, il puntatore non tace più coi valori fermi: resta acceso 18 decibel più piano, col volume che segue sempre la potenza, così sai sempre dove stai puntando. Tace allo sparo, con Esc e durante la pausa, e si riaccende alla ripresa. Negli Ascolti, fra le due corse di ogni valore, il puntatore resta acceso piano come in partita.
+
 ## [2.0.1] - 2026-11-22
 
 Il suono della mira adesso è il tuo puntatore, come ha chiesto Gabriele: una voce sola, in onda triangolare, che porta sempre tutti e tre i valori, la direzione nel punto da cui arriva, l'alzo nell'altezza della nota, da 150 a 2.400 hertz, e la potenza nel volume. Se muovi la direzione, la nota e il volume restano quelli dell'alzo e della potenza, e lo stesso per gli altri due; con due tasti giù cambiano insieme due cose dello stesso suono. Fino alla 2.0.0 ogni valore aveva la sua voce, e gli altri due tacevano.

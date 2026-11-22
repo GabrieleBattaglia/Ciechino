@@ -62,10 +62,11 @@ from costanti import (
     PARTENZA_DELLA_MIRA,
     POTENZA_DB_MINIMO,
     PROIETTILE_FORME,
-    PUNTATORE_FORMA,
+    PUNTATORE_FERMO_DB,
     RAGGIO_BONUS_FATTORE,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     SETTORE_AZIMUT,
+    SFUMATURA_STOP,
     TACCHE,
     TEMPO_DELLA_MIRA_INIZIALE,
     TEMPO_DELLA_MIRA_MINIMO,
@@ -73,7 +74,7 @@ from costanti import (
     VELOCITA_DELLA_MIRA,
 )
 from motore_audio import VoceBuffer, VoceTono
-from sintesi import pan_della_direzione, parametri_del_puntatore, tacca_dell_asse, tick_del_tempo
+from sintesi import db_in_lineare, pan_della_direzione, parametri_del_puntatore, tacca_dell_asse, tick_del_tempo
 from statistiche import NOMI_DELLE_FORME, NOMI_DELLE_PORTANTI
 from strumenti import crea_preset
 
@@ -536,29 +537,29 @@ def test_tutte_le_forme_dell_oscillazione_e_tutti_i_timbri(finto):
 
 def test_la_mira_manuale_come_in_partita_con_le_corse_le_tacche_e_i_capi(finto, chiesti):
     """D29: il respiro che avvia la mira, poi per ogni valore, nell'ordine di PARAMETRI, le corse di CORSE_DELLA_MIRA, dal centro al
-    massimo e dal massimo al minimo, come col suo tasto giù: il puntatore di D31, con gli altri due valori al centro, a
-    VELOCITA_DELLA_MIRA; la tacca di tacca_dell_asse a ogni decimo che attraversa, nell'istante in cui lo passa; e il suono fine_scala
-    al capo, dal punto del puntatore. Ogni corsa è staccata dalla seguente da ASCOLTI_PAUSA, e niente spara."""
+    massimo e dal massimo al minimo, come col suo tasto giù, a VELOCITA_DELLA_MIRA; la tacca di tacca_dell_asse a ogni decimo che
+    attraversa, nell'istante in cui lo passa; e il suono fine_scala al capo, dal punto del puntatore. Il puntatore di D31 è una voce
+    sola per ogni valore, dalla prima corsa alla fine dell'ultima, nel timbro del proiettile (D32), con gli altri due valori al
+    centro: pieno mentre il valore corre, e PUNTATORE_FERMO_DB più piano fra le due corse, col valore fermo dove l'ha lasciato. Ogni
+    corsa parte ASCOLTI_PAUSA dopo la fine della precedente, capo compreso, e niente spara."""
     assert ascolti.CORSE_DELLA_MIRA == ((PARTENZA_DELLA_MIRA, 1.0), (1.0, 0.0))
     motore, _flusso = finto
     fs = motore.fs
-    ascolto = _regia(motore).suona(_indice("mira"))
+    regia = _regia(motore)
+    ascolto = regia.suona(_indice("mira"))
     pausa = round(ASCOLTI_PAUSA * fs)
+    fermo = float(db_in_lineare(PUNTATORE_FERMO_DB))
     voci = iter(ascolto.voci)
     respiro = next(voci)
     assert isinstance(respiro, VoceBuffer) and respiro.inizio == ascolto.inizio
     campione = ascolto.inizio + CAMPIONI_FINTI + pausa
     eventi = [("mira_avviata", ascolto.inizio, None)]
+    puntatori = {}
     for parametro in PARAMETRI:
+        via = campione
+        corse = []
         for da, a in ascolti.CORSE_DELLA_MIRA:
-            secondi = abs(a - da) / VELOCITA_DELLA_MIRA
-            voce = next(voci)
-            assert isinstance(voce, VoceTono) and voce.forma == PUNTATORE_FORMA and voce.inizio == campione, parametro
-            # La voce suona il valore che corre: al via quello di partenza, a metà il mezzo, in fondo il capo, e poi resta lì.
-            for istante, valore in ((0.0, da), (secondi / 2, (da + a) / 2), (secondi, a), (secondi + 1.0, a)):
-                ottenuti, attesi = _parametri(voce, istante), _puntatore_con(parametro, valore)
-                assert all(np.allclose(x, y) for x, y in zip(ottenuti, attesi, strict=True)), (parametro, da, a, istante)
-            fine = campione + round(secondi * fs)
+            fine = campione + round(abs(a - da) / VELOCITA_DELLA_MIRA * fs)
             # Le tacche: i decimi che il valore attraversa, esclusi quello da cui parte e il capo, che ha il suo suono.
             decimi = sorted((k for k in range(1, TACCHE) if min(da, a) < k / TACCHE < max(da, a)), key=lambda k: abs(k / TACCHE - da))
             tacche = sorted(itertools.islice(voci, len(decimi)), key=lambda tacca: tacca.inizio)
@@ -570,13 +571,29 @@ def test_la_mira_manuale_come_in_partita_con_le_corse_le_tacche_e_i_capi(finto, 
             pan = pan_della_direzione(a if parametro == "direzione" else PARTENZA_DELLA_MIRA)
             assert _pan_del_buffer(capo.buffer) == pytest.approx(pan, abs=1e-3), (parametro, a)
             eventi.append(("fine_scala", fine, None))
+            corse.append((campione, fine, da, a))
             campione = fine + CAMPIONI_FINTI + pausa
+        voce = next(voci)
+        assert isinstance(voce, VoceTono) and voce.forma == regia.proiettile and voce.inizio == via, parametro
+        # Nelle corse il puntatore suona pieno il valore che corre: dopo l'entrata, a metà e prima dell'uscita.
+        for dal, al, da, a in corse:
+            secondi, verso = (al - dal) / fs, (1.0 if a >= da else -1.0)
+            for istante in (2 * SFUMATURA_STOP, secondi / 2, secondi - 2 * SFUMATURA_STOP):
+                ottenuti = _parametri(voce, (dal - via) / fs + istante)
+                attesi = _puntatore_con(parametro, da + verso * VELOCITA_DELLA_MIRA * istante)
+                assert all(np.allclose(x, y) for x, y in zip(ottenuti, attesi, strict=True)), (parametro, da, a, istante)
+        # Fra le due corse il valore resta dove la prima l'ha lasciato, e il puntatore suona PUNTATORE_FERMO_DB più piano.
+        (_dal, al, _da, a), _seconda = corse
+        frequenze, pan, guadagni = _parametri(voce, (al - via) / fs + (CAMPIONI_FINTI + pausa) / (2 * fs))
+        attesi = _puntatore_con(parametro, a)
+        assert np.allclose(frequenze, attesi[0]) and np.allclose(pan, attesi[1]) and np.allclose(guadagni, attesi[2] * fermo), parametro
+        puntatori[parametro] = (voce, via, corse)
     assert next(voci, None) is None
     assert ascolto.eventi == eventi and ascolto.fine == campione - pausa
     # La direzione va dal mezzo a tutto a destra, e poi a tutto a sinistra, come dice il testo.
-    direzione = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)][:2]
-    capi = [_parametri(voce, abs(a - da) / VELOCITA_DELLA_MIRA)[1][0] for voce, (da, a) in zip(direzione, ascolti.CORSE_DELLA_MIRA, strict=True)]
-    assert _parametri(direzione[0], 0.0)[1][0] == pytest.approx(0.0) and capi == pytest.approx([1.0, -1.0])
+    voce, via, corse = puntatori["direzione"]
+    capi = [_parametri(voce, (al - via) / fs)[1][0] for _dal, al, _da, _a in corse]
+    assert _parametri(voce, 0.0)[1][0] == pytest.approx(0.0) and capi == pytest.approx([1.0, -1.0])
 
 
 def test_una_corsa_che_non_arriva_al_capo_non_ha_il_suo_suono(finto, chiesti):
@@ -590,7 +607,7 @@ def test_una_corsa_che_non_arriva_al_capo_non_ha_il_suo_suono(finto, chiesti):
     fine = regia.corsa(ascolto, "alzo", da, a, inizio)
     assert fine == inizio + round(abs(a - da) / VELOCITA_DELLA_MIRA * fs) and ascolto.fine == fine and ascolto.eventi == []
     (voce,) = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)]
-    assert voce.inizio == inizio and voce.forma == PUNTATORE_FORMA
+    assert voce.inizio == inizio and voce.forma == regia.proiettile
     tacche = sorted((voce for voce in ascolto.voci if isinstance(voce, VoceBuffer)), key=lambda tacca: tacca.inizio)
     assert [tacca.inizio for tacca in tacche] == [inizio + round(abs(k / TACCHE - da) / VELOCITA_DELLA_MIRA * fs) for k in (4, 3)]
     assert np.array_equal(tacche[0].buffer, tacca_dell_asse("alzo", 4, fs=fs)) and np.array_equal(tacche[1].buffer, tacca_dell_asse("alzo", 3, fs=fs))

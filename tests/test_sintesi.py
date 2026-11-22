@@ -18,8 +18,8 @@ from costanti import (
     PARAMETRI,
     PARTENZA_DELLA_MIRA,
     POTENZA_DB_MINIMO,
+    PROIETTILE_FORMA,
     PUNTATORE_DB,
-    PUNTATORE_FORMA,
     TACCA_DB,
     TACCA_DURATA,
     TACCA_FORMA,
@@ -238,12 +238,13 @@ def test_i_valori_del_puntatore_fuori_scala_e_insieme():
 
 def _scala(parametro):
     """Il puntatore mentre un valore corre da un capo all'altro, in DURATA_DELLA_SCALA, con gli altri due al centro, come
-    lo fa la voce del motore: lo stato di un Asse, i parametri di ogni campione e l'Oscillatore di PUNTATORE_FORMA."""
+    lo fa la voce del motore: lo stato di un Asse, i parametri di ogni campione e l'Oscillatore del timbro del proiettile
+    predefinito, PROIETTILE_FORMA, che il puntatore prende da D32."""
     asse = Asse(0.0)
     asse.muovi(1, 0.0)
     tempi = np.arange(_campioni(DURATA_DELLA_SCALA)) / FS
     frequenze, pan, guadagni = _puntatore(**{parametro: asse.valore(tempi)})
-    mono = sintesi.Oscillatore(PUNTATORE_FORMA).rendi(frequenze) * guadagni
+    mono = sintesi.Oscillatore(PROIETTILE_FORMA).rendi(frequenze) * guadagni
     return sintesi.panoramica(mono, pan).astype(np.float64)
 
 

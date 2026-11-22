@@ -62,7 +62,7 @@ from costanti import (
     POTENZA_DB_MINIMO,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
-    PUNTATORE_FORMA,
+    PUNTATORE_FERMO_DB,
     RAGGIO_BONUS_FATTORE,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     SETTORE_AZIMUT,
@@ -411,8 +411,9 @@ def _testo_timbri(proiettile):
           "la stessa oscillazione, ognuno per {secondi} secondi. In quest'ordine: {timbri}.").format(quanti=len(timbri), secondi=testi.numero(ASCOLTI_SUONO, 1),
                                                                                                   timbri=_nomi(timbri, NOMI_DELLE_PORTANTI)),
         # Traduttori: proiettile è un timbro, come «seno».
-        _("Il timbro {proiettile} è quello del tuo proiettile, che scegli con Proiettile nel menu Impostazioni: nessun bersaglio lo usa, così il "
-          "colpo non si confonde con loro. Con qualunque timbro la nota dice l'altezza allo stesso modo.").format(
+        _("Il timbro {proiettile} è quello del tuo proiettile e del puntatore della mira, che scegli con Proiettile nel menu Impostazioni: "
+          "nessun bersaglio lo usa, così il colpo e il puntatore non si confondono con loro. Con qualunque timbro la nota dice l'altezza allo "
+          "stesso modo.").format(
             proiettile=NOMI_DELLE_PORTANTI.get(proiettile, proiettile)),
     )
 
@@ -421,19 +422,21 @@ def _testo_mira():
     return _testo(
         # Traduttori: basso e alto sono frequenze già scritte, come 150 e 2.400; decibel è un numero già scritto, come 20.
         _("La mira manuale, come in partita, ma senza sparare: prima il respiro che avvia la mira, coi tre valori al centro della loro scala. "
-          "Poi il puntatore, il suono della mira: una voce sola che porta sempre tutti e tre i valori, la direzione nella posizione fra le "
-          "orecchie, l'alzo nell'altezza della nota, da {basso} a {alto} hertz, e la potenza nel volume, {decibel} decibel dal minimo al "
-          "massimo.").format(basso=testi.intero(ALZO_FREQUENZE[0]), alto=testi.intero(ALZO_FREQUENZE[1]), decibel=testi.intero(-POTENZA_DB_MINIMO)),
+          "Poi il puntatore, il suono della mira, nel timbro del tuo proiettile: una voce sola che porta sempre tutti e tre i valori, la "
+          "direzione nella posizione fra le orecchie, l'alzo nell'altezza della nota, da {basso} a {alto} hertz, e la potenza nel volume, "
+          "{decibel} decibel dal minimo al massimo.").format(basso=testi.intero(ALZO_FREQUENZE[0]), alto=testi.intero(ALZO_FREQUENZE[1]), decibel=testi.intero(-POTENZA_DB_MINIMO)),
         _("Qui si muove un valore alla volta, con gli altri due al centro. Prima la direzione, come tenendo giù la freccia destra e poi la "
           "sinistra: il puntatore va dal mezzo a tutto a destra, dove si ferma col suo colpo sordo, e poi fino a tutto a sinistra; poi l'alzo, "
           "con le frecce su e giù, la nota che sale fino in cima e scende fino in fondo; poi la potenza, con Fine e Home, che cresce fino al "
-          "pieno e cala fino al minimo, dove si sente ancora."),
+          "pieno e cala fino al minimo, dove si sente ancora. Fra le due corse di un valore il puntatore resta acceso, molto più piano, "
+          "com'è in partita coi valori fermi."),
         # Traduttori: durata è come «3 secondi».
         _("Ogni valore percorre tutta la sua scala in {durata}, con una tacca a ogni decimo che attraversa, sempre più acuta verso il "
           "massimo, che arriva dal punto in cui sta il puntatore.").format(durata=testi.durata(DURATA_DELLA_SCALA)),
-        _("In partita un valore si muove finché tieni giù il suo tasto, e si ferma quando lo lasci, mentre gli altri restano dove li hai "
-          "lasciati, anche nel suono del puntatore; due tasti di valori diversi li muovono insieme. Invio spara coi tre valori di quel "
-          "momento; Esc annulla la mira, e il proiettile resta nella riserva."),
+        _("In partita il puntatore suona per tutta la mira, piano coi valori fermi e pieno mentre li muovi. Un valore si muove finché tieni "
+          "giù il suo tasto, e si ferma quando lo lasci, mentre gli altri restano dove li hai lasciati, anche nel suono del puntatore; due "
+          "tasti di valori diversi li muovono insieme. Invio spara coi tre valori di quel momento; Esc annulla la mira, e il proiettile resta "
+          "nella riserva."),
     )
 
 
@@ -621,14 +624,13 @@ CORSE_DELLA_MIRA = ((PARTENZA_DELLA_MIRA, 1.0), (1.0, 0.0))
 
 
 def _suono_della_mira(regia, inizio):
-    """Come in partita: il respiro della mira, poi ogni valore che corre, con le sue tacche e il suono del capo,
-    una corsa dopo l'altra, staccate da ASCOLTI_PAUSA (D29)."""
+    """Come in partita: il respiro della mira, poi ogni valore che fa le sue corse, con le sue tacche e il suono del
+    capo, staccate da ASCOLTI_PAUSA, col puntatore acceso piano fra l'una e l'altra (D29, D32)."""
     ascolto = Ascolto("mira", inizio, inizio)
     pausa = round(ASCOLTI_PAUSA * regia.motore.fs)
     campione = regia.effetto(ascolto, "mira_avviata", inizio) + pausa
     for parametro in PARAMETRI:
-        for da, a in CORSE_DELLA_MIRA:
-            campione = regia.corsa(ascolto, parametro, da, a, campione) + pausa
+        campione = regia.corse(ascolto, parametro, CORSE_DELLA_MIRA, campione, pausa) + pausa
     return ascolto
 
 
@@ -807,30 +809,53 @@ class Regia:
         return self.punti
 
     def corsa(self, ascolto, parametro, da, a, inizio):
-        """Un valore della mira che corre da da ad a, come col suo tasto giù (D29): il puntatore dal campione
-        inizio, con gli altri due valori al centro (D31), a VELOCITA_DELLA_MIRA, le tacche dei decimi che
-        attraversa e, se arriva a un capo, il suono fine_scala, tutti dal punto del puntatore. Restituisce il
-        campione della fine, il suono del capo compreso."""
+        """Una corsa sola di un valore della mira, da da ad a: corse con un tratto solo."""
+        return self.corse(ascolto, parametro, ((da, a),), inizio)
+
+    def corse(self, ascolto, parametro, tratti, inizio, pausa=0):
+        """Un valore della mira che fa una dopo l'altra le corse dei tratti, coppie (da, a), come tenendo giù i suoi tasti (D29):
+        ognuna a VELOCITA_DELLA_MIRA, con le tacche dei decimi che attraversa e, se arriva a un capo, il suono fine_scala, tutti
+        dal punto del puntatore; la seguente parte pausa campioni dopo la fine della precedente, capo compreso. Il puntatore è
+        una voce sola, dal campione inizio alla fine dell'ultima corsa, nel timbro del proiettile, con gli altri due valori al
+        centro (D31, D32): pieno mentre il valore corre, PUNTATORE_FERMO_DB più piano fra una corsa e l'altra, col valore fermo
+        dove l'ha lasciato, come in partita, passando dall'uno all'altro in SFUMATURA_STOP. Restituisce il campione della fine,
+        il suono dell'ultimo capo compreso."""
         fs = self.motore.fs
-        verso = 1.0 if a >= da else -1.0
-        secondi = abs(a - da) / VELOCITA_DELLA_MIRA
-        partenza = inizio / fs
+        programma = []
+        campione = fine = inizio
+        for da, a in tratti:
+            if programma:
+                campione = fine + pausa
+            arrivo = campione + round(abs(a - da) / VELOCITA_DELLA_MIRA * fs)
+            programma.append((campione / fs, arrivo / fs, float(da), float(a)))
+            for k in range(1, TACCHE):
+                soglia = k / TACCHE
+                if min(da, a) < soglia < max(da, a):
+                    self.buffer(ascolto, tacca_dell_asse(parametro, k, fs=fs), campione + round(abs(soglia - da) / VELOCITA_DELLA_MIRA * fs))
+            fine = arrivo
+            if a in (0.0, 1.0):
+                pan = pan_della_direzione(a if parametro == "direzione" else PARTENZA_DELLA_MIRA)
+                fine = max(fine, self.effetto(ascolto, "fine_scala", arrivo, pan=pan))
+        fermo = float(db_in_lineare(PUNTATORE_FERMO_DB))
+        nodi, livelli = [], []
+        for dal, al, _da, _a in programma:
+            nodi += [dal, dal + SFUMATURA_STOP, al, al + SFUMATURA_STOP]
+            livelli += [fermo, 1.0, 1.0, fermo]
 
         def parametri(tempi_di_gioco, tempi_audio):
-            tempi = np.atleast_1d(np.asarray(tempi_audio, dtype=float)) - partenza
+            tempi = np.atleast_1d(np.asarray(tempi_audio, dtype=float))
+            valore = np.full(tempi.shape, programma[0][2])
+            for dal, al, da, a in programma:
+                verso = 1.0 if a >= da else -1.0
+                valore = np.where(tempi >= dal, da + verso * VELOCITA_DELLA_MIRA * np.clip(tempi - dal, 0.0, al - dal), valore)
             valori = dict.fromkeys(PARAMETRI, PARTENZA_DELLA_MIRA)
-            valori[parametro] = da + verso * VELOCITA_DELLA_MIRA * np.clip(tempi, 0.0, secondi)
-            return parametri_del_puntatore(*(valori[nome] for nome in PARAMETRI))
+            valori[parametro] = valore
+            frequenze, pan, guadagni = parametri_del_puntatore(*(valori[nome] for nome in PARAMETRI))
+            return frequenze, pan, guadagni * np.interp(tempi, nodi, livelli)
 
-        fine = self.tono(ascolto, parametri, PUNTATORE_FORMA, inizio, secondi, attacco=SFUMATURA_STOP, sfumatura=SFUMATURA_STOP)
-        for k in range(1, TACCHE):
-            soglia = k / TACCHE
-            if min(da, a) < soglia < max(da, a):
-                self.buffer(ascolto, tacca_dell_asse(parametro, k, fs=fs), inizio + round(abs(soglia - da) / VELOCITA_DELLA_MIRA * fs))
-        if a in (0.0, 1.0):
-            pan = pan_della_direzione(a if parametro == "direzione" else PARTENZA_DELLA_MIRA)
-            fine = max(fine, self.effetto(ascolto, "fine_scala", fine, pan=pan))
-        return fine
+        ultima = round(programma[-1][1] * fs)
+        return max(fine, self.tono(ascolto, parametri, self.proiettile, inizio, (ultima - inizio) / fs, attacco=SFUMATURA_STOP,
+                                   sfumatura=SFUMATURA_STOP))
 
     def tono(self, ascolto, parametri, forma, inizio, secondi, attacco=ASCOLTI_RAMPA, sfumatura=ASCOLTI_RAMPA):
         """Una VoceTono di forma, coi parametri, dal campione inizio per tanti secondi: entra con la rampa

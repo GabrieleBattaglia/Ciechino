@@ -1,13 +1,13 @@
-Collaudo di Ciechino 2.0.1, la cupola, la mira manuale col puntatore e la riserva più larga: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Collaudo di Ciechino 2.0.3, la cupola, la mira manuale col puntatore e la riserva più larga: cancella le righe superate, annota dopo i due punti quelle con problemi.
 Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py.
 Passo 1: apri gli Ascolti dal menu Aiuto e ascolta i passi 2, 3 e 4: da un lato all'altro, l'altezza, la distanza.
 Domanda 1: nel passo 2 cambia soltanto la panoramica, nel 3 soltanto la nota, nel 4 soprattutto il volume?
 Passo 2: negli Ascolti ascolta i passi della mira manuale e del tempo della mira, poi chiudi con Esc.
-Domanda 2: il puntatore porta i tre valori, il punto, la nota e il volume, le tacche e il colpo sordo dei capi si distinguono bene, e il tick del tempo si sente salire fino allo sparo?
+Domanda 2: il puntatore, nel timbro del tuo proiettile, porta i tre valori, il punto, la nota e il volume, e fra le due corse di un valore resta acceso piano; le tacche e il colpo sordo dei capi si distinguono bene, e il tick del tempo si sente salire fino allo sparo?
 Passo 3: comincia una partita con Spazio, poi premi Spazio per mirare.
-Domanda 3: NVDA dice Mira e il fuoco va lì, e premendo le frecce, Home e Fine NVDA tace, senza rileggere righe?
+Domanda 3: NVDA dice Mira e il fuoco va lì, il puntatore si accende piano coi valori fermi, e premendo le frecce, Home e Fine NVDA tace, senza rileggere righe?
 Passo 4: tieni giù la freccia destra per circa un secondo e lasciala; poi fai lo stesso con la freccia su e con Fine.
-Domanda 4: il puntatore si muove finché tieni giù un tasto e tace appena lo lasci, senza ritardi che disturbino; muovendo l'alzo e la potenza resta a destra, dove l'ha lasciato la direzione, con le tacche da lì, e la nota e il volume restano dove li hai lasciati?
+Domanda 4: il puntatore si muove pieno finché tieni giù un tasto e torna piano appena lo lasci, senza ritardi che disturbino; muovendo l'alzo e la potenza resta a destra, dove l'ha lasciato la direzione, con le tacche da lì, anche quando passa vicino alla nota di un bersaglio, e la nota e il volume restano dove li hai lasciati?
 Passo 5: tieni giù insieme la freccia sinistra e Home.
 Domanda 5: i due valori cambiano insieme lo stesso suono, che va verso sinistra e cala di volume, mentre la nota resta quella dell'alzo?
 Passo 6: tieni giù Fine finché la potenza arriva al massimo, poi Home fino al minimo, e muovi la direzione.

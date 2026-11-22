@@ -81,7 +81,7 @@ from costanti import (
     POTENZA_DB_MINIMO,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
-    PUNTATORE_FORMA,
+    PUNTATORE_FERMO_DB,
     RAGGIO_BONUS_FATTORE,
     RAGGIO_INIZIALE,
     RAGGIO_MINIMO,
@@ -798,11 +798,13 @@ def test_la_mira_manuale_nei_documenti():
     ]
     mancanti = [frase for frase in frasi if frase not in tasti]
     assert not mancanti, f"frasi dei tasti della mira che il manuale non dice: {mancanti}"
-    # Il puntatore di D31: una voce sola in onda triangolare, che porta la direzione nel punto, l'alzo nella nota e la potenza nel volume.
-    assert PUNTATORE_FORMA == "triangolo", "il manuale dice il puntatore in onda triangolare"
+    # Il puntatore di D31: una voce sola, nel timbro del proiettile da D32, che porta la direzione nel punto, l'alzo nella nota e la
+    # potenza nel volume, e coi valori fermi resta acceso PUNTATORE_FERMO_DB più piano.
     voci = _sezione(manuale, "suoni-mira")
     frasi = [
-        "una voce sola, in onda triangolare, che porta sempre tutti e tre i valori",
+        "una voce sola, nel timbro del tuo proiettile, che porta sempre tutti e tre i valori",
+        f"resta acceso, {testi.intero(-PUNTATORE_FERMO_DB)} decibel più piano",
+        "nessun bersaglio lo usa",
         "La direzione è il punto da cui arriva il puntatore",
         f"da {testi.intero(ALZO_FREQUENZE[0])} a {testi.intero(ALZO_FREQUENZE[1])} hertz, {A_PAROLE[round(math.log2(ALZO_FREQUENZE[1] / ALZO_FREQUENZE[0]))]} ottave",
         f"La potenza è il volume, {testi.intero(-POTENZA_DB_MINIMO)} decibel dal minimo al massimo",

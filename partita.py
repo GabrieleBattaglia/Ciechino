@@ -79,7 +79,7 @@ from costanti import (
     PROBABILITA_BONUS,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
-    PUNTATORE_FORMA,
+    PUNTATORE_FERMO_DB,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
@@ -94,7 +94,7 @@ from costanti import (
 )
 from motore_audio import VoceTono
 from resoconti import Messaggio
-from sintesi import pan_della_direzione, panoramica, parametri_del_puntatore, tacca_mono, tick_del_tempo
+from sintesi import db_in_lineare, pan_della_direzione, panoramica, parametri_del_puntatore, tacca_mono, tick_del_tempo
 from volo import calcola_volo, parametri_del_proiettile
 
 __all__ = ["CONTI_DEL_PROIETTILE", "FASI", "Messaggio", "Partita", "esempio_del_proiettile", "nella_palestra", "punti_del_centro", "tempo_della_mira",
@@ -225,10 +225,9 @@ def _suono_del_puntatore(assi, tempi):
 
 
 def _rampa(bersaglio, partenza, passo):
-    """L'inviluppo che insegue il bersaglio, un array di vero e falso, partendo da partenza e cambiando al più
-    di passo a ogni campione, verso uno dove il bersaglio è vero e verso zero dove è falso: così il puntatore
-    entra ed esce senza click (D31). Restituisce l'inviluppo e il suo ultimo valore, da cui riparte il blocco
-    seguente."""
+    """L'inviluppo che insegue il bersaglio, un array di livelli, partendo da partenza e cambiando al più di
+    passo a ogni campione: così il puntatore passa dal livello dei valori fermi al pieno, e indietro, senza
+    click (D31, D32). Restituisce l'inviluppo e il suo ultimo valore, da cui riparte il blocco seguente."""
     bersaglio = np.asarray(bersaglio, dtype=float)
     uscita = np.empty(len(bersaglio))
     valore = float(partenza)
@@ -606,6 +605,7 @@ class Partita:
         if self.fase == "mira":
             self._mira_corre_dal = k
             self._avvia_il_tempo_della_mira(k)
+            self._accendi_il_puntatore(k)
         rimandati, self._avvisi_rimandati = self._avvisi_rimandati, []
         for evento in rimandati:
             self._avviso(evento)
@@ -974,9 +974,10 @@ class Partita:
         return self._scadenza is not None and self.motore.campione_udibile() >= self._scadenza
 
     def _avvia_mira(self):
-        """Lo spazio nell'ascolto avvia la mira: suona mira_avviata, i tre valori stanno al centro, fermi e
-        muti finché un tasto non li muove, il tempo di gioco continua a scorrere e i bersagli suonano pieni
-        (D29); fuori dalla palestra parte il tempo della mira, coi suoi tick."""
+        """Lo spazio nell'ascolto avvia la mira: suona mira_avviata, i tre valori stanno al centro, fermi
+        finché un tasto non li muove, il tempo di gioco continua a scorrere e i bersagli suonano pieni
+        (D29); fuori dalla palestra parte il tempo della mira, coi suoi tick. Il puntatore si accende subito,
+        piano, coi valori fermi (D32)."""
         self.suoni.suona("mira_avviata")
         self._conta("mire_avviate")
         self.valori = []
@@ -988,6 +989,7 @@ class Partita:
         self._tempo_della_mira = tempo_della_mira(self.livello)
         self._secondi_rimasti = self._tempo_della_mira
         self._avvia_il_tempo_della_mira(k)
+        self._accendi_il_puntatore(k)
         return []
 
     def _avvia_il_tempo_della_mira(self, k):
@@ -1034,7 +1036,7 @@ class Partita:
 
     def _suona_l_asse(self, parametro):
         """I suoni della mira dopo un cambio del moto di un valore (D31): il puntatore, la voce sola che porta
-        i tre valori, nasce al primo valore che si muove e da lì li segue da solo; davanti al valore, in fila,
+        i tre valori, acceso dall'inizio della mira (D32), li segue da solo; davanti al valore, in fila,
         le tacche dei decimi che attraverserà e il suono fine_scala del capo, dove si ferma, ognuno dal punto
         del puntatore nell'istante in cui suona. Se cambia la direzione, cambia anche il punto da cui
         suoneranno le tacche e il capo degli altri valori in corsa, e quelli si rimettono in fila. Il suono
@@ -1090,24 +1092,26 @@ class Partita:
         self._in_fila_degli_assi[parametro] = tenute + nuove
 
     def _accendi_il_puntatore(self, k):
-        """Il puntatore della mira (D31): una voce sola, in PUNTATORE_FORMA, coi parametri di
-        sintesi.parametri_del_puntatore, la direzione nella panoramica, l'alzo nell'altezza e la potenza nel
-        volume, che suona soltanto dove almeno un valore si muove, entrando e uscendo in SFUMATURA_STOP. Nasce
-        dal campione k al primo valore che si muove, e resta fino alla fine della mira o alla pausa: legge lo
-        stato dei tre valori a ogni blocco, così due valori insieme cambiano lo stesso suono, senza voci nuove
-        a ogni tasto. Già acceso non fa niente."""
+        """Il puntatore della mira (D31): una voce sola, coi parametri di sintesi.parametri_del_puntatore, la
+        direzione nella panoramica, l'alzo nell'altezza e la potenza nel volume. Ha il timbro del proiettile
+        di questa partita, che nessun bersaglio usa (D32), e suona dal campione k per tutta la mira: pieno dove
+        almeno un valore si muove, PUNTATORE_FERMO_DB più piano dove sono tutti fermi, passando dall'uno
+        all'altro in SFUMATURA_STOP. Si accende allo spazio che avvia la mira e alla ripresa dopo una pausa,
+        e tace alla fine della mira e alla pausa: legge lo stato dei tre valori a ogni blocco, così due valori
+        insieme cambiano lo stesso suono, senza voci nuove a ogni tasto. Già acceso non fa niente."""
         if self._voce_del_puntatore is not None:
             return
         assi = [self.mira.assi[parametro] for parametro in PARAMETRI]
         passo = 1.0 / max(1.0, SFUMATURA_STOP * self.motore.fs)
-        porta = [0.0]
+        fermo = float(db_in_lineare(PUNTATORE_FERMO_DB))
+        porta = [fermo]
 
         def parametri(tempi_di_gioco, tempi_audio):
             frequenze, pan, guadagni, in_moto = _suono_del_puntatore(assi, tempi_audio)
-            inviluppo, porta[0] = _rampa(in_moto, porta[0], passo)
+            inviluppo, porta[0] = _rampa(np.where(in_moto, 1.0, fermo), porta[0], passo)
             return frequenze, pan, guadagni * inviluppo
 
-        voce = VoceTono(parametri, PUNTATORE_FORMA, inizio=k)
+        voce = VoceTono(parametri, self.proiettile, inizio=k)
         self.motore.aggiungi(voce)
         self._voce_del_puntatore = voce
 

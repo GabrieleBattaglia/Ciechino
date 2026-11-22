@@ -16,7 +16,8 @@ posto i tre valori che si muovono finché i loro tasti sono giù, con le tacche 
 l'Invio coi valori dell'istante udibile, il tempo della mira fuori dalla palestra coi suoi tick e la
 scadenza che fa partire il colpo da solo, la pausa che conserva i secondi rimasti, Esc, i bersagli che
 si muovono durante la mira, e i colpi di D30. Dalla 2.0.1 il puntatore di D31, la voce sola che porta i tre
-valori, con le tacche e il capo dal suo punto.
+valori, con le tacche e il capo dal suo punto; dalla 2.0.3 il puntatore di D32, nel timbro del proiettile e
+acceso piano per tutta la mira.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 le prove mirano tenendo giù i tasti dei valori, non più
 con lo spazio sulle scivolate.
@@ -65,7 +66,7 @@ from costanti import (
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
     PUNTATORE_DB,
-    PUNTATORE_FORMA,
+    PUNTATORE_FERMO_DB,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     RAGGIO_PROIETTILE,
@@ -85,7 +86,7 @@ from costanti import (
 from fisica import MEZZO_DELLA_CUPOLA, Traiettoria, distanza_dal_punto_piu_lontano, parametri_del_tiro, soluzione
 from motore_audio import VoceTono
 from partita import Messaggio, Partita, punti_del_centro, tempo_della_mira
-from sintesi import parametri_del_puntatore, tacca_mono, tick_del_tempo
+from sintesi import db_in_lineare, parametri_del_puntatore, tacca_mono, tick_del_tempo
 from statistiche import Statistiche
 from suoni import Suoni
 from volo import calcola_volo
@@ -548,13 +549,14 @@ def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartell
     assert statistiche.dati["conti"]["mire_avviate"] == 1 and partita.valori == []
     inizio = banco.motore.campione_udibile()
     assert partita.mira.valori(inizio / FS) == [PARTENZA_DELLA_MIRA] * 3 == [0.5] * 3
-    assert partita._voce_del_puntatore is None and partita.tasti_giu() == []
-    # La direzione verso destra e l'alzo verso il basso, insieme, nello stesso puntatore (D31).
+    # Il puntatore si accende con la mira, nel timbro del proiettile, che nessun bersaglio usa (D32).
     k = banco.motore.prossimo_campione()
-    assert partita.muovi("direzione", 1) == [] and partita.muovi("alzo", -1) == []
-    assert partita.tasti_giu() == [("direzione", 1), ("alzo", -1)]
     voce = partita._voce_del_puntatore
-    assert isinstance(voce, VoceTono) and voce.forma == PUNTATORE_FORMA == "triangolo" and voce.inizio == k
+    assert isinstance(voce, VoceTono) and voce.forma == partita.proiettile == PROIETTILE_FORMA and voce.inizio == k
+    assert partita.tasti_giu() == [] and all(bersaglio.portante != voce.forma for bersaglio in partita.bersagli)
+    # La direzione verso destra e l'alzo verso il basso, insieme, nello stesso puntatore (D31).
+    assert partita.muovi("direzione", 1) == [] and partita.muovi("alzo", -1) == []
+    assert partita.tasti_giu() == [("direzione", 1), ("alzo", -1)] and partita._voce_del_puntatore is voce
     # Il puntatore porta i tre valori di ogni istante del tempo dell'audio: a 0,3 e a 0,9 secondi dal tasto la direzione al
     # sesto e all'ottavo decimo, l'alzo al quarto e al secondo, la potenza ferma al centro; e si muove.
     frequenze, pan, guadagni, in_moto = suono_del_puntatore(partita, inizio + np.array((0.3, 0.9)) * FS)
@@ -582,7 +584,7 @@ def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartell
     porta_udibile_a(banco, inizio + 1.5 * FS)
     assert partita.lascia("alzo", -1) == [] and partita.tasti_giu() == [] and partita._voce_del_puntatore is voce
     assert partita.mira.valori(inizio / FS + 9.0) == pytest.approx([0.7, 0.2, 0.5])
-    # Coi valori fermi il puntatore tace, ma resta per la mira: il prossimo tasto lo riapre.
+    # Coi valori fermi il puntatore non è in moto, e suona piano (D32): il prossimo tasto lo riapre.
     assert not suono_del_puntatore(partita, inizio + np.array((1.6, 9.0)) * FS)[3].any()
     # Il tasto che non era giù non cambia niente; un parametro o un verso sconosciuti non sono tasti della mira.
     assert partita.lascia("potenza", 1) == [] and partita.mira.pressioni == 3
@@ -590,7 +592,7 @@ def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartell
         partita.muovi("velocita", 1)
     with pytest.raises(ValueError):
         partita.muovi("direzione", 0)
-    # Il puntatore resta acceso per tutta la mira, muto coi valori fermi, e finisce con la mira.
+    # Il puntatore resta acceso per tutta la mira, piano coi valori fermi, e finisce con la mira.
     banco.flusso.avanza(4)
     assert not voce.finita and partita.fase == "mira" and partita.valori == []
     partita.annulla_mira()
@@ -719,10 +721,10 @@ def test_il_puntatore_porta_i_tre_valori(banco, monkeypatch):
 
 
 def test_il_puntatore_si_apre_e_si_chiude_senza_click(banco):
-    """D31: il puntatore suona soltanto dove almeno un valore si muove, e il suo inviluppo entra ed esce in SFUMATURA_STOP, un
-    campione alla volta, senza salti, anche a cavallo di due blocchi; coi valori fermi tace. La prova fa leggere da sola la
-    voce, un blocco dopo l'altro, con l'alzo che si muove dal decimo blocco e si ferma al trentesimo, e finisce prima che il
-    motore la suoni."""
+    """D31, D32: il puntatore suona pieno dove almeno un valore si muove, e coi valori fermi PUNTATORE_FERMO_DB più piano; il suo
+    inviluppo passa dall'uno all'altro in SFUMATURA_STOP, un campione alla volta, senza salti, anche a cavallo di due blocchi. La
+    prova fa leggere da sola la voce, un blocco dopo l'altro, con l'alzo che si muove dal decimo blocco e si ferma al trentesimo, e
+    finisce prima che il motore la suoni."""
     partita = banco.partita()
     partita.nuova()
     partita.spazio()
@@ -745,10 +747,43 @@ def test_il_puntatore_si_apre_e_si_chiude_senza_click(banco):
         pieni = modulo_partita._suono_del_puntatore(assi, tempi)[2]
         pezzi.append(guadagni / pieni)
     inviluppo = np.concatenate(pezzi)
-    assert np.all(inviluppo[:da] == 0.0) and np.all(inviluppo[a + sfumatura:] == 0.0)
+    fermo = float(db_in_lineare(PUNTATORE_FERMO_DB))
+    np.testing.assert_allclose(inviluppo[:da], fermo)
+    np.testing.assert_allclose(inviluppo[a + sfumatura:], fermo)
     np.testing.assert_allclose(inviluppo[da + sfumatura:a], 1.0)
     assert np.max(np.abs(np.diff(inviluppo))) <= 1.0 / (SFUMATURA_STOP * FS) + 1e-12
-    assert 0.0 < inviluppo[da] < inviluppo[da + sfumatura // 2] < 1.0 and 0.0 < inviluppo[a + sfumatura // 2] < 1.0
+    assert fermo < inviluppo[da] < inviluppo[da + sfumatura // 2] < 1.0 and fermo < inviluppo[a + sfumatura // 2] < 1.0
+
+
+def test_il_puntatore_si_accende_con_la_mira_e_alla_ripresa(banco):
+    """D32: il puntatore si accende allo spazio che avvia la mira, nel timbro del proiettile della partita, che nessun bersaglio
+    usa, e coi valori fermi suona PUNTATORE_FERMO_DB più piano di come suonerebbe in moto, col volume della potenza; tace alla
+    pausa, si riaccende alla ripresa e finisce con la mira."""
+    partita = banco.partita(proiettile="triangolo")
+    partita.nuova()
+    assert partita._voce_del_puntatore is None
+    partita.spazio()
+    voce = partita._voce_del_puntatore
+    assert voce.forma == partita.proiettile == "triangolo" and all(bersaglio.portante != "triangolo" for bersaglio in partita.bersagli)
+    campioni = banco.motore.prossimo_campione() + np.arange(banco.motore.blocco)
+    frequenze, pan, guadagni = voce.parametri(None, campioni / FS)
+    attese, attesi, pieni, in_moto = suono_del_puntatore(partita, campioni)
+    np.testing.assert_allclose(frequenze, attese)
+    np.testing.assert_allclose(pan, attesi)
+    assert not in_moto.any()
+    np.testing.assert_allclose(20.0 * np.log10(guadagni / pieni), PUNTATORE_FERMO_DB)
+    np.testing.assert_allclose(20.0 * np.log10(pieni), PUNTATORE_DB + POTENZA_DB_MINIMO * (1.0 - PARTENZA_DELLA_MIRA))
+    # La pausa lo spegne, e la ripresa lo riaccende, una voce nuova nello stesso timbro.
+    assert partita.pausa_automatica(True) == [] and partita.in_pausa and partita._voce_del_puntatore is None
+    banco.flusso.avanza(4)
+    assert voce.finita
+    partita.pausa_automatica(False)
+    ripresa = partita._voce_del_puntatore
+    assert not partita.in_pausa and ripresa is not None and ripresa is not voce and ripresa.forma == "triangolo"
+    # Con la mira annullata finisce.
+    partita.annulla_mira()
+    banco.flusso.avanza(4)
+    assert partita._voce_del_puntatore is None and ripresa.finita
 
 
 def test_lo_spazio_nella_mira_suona_non_ora(banco):
