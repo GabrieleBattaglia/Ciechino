@@ -77,7 +77,7 @@ TITOLO = costanti.NOME
 MISURA = (1024, 768)
 # Quante righe si vedono nella barra di stato senza scorrere: quelle della partita stanno qui, e se
 # un giorno fossero di più la barra scorre.
-RIGHE_DELLA_BARRA = 4
+RIGHE_DELLA_BARRA = 5
 # La curva del volume: da 1 a 100 la scala è lineare in decibel e copre tanti decibel, così ogni
 # passo cambia il volume che l'orecchio sente sempre della stessa misura; zero è il silenzio.
 DINAMICA_DEL_VOLUME_DB = 40.0
@@ -102,7 +102,13 @@ INTERVALLO_DEI_RIASSUNTI = 60.0
 MILLESIMI = 1000
 MEGABYTE = 1024 * 1024
 # I tasti fuori dai menu, che il gancio dei tasti prende da sé.
-TASTI_DEL_FUOCO = (wx.WXK_F5, wx.WXK_F7)
+TASTI_DEL_FUOCO = (wx.WXK_F5, wx.WXK_F6, wx.WXK_F7)
+# I tasti della mira manuale (D29), col valore che muovono e il verso: le frecce orizzontali la direzione, quelle
+# verticali l'alzo, Home e Fine la potenza; Invio spara. Il tastierino resta fuori, perché NVDA se lo tiene.
+TASTI_DELLA_MIRA = {wx.WXK_LEFT: ("direzione", -1), wx.WXK_RIGHT: ("direzione", 1), wx.WXK_UP: ("alzo", 1), wx.WXK_DOWN: ("alzo", -1),
+                    wx.WXK_HOME: ("potenza", -1), wx.WXK_END: ("potenza", 1)}
+TASTO_DI_OGNI_VERSO = {valore: codice for codice, valore in TASTI_DELLA_MIRA.items()}
+TASTI_DELLO_SPARO = (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER)
 # Il suono e l'icona di ogni esito dell'aggiornamento.
 SUONI_DEGLI_ESITI = {aggiornamento.PRONTO: "aggiornamento_pronto", aggiornamento.NON_RIUSCITO: "aggiornamento_non_riuscito",
                      aggiornamento.NON_PRONTO: "aggiornamento_non_pronto"}
@@ -219,6 +225,25 @@ class NomeInAttesa(NamedTuple):
     posizione: int
 
 
+class ControlloDellaMira(wx.Panel):
+    """Il controllo che ha il fuoco durante la mira manuale (D29): un pannello vuoto, che non è un testo,
+    così NVDA lascia passare frecce, Home e Fine come pressioni vere, giù finché il dito non sale. Accetta
+    il fuoco, ma non da Tab: ci arriva la finestra quando la mira comincia. Il nome è quello che NVDA
+    dice."""
+
+    def __init__(self, genitore, nome):
+        super().__init__(genitore, style=wx.WANTS_CHARS)
+        self.SetName(nome)
+        self.SetLabel(nome)
+        self.SetMinSize(wx.Size(-1, self.GetCharHeight()))
+
+    def AcceptsFocus(self):
+        return True
+
+    def AcceptsFocusFromKeyboard(self):
+        return False
+
+
 class FinestraPrincipale(wx.Frame):
     """
     La finestra di Ciechino. crash_precedente è il resoconto del crash della volta prima, che la vista
@@ -245,6 +270,8 @@ class FinestraPrincipale(wx.Frame):
         self._menu_dagli_eventi = False
         self._comandi_in_corso = 0
         self._nel_battito = False
+        # Se la partita era nella mira al giro di prima, perché il fuoco la segua (D29).
+        self._in_mira = False
         self._errore_aperto = False
         # I lavori del battito che si sono guastati: il registro riceve una volta sola ogni guasto uguale,
         # e chi gioca un messaggio solo per lavoro, perché il battito li ripeterebbe cento volte al secondo.
@@ -338,10 +365,21 @@ class FinestraPrincipale(wx.Frame):
         # frecce su e giù passano da una riga all'altra anche con i caratteri grandi.
         self.barra = wx.TextCtrl(self.pannello, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2 | wx.TE_DONTWRAP)
         self.barra.SetName(nome_della_barra)
+        # La mira manuale (D29): mentre si mira il fuoco sta qui, su un controllo che non è un testo,
+        # perché sulle aree di testo NVDA si prende le frecce, Home e Fine, le rimanda come pressioni brevi
+        # e rilegge la riga a ogni ripetizione. Non mostra niente: i valori li dice la barra di stato.
+        nome_della_mira = _("Mira")
+        self.etichetta_mira = wx.StaticText(self.pannello, label=nome_della_mira)
+        self.controllo_mira = ControlloDellaMira(self.pannello, nome_della_mira)
         sizer.Add(self.etichetta_vista, 0, wx.LEFT | wx.RIGHT | wx.TOP, dialoghi.BORDO)
         sizer.Add(self.vista, 1, wx.EXPAND | wx.ALL, dialoghi.BORDO)
         sizer.Add(self.etichetta_barra, 0, wx.LEFT | wx.RIGHT, dialoghi.BORDO)
         sizer.Add(self.barra, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, dialoghi.BORDO)
+        sizer.Add(self.etichetta_mira, 0, wx.LEFT | wx.RIGHT, dialoghi.BORDO)
+        sizer.Add(self.controllo_mira, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, dialoghi.BORDO)
+        # Il rilascio dei tasti della mira arriva al controllo che ha il fuoco, qualunque sia dei tre.
+        for controllo in (self.vista, self.barra, self.controllo_mira):
+            controllo.Bind(wx.EVT_KEY_UP, self._tasto_su)
         # La barra è alta quanto le sue righe, nel suo carattere, più il bordo, la barra di scorrimento
         # orizzontale e mezza riga di margine, come in MESS: niente misure fisse in pixel.
         riga = self.barra.GetCharHeight()
@@ -389,12 +427,18 @@ class FinestraPrincipale(wx.Frame):
         """I tasti che il gancio della finestra prende da sé, con quello che fanno, per la guida."""
         return (
             # Traduttori: il nome del tasto, come lo dice la guida.
-            (_("Spazio"), _("comincia la partita, avvia la mira e ferma le tre scivolate, della direzione, dell'alzo e della potenza; nei livelli "
-                            "della palestra, dopo ogni tiro, fa ripartire la partita, che aspetta ferma")),
+            (_("Spazio"), _("comincia la partita e, mentre ascolti i bersagli, avvia la mira; nei livelli della palestra, dopo ogni tiro, fa "
+                            "ripartire la partita, che aspetta ferma")),
+            # Traduttori: da qui, i tasti della mira manuale (D29), che muovono un valore finché li tieni giù.
+            (_("Frecce sinistra e destra"), _("nella mira, col fuoco sulla Mira, muovono la direzione, finché le tieni giù")),
+            (_("Frecce su e giù"), _("nella mira, col fuoco sulla Mira, alzano e abbassano l'alzo, finché le tieni giù")),
+            (_("Home e Fine"), _("nella mira, col fuoco sulla Mira, abbassano e alzano la potenza, finché le tieni giù")),
+            (_("Invio"), _("nella mira fa partire il colpo coi tre valori di quel momento")),
             # Traduttori: Esc nella mira (D25); fuori dalla mira chiude le finestre interne, come sempre.
-            ("Esc", _("durante la mira annulla il tiro: il colpo non parte, il proiettile resta nella riserva e i bersagli tornano a cantare; "
-                      "nelle finestre interne le chiude")),
+            ("Esc", _("durante la mira annulla il tiro: il colpo non parte, e il proiettile resta nella riserva; nelle finestre interne le chiude")),
             ("F5", _("porta il fuoco nella vista della partita")),
+            # Traduttori: F6 durante la mira manuale (D29), dopo F5 o F7.
+            ("F6", _("durante la mira riporta il fuoco sulla Mira, dove le frecce, Home e Fine muovono i valori")),
             ("F7", _("porta il fuoco nella barra di stato")),
         )
 
@@ -646,6 +690,7 @@ class FinestraPrincipale(wx.Frame):
             comando()
         finally:
             self._comandi_in_corso -= 1
+            self._segui_la_fase_della_mira()
             self.aggiorna_barra()
 
     def _finestra_modale_aperta(self):
@@ -684,6 +729,20 @@ class FinestraPrincipale(wx.Frame):
         self._menu_dagli_eventi = False
         codice = event.GetKeyCode()
         if not event.HasAnyModifiers():
+            if getattr(self.partita, "fase", None) == "mira" and self._spazio_per_la_partita():
+                # La mira manuale (D29): i tasti dei valori, col fuoco sul controllo Mira, e l'Invio, ovunque,
+                # sono della partita e si fermano qui; la ripetizione del tasto tenuto giù non cambia niente, il
+                # moto è già partito. Col fuoco nella vista o nella barra, portato lì con F5 o F7, le frecce,
+                # Home e Fine leggono come sempre, e F6 riporta il fuoco sulla Mira.
+                if codice in TASTI_DELLA_MIRA and self.controllo_mira.HasFocus():
+                    if not event.IsAutoRepeat():
+                        parametro, verso = TASTI_DELLA_MIRA[codice]
+                        self._esegui(lambda: self._ricevi(self.partita.muovi(parametro, verso)))
+                    return
+                if codice in TASTI_DELLO_SPARO:
+                    if not event.IsAutoRepeat():
+                        self._esegui(lambda: self._ricevi(self.partita.spara()))
+                    return
             if codice == wx.WXK_SPACE and self._spazio_per_la_partita():
                 if not event.IsAutoRepeat():
                     self._esegui(self.spazio)
@@ -693,9 +752,43 @@ class FinestraPrincipale(wx.Frame):
                     self._esegui(self.annulla_la_mira)
                 return
             if codice in TASTI_DEL_FUOCO and not self._finestra_modale_aperta():
-                self._esegui(self.vai_alla_vista if codice == wx.WXK_F5 else self.vai_alla_barra)
+                self._esegui({wx.WXK_F5: self.vai_alla_vista, wx.WXK_F6: self.vai_alla_mira, wx.WXK_F7: self.vai_alla_barra}[codice])
                 return
         event.Skip()
+
+    def _tasto_su(self, event):
+        """Il rilascio di un tasto della mira manuale (D29), che arriva al controllo col fuoco: il valore si
+        ferma dove si sentiva. Gli altri rilasci proseguono come sempre."""
+        codice = event.GetKeyCode()
+        if codice in TASTI_DELLA_MIRA and getattr(self.partita, "fase", None) == "mira":
+            parametro, verso = TASTI_DELLA_MIRA[codice]
+            self._esegui(lambda: self._ricevi(self.partita.lascia(parametro, verso)))
+            return
+        event.Skip()
+
+    def _controlla_i_tasti_della_mira(self):
+        """A ogni battito, i tasti della mira che la partita crede giù e che la tastiera dice su valgono
+        come lasciati: il rilascio arriva soltanto al controllo col fuoco, e con un dialogo o un'altra
+        finestra davanti può perdersi. Il tasto si legge con wx.GetKeyState, che chiede lo stato vero."""
+        for parametro, verso in list(getattr(self.partita, "tasti_giu", list)()):
+            codice = TASTO_DI_OGNI_VERSO.get((parametro, verso))
+            if codice is not None and not wx.GetKeyState(codice):
+                self._ricevi(self.partita.lascia(parametro, verso))
+
+    def _segui_la_fase_della_mira(self):
+        """Il fuoco segue la mira manuale (D29): quando la mira comincia va sul controllo Mira, quando
+        finisce torna alla vista, se era ancora sulla Mira. In mezzo F5 e F7 lo portano dove si vuole, e
+        resta lì."""
+        in_mira = getattr(self.partita, "fase", None) == "mira"
+        if in_mira == self._in_mira:
+            return
+        self._in_mira = in_mira
+        if self.chiusa or self._finestra_modale_aperta():
+            return
+        if in_mira:
+            self.controllo_mira.SetFocus()
+        elif self.controllo_mira.HasFocus():
+            self.vista.SetFocus()
 
     def spazio(self):
         """Lo spazio della partita: senza partita in corso ne comincia una, e allora il battito riparte,
@@ -727,6 +820,7 @@ class FinestraPrincipale(wx.Frame):
         try:
             self._controlla_il_motore()
             self._pausa_della_finestra()
+            self._controlla_i_tasti_della_mira()
             try:
                 messaggi = self.partita.battito()
             except Exception:
@@ -743,6 +837,7 @@ class FinestraPrincipale(wx.Frame):
             self._forse_gli_ascolti_d_avvio()
         finally:
             self._nel_battito = False
+        self._segui_la_fase_della_mira()
         self.aggiorna_barra()
 
     def _ricevi(self, messaggi, con_la_classifica=True):
@@ -876,6 +971,15 @@ class FinestraPrincipale(wx.Frame):
     def vai_alla_vista(self):
         self.suoni.suona("vai_alla_vista")
         self.vista.SetFocus()
+
+    def vai_alla_mira(self):
+        """F6: durante la mira manuale il fuoco torna sul controllo Mira, dove i tasti dei valori muovono la
+        mira (D29); fuori dalla mira non c'è niente da puntare, e suona il non ora."""
+        if getattr(self.partita, "fase", None) != "mira":
+            self.suoni.suona("non_ora")
+            return
+        self.suoni.suona("vai_alla_mira")
+        self.controllo_mira.SetFocus()
 
     def vai_alla_barra(self):
         """F7: il fuoco va nella barra; se c'è già, la barra si riscrive comunque, tenendo il cursore."""

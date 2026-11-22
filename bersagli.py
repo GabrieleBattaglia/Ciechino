@@ -7,11 +7,13 @@ istante senza stato e senza simulare: la posizione dal tempo di gioco, l'LFO dal
 Così il motore audio può chiedere i parametri di un blocco qualunque, il volo può esaminare tutto
 il tragitto in un colpo solo, e fermando il tempo di gioco i bersagli si fermano mentre il loro
 suono continua a vibrare.
-Il bonus: nasce col centro appena fuori dal cubo, a un raggio dalla parete di sinistra o di destra,
-cioè già tangente al cubo, ed è vivo da subito, dal suo tempo nato; lo attraversa lungo x, alla
-velocità (CUBO_LATO più due raggi) diviso durata_del_bonus(livello), e smette di essere vivo a
-tempo_di_uscita, quando è uscito del tutto dall'altra parte. Prima di nato nessun bersaglio è vivo,
-perché non esisteva ancora.
+Da D28 i bersagli stanno nella cupola: nascono in un punto a caso della Zona del loro raggio, e i
+mobili vanno dritti e rimbalzano sulle sue pareti, con un fisica.Percorso calcolato a tratti.
+Il bonus: nasce col centro appena fuori dal settore, a un raggio dal lato di sinistra o di destra,
+cioè già tangente al lato, ed è vivo da subito, dal suo tempo nato; attraversa il settore lungo x, su
+una corda a quota e profondità costanti tutta dentro la cupola, in durata_del_bonus(livello) secondi, e
+smette di essere vivo a tempo_di_uscita, quando è uscito del tutto dall'altro lato. Prima di nato
+nessun bersaglio è vivo, perché non esisteva ancora.
 I bersagli sempre un po' diversi (D18, dal banco dei bersagli del 19 novembre 2026): oltre alla forma,
 alla frequenza e alla fase dell'LFO, ogni bersaglio estrae a caso i parametri della sua forma, dentro
 gli intervalli di costanti.py, il moltiplicatore della sua escursione, in ESCURSIONE_A_CASO, e la sua
@@ -33,8 +35,6 @@ from costanti import (
     BERSAGLIO_DB,
     BERSAGLIO_FORMA,
     BERSAGLIO_PORTANTI,
-    CUBO_LATO,
-    CUBO_X,
     CURVATURA_DELLA_SEGA,
     DURATA_BONUS_INIZIALE,
     DURATA_BONUS_MINIMA,
@@ -62,6 +62,7 @@ from costanti import (
     RAPPORTI_DELLA_DOPPIA,
     RIDUZIONE_DEL_RAGGIO,
     RIDUZIONE_DURATA_BONUS,
+    SETTORE_AZIMUT,
     SMORZAMENTO_DELLA_MOLLA,
     SPINTA_DEL_CASO,
     VALORI_DEL_CASUALE,
@@ -415,22 +416,6 @@ def portanti_senza(forma, portanti=BERSAGLIO_PORTANTI):
     return tuple(portante for portante in portanti if portante != forma)
 
 
-def rimbalzo(libera, minimi, massimi):
-    """La posizione che rimbalza sulle pareti, asse per asse, senza simulare i rimbalzi: la
-    posizione libera, quella del moto rettilineo, riflessa dentro [minimi, massimi] da una funzione
-    a triangolo di periodo due volte la larghezza. È continua, resta sempre dentro, e la velocità
-    scalare resta quella del moto libero perché ogni asse cambia solo di segno. Un asse largo zero
-    tiene la posizione sul suo minimo."""
-    libera = np.asarray(libera, dtype=float)
-    minimi = np.asarray(minimi, dtype=float)
-    larghezze = np.asarray(massimi, dtype=float) - minimi
-    aperti = larghezze > 0.0
-    sicure = np.where(aperti, larghezze, 1.0)
-    dentro = np.mod(libera - minimi, 2.0 * sicure)
-    riflessa = minimi + sicure - np.abs(dentro - sicure)
-    return np.where(aperti, riflessa, minimi)
-
-
 @dataclass(eq=False)
 class Bersaglio:
     """Un bersaglio in volo. Si confronta per identità, non per contenuto: due bersagli con gli
@@ -438,7 +423,9 @@ class Bersaglio:
     I campi di D18 hanno un valore di serie, quello della 0.1.0: portante, la forma d'onda della sua
     voce, fra sintesi.FORME_PORTANTI, di serie BERSAGLIO_FORMA; escursione, il moltiplicatore della
     sua oscillazione, di serie 1; parametri_lfo, i parametri della sua forma, un dizionario che
-    __post_init__ completa coi valori di serie e controlla."""
+    __post_init__ completa coi valori di serie e controlla.
+    La zona e, per il mobile, il percorso coi rimbalzi (D28) nascono con lui, da raggio, partenza e
+    velocità: chi cambia quei campi dopo ha il bersaglio di prima."""
 
     numero: int
     forma: str
@@ -469,6 +456,8 @@ class Bersaglio:
         if not math.isfinite(self.escursione) or self.escursione < 0.0:
             raise ValueError(f"L'escursione di un bersaglio è un moltiplicatore positivo, non {self.escursione!r}.")
         self.parametri_lfo = parametri_completi(self.forma, self.parametri_lfo)
+        self._zona = fisica.Zona(self.raggio)
+        self._percorso = fisica.Percorso(self._zona, self.partenza, self.velocita) if self.mobile and not self.bonus else None
 
     @property
     def velocita_scalare(self):
@@ -481,34 +470,30 @@ class Bersaglio:
 
     @property
     def zona(self):
-        """(minimi, massimi) della zona dove può stare il suo centro, quella dei rimbalzi."""
-        return fisica.zona_del_centro(self.raggio)
+        """La fisica.Zona dove può stare il suo centro, quella dei rimbalzi (D28)."""
+        return self._zona
 
     @property
     def tempo_di_uscita(self):
-        """Per il bonus il tempo di gioco in cui è uscito del tutto dal cubo, dalla parte verso cui va;
-        per gli altri None. Un bonus fermo non esce mai: infinito."""
+        """Per il bonus il tempo di gioco in cui è uscito del tutto dal settore, dal lato verso cui va,
+        cioè quando il suo centro sta a un raggio oltre quel lato; per gli altri None. Un bonus fermo, o
+        che non va verso nessun lato, non esce mai: infinito."""
         if not self.bonus:
             return None
-        verso = float(self.velocita[0])
-        if verso > 0.0:
-            strada = CUBO_X[1] + self.raggio - float(self.partenza[0])
-        elif verso < 0.0:
-            strada = float(self.partenza[0]) - (CUBO_X[0] - self.raggio)
-        else:
-            return math.inf
-        return self.nato + max(strada, 0.0) / abs(verso)
+        for normale in (self._zona.normale_destra, self._zona.normale_sinistra):
+            verso = float(normale @ self.velocita)
+            if verso > 0.0:
+                return self.nato + max(self.raggio - float(normale @ self.partenza), 0.0) / verso
+        return math.inf
 
     def posizione(self, t):
         """La posizione del centro al tempo di gioco t: (3,) per t scalare, (N, 3) per un array.
-        Il fermo sta dov'è nato; il mobile va dritto e rimbalza sulle pareti della sua zona; il bonus
-        va dritto e basta, perché entra ed esce dal cubo."""
-        trascorso = (np.asarray(t, dtype=float) - self.nato)[..., None]
-        libera = self.partenza + self.velocita * trascorso
-        if self.bonus or not self.mobile:
-            return libera
-        minimi, massimi = self.zona
-        return rimbalzo(libera, minimi, massimi)
+        Il fermo sta dov'è nato; il mobile va dritto e rimbalza sulle pareti della sua zona, col suo
+        percorso; il bonus va dritto e basta, perché entra ed esce dal settore."""
+        tempi = np.asarray(t, dtype=float)
+        if self._percorso is not None:
+            return self._percorso.posizione(tempi - self.nato)
+        return self.partenza + self.velocita * (tempi - self.nato)[..., None]
 
     def vivo(self, t):
         """Vero dal tempo nato in poi; per il bonus fino a tempo_di_uscita compreso. Per un array di
@@ -620,7 +605,8 @@ def _voce_a_caso(rng, portanti):
 def genera(livello, rng, numero, tempo, portanti=BERSAGLIO_PORTANTI):
     """Un bersaglio normale del livello, nato al tempo di gioco dato. rng è un random.Random, e il
     bersaglio dipende soltanto da lui: stesso seme, stessi bersagli. Le estrazioni, sempre in
-    quest'ordine: le tre coordinate della partenza, x, y e z, uniformi nella zona permessa; la
+    quest'ordine: la partenza, con fisica.Zona.punto_a_caso, distanza, azimut ed elevazione, ripetute
+    finché il punto non sta nella zona del suo raggio (D28); la
     direzione del moto, tre gaussiane, uniforme sulla sfera, estratta anche per i fermi, così la
     sequenza non dipende dal livello; la forma dell'LFO fra FORME_LFO, la sua frequenza in
     FREQUENZA_LFO, la fase e il seme; i parametri della forma, nell'ordine di PARAMETRI_LFO; il
@@ -628,30 +614,39 @@ def genera(livello, rng, numero, tempo, portanti=BERSAGLIO_PORTANTI):
     portanti vuoto, o con una portante sconosciuta, solleva ValueError prima di ogni estrazione."""
     portanti = _portanti_valide(portanti)
     raggio = raggio_del_livello(livello)
-    minimi, massimi = fisica.zona_del_centro(raggio)
-    partenza = np.array([rng.uniform(basso, alto) for basso, alto in zip(minimi, massimi, strict=True)])
+    partenza = fisica.Zona(raggio).punto_a_caso(rng)
     velocita = _direzione_a_caso(rng) * velocita_del_livello(livello)
     return Bersaglio(numero=numero, raggio=raggio, partenza=partenza, velocita=velocita, nato=tempo, bonus=False, **_voce_a_caso(rng, portanti))
 
 
 def genera_bonus(livello, rng, numero, tempo, portanti=BERSAGLIO_PORTANTI):
-    """Il bersaglio bonus del livello: raggio ridotto di RAGGIO_BONUS_FATTORE, centro appena fuori
-    dalla parete di sinistra o di destra, a caso, altezza e profondità uniformi nella zona permessa;
-    attraversa il cubo lungo x in durata_del_bonus(livello) secondi, dal primo contatto all'uscita
-    completa. Le estrazioni, sempre in quest'ordine: il lato, l'altezza, la profondità, poi il suono
-    come in genera, dalla forma dell'LFO alla portante fra portanti. Un elenco di portanti vuoto, o
-    con una portante sconosciuta, solleva ValueError prima di ogni estrazione."""
+    """Il bersaglio bonus del livello: raggio ridotto di RAGGIO_BONUS_FATTORE, centro appena fuori dal
+    lato di sinistra o di destra, a caso, su una corda lungo x a quota e profondità costanti che dentro
+    il settore resta tutta nella zona del suo raggio (D28); attraversa il settore in
+    durata_del_bonus(livello) secondi, dal primo contatto col lato all'uscita completa dall'altro. Le
+    estrazioni, sempre in quest'ordine: il lato, poi l'altezza, fra il pavimento della zona e il suo
+    raggio esterno, e la profondità, fino al raggio esterno, ripetute finché la corda non sta nella
+    zona, poi il suono come in genera, dalla forma dell'LFO alla portante fra portanti. Un elenco di
+    portanti vuoto, o con una portante sconosciuta, solleva ValueError prima di ogni estrazione."""
     portanti = _portanti_valide(portanti)
     raggio = raggio_del_livello(livello) * RAGGIO_BONUS_FATTORE
-    minimi, massimi = fisica.zona_del_centro(raggio)
+    zona = fisica.Zona(raggio)
+    seno, coseno = math.sin(math.radians(SETTORE_AZIMUT)), math.cos(math.radians(SETTORE_AZIMUT))
     da_sinistra = rng.random() < 0.5
-    altezza = rng.uniform(minimi[1], massimi[1])
-    profondita = rng.uniform(minimi[2], massimi[2])
-    rapidita = (CUBO_LATO + 2.0 * raggio) / durata_del_bonus(livello)
+    while True:
+        altezza = rng.uniform(zona.pavimento, zona.esterno)
+        profondita = rng.uniform(0.0, zona.esterno)
+        # Dentro il settore la corda va da meno bordo a più bordo: lì sta a un raggio dai lati.
+        bordo = (profondita * seno - raggio) / coseno
+        if bordo > 0.0 and zona.contiene((0.0, altezza, profondita), tolleranza=0.0) and zona.contiene((bordo, altezza, profondita), tolleranza=0.0):
+            break
+    # Il centro parte e arriva a un raggio fuori dai lati: la corda intera è lunga tanto.
+    fuori = (profondita * seno + raggio) / coseno
+    rapidita = 2.0 * fuori / durata_del_bonus(livello)
     if da_sinistra:
-        partenza = np.array((CUBO_X[0] - raggio, altezza, profondita))
+        partenza = np.array((-fuori, altezza, profondita))
         velocita = np.array((rapidita, 0.0, 0.0))
     else:
-        partenza = np.array((CUBO_X[1] + raggio, altezza, profondita))
+        partenza = np.array((fuori, altezza, profondita))
         velocita = np.array((-rapidita, 0.0, 0.0))
     return Bersaglio(numero=numero, raggio=raggio, partenza=partenza, velocita=velocita, nato=tempo, bonus=True, **_voce_a_caso(rng, portanti))

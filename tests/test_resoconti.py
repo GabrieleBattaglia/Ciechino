@@ -3,11 +3,14 @@ Le prove di resoconti.py: le frasi dei tiri, dei livelli, dei bonus, dei primati
 delle direzioni e degli scarti, i singolari e i plurali, le righe della barra, il sommario di D21 ai
 tre gradi della palestra, coi segni, le soglie, le misure che mancano e i confini fra i livelli,
 l'annuncio con l'esito prima del sommario, i messaggi e la barra della palestra delle attese di D22,
-la riga del sommario a blocchi per il display braille di D24, il proiettile perduto e Esc nella mira di
-D25, la precisione globale di D26, e nessun separatore grafico. Dalla 0.11.8 i valori senza lo spazio dopo
-i due punti, con G nel primo blocco, e il sommario a parole su due righe.
+la riga del sommario a blocchi per il display braille di D24, Esc nella mira di D25, la precisione
+globale di D26, e nessun separatore grafico. Dalla 0.11.8 i valori senza lo spazio dopo i due punti, con
+G nel primo blocco, e il sommario a parole su due righe.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0.
+Nasce il 2026-11-19 con la 0.1.0. Dalla 2.0.0 la mira manuale di D29: la riga della fase dice che Invio
+spara ed Esc annulla, la barra ha la riga dei tre valori col tempo che resta, e i testi dell'inizio, della
+pausa nella mira e della mira annullata sono quelli nuovi; escono le sottofasi, i passaggi della barra e
+il proiettile perduto di D25. La precisione globale si misura sulla cupola di D28.
 I voli sono costruiti a mano, coi numeri tondi che le frasi devono dire; i numeri che dipendono dalle
 costanti di taratura, come il raggio di un livello, si sostituiscono nel modulo, così le frasi restano
 note anche quando Gabriele tara il gioco.
@@ -26,7 +29,8 @@ from costanti import (
     BLOCCO_DEL_BRAILLE,
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
-    PASSAGGI_DELLA_BARRA,
+    COLPI_INIZIALI,
+    COLPI_PER_LIVELLO,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     SOMMARIO_SOGLIA_INCLINAZIONE,
@@ -34,7 +38,7 @@ from costanti import (
     SOMMARIO_SOGLIA_PROFONDITA,
     SOMMARIO_SOGLIA_VERTICALE,
 )
-from fisica import Traiettoria, distanza_dall_angolo_piu_lontano
+from fisica import Traiettoria, distanza_dal_punto_piu_lontano
 from resoconti import Messaggio
 from volo import Misure, Volo
 
@@ -95,10 +99,11 @@ LEGENDA = "L laterale, V verticale, P profondità, in metri; I inclinazione, in 
 LEGENDA_CON_G = f"{LEGENDA}; G precisione globale"
 DAL_BERSAGLIO = "Dal bersaglio: lato, altezza, profondità, inclinazione."
 # Le precisioni globali dei voli costruiti a mano (D26): il centro a mezzo metro dal centro del bersaglio, il tiro a vuoto a 2,3 metri
-# dalla superficie del bersaglio di 3,6 metri; dal terzo collaudo sulla distanza fra DOVE_STAVA e il più lontano degli angoli del cubo,
-# 52,1 metri.
-G_DEL_CENTRO = "99,0%"
-G_DEL_MANCATO = "88,7%"
+# dalla superficie del bersaglio di 3,6 metri; dal terzo collaudo sulla distanza fra DOVE_STAVA e il punto più lontano dello spazio dei
+# bersagli, che da D28 è la cupola: 69,4 metri, fino al punto della sfera esterna sul cono di ELEVAZIONE_MASSIMA, dalla parte opposta
+# del bersaglio. Fino alla 1.0.0 era l'angolo più lontano del cubo, a 52,1 metri.
+G_DEL_CENTRO = "99,3%"
+G_DEL_MANCATO = "91,5%"
 # Il bonus dei voli costruiti a mano nasce alla loro fine, a 12,8 secondi di gioco: in quell'istante, quello del passaggio di un volo
 # senza tempo_del_passaggio, sta in DOVE_STAVA, come il bersaglio fermo, e la precisione globale è la stessa.
 NATO_DEL_BONUS = 12.8
@@ -129,7 +134,7 @@ def test_resoconto_di_un_centro():
     ]
     assert messaggio.annuncio == f"Colpito, 230 punti. Precisione globale {G_DEL_CENTRO}."
     assert messaggio.dati == {"tiro": 12, "livello": 3, "colpito": True, "bonus": False, "punti": 230, "totale": 1230, "riserva": 8, "precisione": 0.64,
-                              "precisione_globale": pytest.approx(1 - 0.5 / distanza_dall_angolo_piu_lontano(DOVE_STAVA))}
+                              "precisione_globale": pytest.approx(1 - 0.5 / distanza_dal_punto_piu_lontano(DOVE_STAVA))}
 
 
 def test_resoconto_di_un_bonus_e_di_un_mobile():
@@ -161,12 +166,12 @@ def test_resoconto_di_un_tiro_a_vuoto_con_l_aiuto():
 def test_segni_opposti_e_singolari():
     messaggio = raccogli(resoconti.resoconto_del_tiro(1, 1, mancato(scarto=(-3.4, 0.5, -0.2), distanza=1.0, azimut=-7.0, laterale_finale=-1.0), VALORI, riserva=1))
     righe = messaggio.testo.split("\n")
-    assert righe[0] == "Tiro 1, livello 1: a vuoto, precisione globale 91,2%; nella riserva resta 1 colpo."
+    assert righe[0] == "Tiro 1, livello 1: a vuoto, precisione globale 93,4%; nella riserva resta 1 colpo."
     assert righe[1].startswith("Mira: direzione 7 gradi a sinistra, 64% della scala;")
     assert ", 1 metro a sinistra del centro," in righe[2]
     assert righe[3] == ("Il bersaglio più vicino è stato mancato di 1 metro: rispetto al suo centro il tiro è passato a destra di 0,5 metri, sotto di 0,2 metri "
                         "e corto di 3,4 metri.")
-    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri. Precisione globale 91,2%."
+    assert messaggio.annuncio == "A vuoto, riserva 1, corto di 3,4 metri. Precisione globale 93,4%."
     assert resoconti.scarti((0.04, -0.03, 2.0)) == ["sopra di 2 metri"]
     # Lo scarto arriva nell'ordine di fisica.scomponi, e si dice in quello del sommario (D21); le
     # misure che mancano non si dicono.
@@ -272,11 +277,11 @@ def test_segni_del_sommario():
 
 def test_i_valori_e_la_g_nel_primo_blocco():
     """Dalla 0.11.8, per scelta di Gabriele del 20 novembre 2026, i valori del sommario coi numeri non hanno lo spazio dopo i due
-    punti, e stanno tutti nel primo blocco, G compresa, come «L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%»; poi spazi fino al carattere
+    punti, e stanno tutti nel primo blocco, G compresa, come «L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:93,5%»; poi spazi fino al carattere
     40 compreso, e dal 41 la legenda. La riga eccezionale che non ci sta con almeno uno spazio dopo di sé tiene il ripiego di prima:
     G apre il secondo blocco. Gli esempi coi numeri delle docstring di resoconti stanno anche loro nel primo blocco."""
     esempio = resoconti.sommario_del_tiro(mancato(misure=misure(2.5, 7.7, 12.1, -23.2), distanza=0.88), "numeri")
-    assert esempio.primo == "L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:91,4%" and esempio.annuncio == esempio.primo
+    assert esempio.primo == "L:+2,5 V:+7,7 P:+12,1 I:-23,2 G:93,5%" and esempio.annuncio == esempio.primo
     assert esempio.riga == esempio.primo.ljust(BLOCCO_DEL_BRAILLE) + f"{LEGENDA_CON_G}." and esempio.riga.index("L laterale") == BLOCCO_DEL_BRAILLE
     # Con due cifre prima della virgola in ogni valore la riga ci sta ancora, con uno spazio prima della legenda.
     lunga = resoconti.sommario_del_tiro(mancato(misure=misure(-25.4, -48.6, 76.2, -85.0)), "numeri")
@@ -402,17 +407,24 @@ def test_livello_e_inizio(monkeypatch):
     monkeypatch.setattr(resoconti, "quanti_bersagli", lambda n: 1 if n < 8 else 2)
     monkeypatch.setattr(resoconti, "raggio_del_livello", lambda n: 3.07 if n > 1 else 5.0)
     monkeypatch.setattr(resoconti, "velocita_del_livello", lambda n: 1.5 if n >= 4 else 0.0)
-    livello = raccogli(resoconti.livello_nuovo(4, 10, 17))
+    # Da D30 un livello chiuso dà COLPI_PER_LIVELLO colpi, e la partita comincia con COLPI_INIZIALI.
+    riserva = 7 + COLPI_PER_LIVELLO
+    livello = raccogli(resoconti.livello_nuovo(4, COLPI_PER_LIVELLO, riserva))
     assert livello.tipo == "livello"
-    assert livello.testo.split("\n") == ["Livello 4! Il livello 3 è superato.", "10 colpi in più nella riserva, che ora ne ha 17.",
+    assert livello.testo.split("\n") == ["Livello 4! Il livello 3 è superato.", f"{COLPI_PER_LIVELLO} colpi in più nella riserva, che ora ne ha {riserva}.",
                                          "In volo: 1 bersaglio mobile a 1,5 metri al secondo, raggio 3,1 metri."]
-    assert livello.annuncio == "Livello 4, riserva 17."
+    assert livello.annuncio == f"Livello 4, riserva {riserva}."
     assert resoconti.bersagli_del_livello(8) == "2 bersagli mobili a 1,5 metri al secondo, raggio 3,1 metri"
     assert resoconti.bersagli_del_livello(2) == "1 bersaglio fermo, raggio 3,1 metri"
-    inizio = raccogli(resoconti.inizio_partita(1, 10))
+    inizio = raccogli(resoconti.inizio_partita(1, COLPI_INIZIALI))
     assert inizio.tipo == "info"
-    assert inizio.testo.split("\n")[:2] == ["Partita nuova, livello 1: nella riserva 10 colpi.", "In volo: 1 bersaglio fermo, raggio 5 metri."]
+    # La terza riga dice come si mira dalla 2.0.0, con la mira manuale di D29: i tasti dei tre valori, Invio ed Esc.
+    assert inizio.testo.split("\n") == [f"Partita nuova, livello 1: nella riserva {COLPI_INIZIALI} colpi.", "In volo: 1 bersaglio fermo, raggio 5 metri.",
+                                        "Ascolta i bersagli e premi Spazio per mirare: le frecce orizzontali muovono la direzione, quelle verticali l'alzo, "
+                                        "Home e Fine la potenza, finché le tieni giù; Invio spara, Esc annulla."]
+    assert "scivolat" not in inizio.testo
     assert inizio.annuncio == "Partita nuova: Spazio per mirare."
+    assert inizio.dati == {"livello": 1, "riserva": COLPI_INIZIALI}
     assert raccogli(resoconti.livello_nuovo(2, 1, 1)).testo.split("\n")[1] == "1 colpo in più nella riserva, che ora ne ha 1."
 
 
@@ -490,10 +502,14 @@ def test_avvisi_e_pausa():
         assert messaggio.testo and messaggio.annuncio and "\n" not in messaggio.testo
     assert resoconti.ultimo_colpo().tipo == "avviso" and resoconti.ultimo_colpo().annuncio == "Ultimo colpo."
     assert "Ctrl+P" in resoconti.in_pausa().testo
-    # Nella mira la pausa sospende anche la barra (D14): il messaggio dice che ricomincia da capo, coi valori già presi.
+    # Nella mira manuale (D29) la pausa ferma i valori dove sono, e alla ripresa si muovono di nuovo coi loro tasti: niente più barre
+    # che ricominciano da capo.
     nella_mira = resoconti.in_pausa(nella_mira=True)
-    assert nella_mira.tipo == "info" and nella_mira.annuncio == "Pausa." and "Ctrl+P" in nella_mira.testo
-    assert "ricomincia da capo" in nella_mira.testo and "valori già presi restano" in nella_mira.testo
+    assert nella_mira.tipo == "info" and nella_mira.annuncio == "Pausa."
+    assert nella_mira.testo == ("Partita in pausa: la mira è sospesa, i valori restano dove sono e i bersagli tacciono. Alla ripresa i valori si muovono "
+                                "di nuovo coi loro tasti. Ctrl+P per riprendere.")
+    assert "ricomincia da capo" not in nella_mira.testo and "barra" not in nella_mira.testo
+    assert resoconti.in_pausa().testo == "Partita in pausa: il tempo è fermo e i bersagli tacciono. Ctrl+P per riprendere."
     assert resoconti.nessuna_partita().annuncio == "Nessuna partita in corso."
 
 
@@ -502,21 +518,66 @@ def test_righe_della_barra():
     assert resoconti.righe_della_barra("ascolto", livello=3, punti=1230, riserva=8, centri_del_livello=4, bersagli=2, bonus=True) == [
         "Livello 3, 1.230 punti", f"Riserva 8, centri 4 su {CENTRI_PER_LIVELLO}", "Bersagli in volo: 2 e il bonus", "Ascolto: Spazio per mirare"]
     assert resoconti.righe_della_barra("ascolto", livello=1, punti=1, bersagli=1)[0] == "Livello 1, 1 punto"
-    # Nella mira la riga dice che Esc la annulla (D25), nei 40 caratteri del display braille.
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="alzo", sottofase="conto")[-1] == "Mira: alzo, bip; Esc annulla"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="potenza", sottofase="scivolata")[-1] == "Mira: potenza, scivolata; Esc annulla"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="pausa")[-1] == "Mira: direzione, pausa; Esc annulla"
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione")[-1] == "Mira: direzione; Esc annulla"
-    assert len(resoconti.riga_della_fase("mira", parametro="direzione", sottofase="scivolata")) <= BLOCCO_DEL_BRAILLE
-    # Dal secondo passaggio della barra il passaggio va nel secondo blocco, dal carattere 41.
-    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="scivolata", passaggio=1)[-1] == (
-        "Mira: direzione, scivolata; Esc annulla")
-    riga = resoconti.righe_della_barra("mira", livello=1, bersagli=1, parametro="direzione", sottofase="scivolata", passaggio=PASSAGGI_DELLA_BARRA)[-1]
-    assert riga == blocchi("Mira: direzione, scivolata; Esc annulla", f"passaggio {PASSAGGI_DELLA_BARRA} di {PASSAGGI_DELLA_BARRA}")
+    # Nella mira manuale (D29) la riga della fase dice che Invio spara ed Esc annulla (D25), nei 40 caratteri del display braille.
+    fase_della_mira = "Mira: Invio spara, Esc annulla"
+    assert resoconti.riga_della_fase("mira") == fase_della_mira and len(fase_della_mira) <= BLOCCO_DEL_BRAILLE
+    # Sopra la fase, la riga dei tre valori col tempo che resta: è la quinta riga della barra.
+    assert resoconti.righe_della_barra("mira", livello=3, punti=1230, riserva=8, centri_del_livello=4, bersagli=2, bonus=True,
+                                       mira=(-12.5, 38.2, 0.63, 23.2)) == [
+        "Livello 3, 1.230 punti", f"Riserva 8, centri 4 su {CENTRI_PER_LIVELLO}", "Bersagli in volo: 2 e il bonus",
+        "Direzione 12,5 gradi a sinistra, alzo 38,2 gradi, potenza 63%, 24 secondi", fase_della_mira]
+    # Nella palestra la mira non ha tempo, e la riga lo dice.
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1, mira=(0.0, 50.0, 0.5, None))[-2:] == [
+        "Direzione davanti, alzo 50,0 gradi, potenza 50%, senza tempo", fase_della_mira]
+    # Senza i valori la riga della mira manca; e fuori dalla mira i valori non si dicono.
+    assert resoconti.righe_della_barra("mira", livello=1, bersagli=1) == ["Livello 1, 0 punti", f"Riserva 0, centri 0 su {CENTRI_PER_LIVELLO}",
+                                                                           "Bersagli in volo: 1", fase_della_mira]
+    assert len(resoconti.righe_della_barra("ascolto", livello=1, bersagli=1, mira=(0.0, 50.0, 0.5, 10.0))) == 4
+    # La mira in pausa tiene i valori, coi secondi che restavano, e la fase dice la pausa.
+    assert resoconti.righe_della_barra("mira", in_pausa=True, livello=5, bersagli=1, mira=(3.0, 20.0, 1.0, 11.5))[-2:] == [
+        "Direzione 3,0 gradi a destra, alzo 20,0 gradi, potenza 100%, 12 secondi", "In pausa: Ctrl+P per riprendere"]
     assert resoconti.righe_della_barra("volo", livello=1, bersagli=1)[-1] == "Volo"
     assert resoconti.righe_della_barra("volo", in_pausa=True, livello=1, bersagli=1)[-1] == "In pausa: Ctrl+P per riprendere"
     assert resoconti.righe_della_barra("finita", livello=2, punti=500, riserva=0, centri_del_livello=3) == [
         "Livello 2, 500 punti", f"Riserva 0, centri 3 su {CENTRI_PER_LIVELLO}", "Partita finita: Spazio per ricominciare"]
+
+
+def test_la_riga_dei_valori_della_mira():
+    """D29: la riga dei valori della mira manuale dice la direzione in gradi, a sinistra o a destra, o davanti, l'alzo in gradi, la
+    potenza in percentuale della sua scala, e i secondi che restano, arrotondati in su, o che la mira non ha tempo; con la maiuscola.
+    I gradi hanno sempre un decimale, con la parola gradi, anche quando sono interi, dalle prove del 22 novembre 2026."""
+    riga = resoconti.riga_dei_valori_della_mira
+    assert riga(-12.5, 38.2, 0.634, 23.2) == "Direzione 12,5 gradi a sinistra, alzo 38,2 gradi, potenza 63%, 24 secondi"
+    assert riga(7.0, 15.0, 0.0, 1.0) == "Direzione 7,0 gradi a destra, alzo 15,0 gradi, potenza 0%, 1 secondo"
+    assert riga(1.0, 85.0, 1.0, 30.0) == "Direzione 1,0 gradi a destra, alzo 85,0 gradi, potenza 100%, 30 secondi"
+    # Sotto il mezzo decimo, da tutte e due le parti, la direzione è davanti, senza segno.
+    assert riga(0.04, 50.0, 0.5, None) == riga(-0.04, 50.0, 0.5, None) == "Direzione davanti, alzo 50,0 gradi, potenza 50%, senza tempo"
+    assert riga(-0.06, 50.0, 0.5, None).startswith("Direzione 0,1 gradi a sinistra, ")
+    # I secondi si arrotondano in su, così l'ultimo secondo si legge 1 e non 0; allo scadere sono zero.
+    assert riga(0.0, 50.0, 0.5, 9.01).endswith(", 10 secondi") and riga(0.0, 50.0, 0.5, 0.2).endswith(", 1 secondo")
+    assert riga(0.0, 50.0, 0.5, 0.0).endswith(", 0 secondi")
+    # La riga dice gradi a parole, non il simbolo, ed è una riga sola.
+    assert "°" not in riga(-12.5, 38.2, 0.634, 23.2) and "\n" not in riga(-12.5, 38.2, 0.634, 23.2)
+
+
+def test_i_valori_della_mira_arrotondati_prima_di_scriverli():
+    """Come vuole la regola del modulo, le misure si arrotondano prima di scriverle, e i gradi della barra di stato hanno sempre un
+    decimale, con la parola gradi, anche quando sono interi: un alzo di 44,99 gradi si legge «45,0 gradi», come quello di 45 gradi
+    esatti; una direzione di 0,96 gradi a destra si legge «1,0 gradi a destra», come quella di un grado esatto, e mai «1 grado». Mentre
+    il tasto è giù i valori passano di continuo per numeri così, e la riga, che sul braille si rilegge a ogni cambio, tiene la sua forma:
+    la barra non dice lo stesso angolo in due modi, e un intero non la accorcia di due caratteri. La direzione che arrotondata al
+    decimo è zero è davanti, da tutte e due le parti."""
+    riga = resoconti.riga_dei_valori_della_mira
+    assert riga(0.0, 44.99, 0.5, None) == riga(0.0, 45.0, 0.5, None) == riga(0.0, 45.04, 0.5, None) ==         "Direzione davanti, alzo 45,0 gradi, potenza 50%, senza tempo"
+    assert riga(0.96, 50.0, 0.5, None) == riga(1.0, 50.0, 0.5, None) == riga(1.04, 50.0, 0.5, None) ==         "Direzione 1,0 gradi a destra, alzo 50,0 gradi, potenza 50%, senza tempo"
+    assert riga(-11.98, 50.0, 0.5, None).startswith("Direzione 12,0 gradi a sinistra, ")
+    assert riga(0.049, 50.0, 0.5, None) == riga(-0.049, 50.0, 0.5, None) == riga(0.0, 50.0, 0.5, None)
+    assert riga(0.049, 50.0, 0.5, None).startswith("Direzione davanti, ")
+    # La riga tiene la stessa lunghezza mentre l'alzo passa da un intero al decimo dopo, e la direzione da un lato all'altro.
+    assert len(riga(-12.0, 45.0, 0.5, None)) == len(riga(-12.1, 45.1, 0.5, None)) == len(riga(12.9, 45.9, 0.5, None)) + len(" sinistra") - len(" destra")
+    for alzo, scritto in ((15.0, "15,0"), (45.0, "45,0"), (85.0, "85,0")):
+        assert f"alzo {scritto} gradi," in riga(0.0, alzo, 0.5, None)
+    assert " grado " not in riga(1.0, 50.0, 0.5, None) and " grado," not in riga(1.0, 1.0, 0.5, None)
 
 
 def test_la_barra_nell_attesa_della_palestra():
@@ -558,27 +619,15 @@ def test_in_blocchi():
     assert resoconti.in_blocchi("abc", "") == "abc" and resoconti.in_blocchi("abc", "d", larghezza=5) == "abc  d"
 
 
-def test_il_proiettile_perduto_e_la_mira_annullata():
-    """D25: il resoconto del proiettile perduto dice la barra e i passaggi, conta come un tiro a vuoto e non ha precisione globale;
-    la mira annullata con Esc dice che il proiettile resta nella riserva."""
-    perduto = raccogli(resoconti.proiettile_perduto(6, 2, "alzo", 5, 7, totale=430))
-    assert perduto.tipo == "resoconto" and perduto.testo.split("\n") == [
-        "Tiro 6, livello 2: proiettile perduto; nella riserva restano 7 colpi.",
-        "La barra dell'alzo è passata 5 volte senza lo Spazio: il colpo non è partito, e il proiettile conta come un tiro a vuoto."]
-    assert perduto.annuncio == "Proiettile perduto, riserva 7."
-    assert perduto.dati == {"tiro": 6, "livello": 2, "colpito": False, "bonus": False, "punti": 0, "totale": 430, "riserva": 7, "precisione": None,
-                            "precisione_globale": None, "perduto": True, "parametro": "alzo", "passaggi": 5}
-    ultimo = raccogli(resoconti.proiettile_perduto(1, 1, "direzione", 1, 0))
-    assert ultimo.testo.split("\n") == ["Tiro 1, livello 1: proiettile perduto; la riserva è vuota.",
-                                        "La barra della direzione è passata 1 volta senza lo Spazio: il colpo non è partito, e il proiettile conta come un "
-                                        "tiro a vuoto."]
-    assert ultimo.annuncio == "Proiettile perduto, riserva vuota."
-    assert raccogli(resoconti.proiettile_perduto(2, 1, "potenza", 5, 1)).testo.split("\n")[0] == "Tiro 2, livello 1: proiettile perduto; nella riserva resta 1 colpo."
+def test_la_mira_annullata():
+    """D25: la mira annullata con Esc dice che il proiettile resta nella riserva. Dalla 2.0.0 i bersagli non tacciono più durante la
+    mira (D29), e il messaggio non dice che tornano a cantare; il proiettile perduto non c'è più."""
     annullata = raccogli(resoconti.mira_annullata(10))
     assert (annullata.tipo, annullata.annuncio, annullata.dati) == ("info", "Mira annullata.", {"riserva": 10})
-    assert annullata.testo == "Mira annullata con Esc: il proiettile resta nella riserva, che ha 10 colpi, e i bersagli tornano a cantare. Spazio per mirare di nuovo."
+    assert annullata.testo == "Mira annullata con Esc: il proiettile resta nella riserva, che ha 10 colpi. Spazio per mirare di nuovo."
     in_pausa = raccogli(resoconti.mira_annullata(1, in_pausa=True))
     assert in_pausa.testo == "Mira annullata con Esc: il proiettile resta nella riserva, che ha 1 colpo, e la partita resta in pausa. Ctrl+P per riprendere."
+    assert not hasattr(resoconti, "proiettile_perduto")
 
 
 def test_messaggio_di_tipo_sconosciuto():
@@ -601,14 +650,14 @@ def _campionario():
         resoconti.resoconto_del_tiro(7, SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, mancato(misure=misure()), VALORI, riserva=6),
         resoconti.resoconto_del_tiro(8, 1, mancato(misure=misure(arriva=False, ricade=False)), VALORI, riserva=5),
         resoconti.resoconto_del_tiro(9, SOMMARIO_PAROLE_FINO_AL_LIVELLO, mancato(misure=misure(arriva=False)), VALORI, riserva=4),
-        resoconti.inizio_partita(1, 10), resoconti.livello_nuovo(16, 10, 40), resoconti.bonus_apparso(bonus, 20), resoconti.bonus_uscito(),
+        resoconti.inizio_partita(1, COLPI_INIZIALI), resoconti.livello_nuovo(16, COLPI_PER_LIVELLO, 40), resoconti.bonus_apparso(bonus, 20),
+        resoconti.bonus_uscito(),
         resoconti.primati_battuti(["precisione", "vicino", "mancato", "serie", "punti_in_un_tiro"], {"precisione": 1.0, "vicino": 0.0, "mancato": 0.2,
                                                                                                      "serie": 12, "punti_in_un_tiro": 9999}),
         resoconti.ultimo_colpo(), resoconti.fine_partita(riepilogo, ["punteggio", "livello", "centri_in_una_partita", "partita_piu_lunga"],
                                                          {"punteggio": 1234567, "livello": 12, "centri_in_una_partita": 120, "partita_piu_lunga": 4000.0}),
         resoconti.partita_abbandonata(riepilogo), resoconti.in_pausa(), resoconti.ripresa(), resoconti.in_pausa(nella_mira=True), resoconti.nessuna_partita(),
         resoconti.pausa_solo_in_palestra(3), resoconti.attesa_della_palestra(0), resoconti.attesa_della_palestra(1), resoconti.attesa_della_palestra(4),
-        resoconti.proiettile_perduto(3, 4, "potenza", PASSAGGI_DELLA_BARRA, 6), resoconti.proiettile_perduto(3, 4, "direzione", 1, 0),
         resoconti.mira_annullata(12), resoconti.mira_annullata(1, in_pausa=True),
         resoconti.resoconto_del_tiro(10, SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, volo(bersaglio()), VALORI, punti=200, totale=400, riserva=7),
     ]
@@ -616,12 +665,13 @@ def _campionario():
     for messaggio in messaggi:
         testi_.extend(testo for testo in (messaggio.testo, messaggio.annuncio) if testo)
     for fase in ("pronta", "ascolto", "mira", "volo", "attesa", "finita"):
-        testi_.extend(resoconti.righe_della_barra(fase, livello=12, punti=1234567, riserva=40, centri_del_livello=9, bersagli=4, bonus=True, parametro="potenza",
-                                                  sottofase="scivolata"))
+        for in_pausa in (False, True):
+            testi_.extend(resoconti.righe_della_barra(fase, in_pausa=in_pausa, livello=12, punti=1234567, riserva=40, centri_del_livello=9, bersagli=4,
+                                                      bonus=True, mira=(-39.95, 84.99, 1.0, 29.5)))
     for ferma, nasceranno in ((False, 0), (True, 0), (True, 1), (True, 4)):
         testi_.append(resoconti.riga_dell_attesa(ferma, nasceranno))
-    for passaggio in range(1, PASSAGGI_DELLA_BARRA + 1):
-        testi_.append(resoconti.riga_della_fase("mira", parametro="potenza", sottofase="scivolata", passaggio=passaggio))
+    for valori in ((0.0, 15.0, 0.0, None), (40.0, 85.0, 1.0, 0.0), (-0.04, 50.0, 0.5, 1.0)):
+        testi_.append(resoconti.riga_dei_valori_della_mira(*valori))
     return testi_
 
 

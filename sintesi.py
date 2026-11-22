@@ -1,5 +1,5 @@
 """
-La sintesi di Ciechino: le forme d'onda delle portanti, la panoramica, i bip e i buffer della mira.
+La sintesi di Ciechino: le forme d'onda delle portanti, la panoramica, i bip e i suoni della mira manuale.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello di _sintetizza di Acusticator in GBUtils per la legge
 della panoramica a potenza costante.
@@ -14,29 +14,25 @@ Ogni numero di taratura viene da costanti.py; quelli qui sotto riguardano soltan
 dettagli della sintesi, e restano qui finché qualcuno non vorrà tararli giocando.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
 
 from costanti import (
     ALZO_FREQUENZE,
-    BIP_DB,
-    BIP_DISTACCO,
-    BIP_DURATA,
-    BIP_FREQUENZE,
-    BIP_SILENZIO_FINALE,
     DIREZIONE_FREQUENZA,
     FS,
     PARAMETRI,
     POTENZA_DB_MINIMO,
     POTENZA_FREQUENZA,
     SCIVOLATA_DB,
-    SCIVOLATA_DURATA,
     SCIVOLATA_FORMA,
     TACCA_DB,
     TACCA_DURATA,
     TACCA_FREQUENZE,
     TACCHE,
+    TICK_DB,
+    TICK_DURATA,
+    TICK_FORMA,
+    TICK_FREQUENZE,
 )
 
 # Le forme delle portanti, per le scivolate, i bersagli e il proiettile.
@@ -60,10 +56,9 @@ ARMONICHE_DELL_ORGANO = (1.0, 0.25, 0.12)
 # misura, così nessun campione supera mai 1.
 PUNTI_PER_IL_PICCO = 8192
 MARGINE_DEL_PICCO = 1.001
-# Le rampe contro i click, in secondi: un millesimo per i bip, come vuole il contratto, cinque per
-# l'inizio e la fine della scala di una scivolata.
+# La rampa contro i click dei bip, in secondi: un millesimo, come vuole il contratto. Il suono dei
+# valori della mira manuale ha l'attacco e la sfumatura delle voci del motore.
 RAMPA_DEL_BIP = 0.001
-RAMPA_DELLA_SCALA = 0.005
 # lineare_in_db di un silenzio perfetto: un pavimento invece di meno infinito.
 PAVIMENTO_IN_DB = -240.0
 
@@ -203,36 +198,6 @@ def bip(frequenza, durata, db, forma="seno", fs=FS):
     return _bip(frequenza, round(durata * fs), db, forma, fs).astype(np.float32)
 
 
-@dataclass
-class Scivolata:
-    """Il buffer di una barra della mira e dove sta la scala dentro di lui.
-    buffer comincia a pausa finita, col primo bip; inizio_scivolata è il campione del buffer dove
-    comincia la scala, lunga campioni_scivolata; il buffer finisce con la scala. tacche elenca le
-    coppie (inizio, fine) dei bip delle tacche, in campioni del buffer, fine esclusa."""
-
-    parametro: str
-    buffer: np.ndarray
-    inizio_scivolata: int
-    campioni_scivolata: int
-    fs: int = FS
-    tacche: tuple = ()
-
-    @property
-    def fine_scivolata(self):
-        """Il campione del buffer dove la scala è finita, che è anche la lunghezza del buffer."""
-        return self.inizio_scivolata + self.campioni_scivolata
-
-
-def _glissando(frequenze, frazioni, esponenziale):
-    """Le frequenze della scala: un numero resta fermo, una coppia (da, a) scorre."""
-    if np.ndim(frequenze) == 0:
-        return np.full(len(frazioni), float(frequenze))
-    da, a = (float(x) for x in frequenze)
-    if esponenziale:
-        return da * (a / da) ** frazioni
-    return da + (a - da) * frazioni
-
-
 def frequenze_delle_tacche(quante=TACCHE, frequenze=TACCA_FREQUENZE):
     """Le frequenze delle tacche, dalla prima all'ultima su scala esponenziale."""
     da, a = (float(x) for x in frequenze)
@@ -241,64 +206,49 @@ def frequenze_delle_tacche(quante=TACCHE, frequenze=TACCA_FREQUENZE):
     return da * (a / da) ** (np.arange(quante) / (quante - 1))
 
 
-def scivolata(parametro, tacche=True, fs=FS):
-    """Il buffer della mira per un parametro di PARAMETRI, coi valori di costanti.py.
-    Il buffer: i bip di BIP_FREQUENZE del parametro, lunghi BIP_DURATA e separati da BIP_DISTACCO
-    di silenzio, poi BIP_SILENZIO_FINALE di silenzio, poi la scala di SCIVOLATA_DURATA secondi,
-    arrotondati al campione, nella forma SCIVOLATA_FORMA del parametro. Ogni durata si arrotonda al
-    campione da sola, così il conto dei campioni è esatto e il motore, la mira e le prove lo rifanno
-    uguale.
-    La scala: la direzione va da tutto a sinistra a tutto a destra a DIREZIONE_FREQUENZA; l'alzo
-    sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1], al centro, su scala esponenziale in hertz; la
-    potenza a POTENZA_FREQUENZA, al centro, cresce da POTENZA_DB_MINIMO sotto SCIVOLATA_DB fino a
-    SCIVOLATA_DB, lineare in decibel. Il campione i della scala vale la frazione i diviso
-    campioni_scivolata, la stessa che mira.valore_scelto dà allo spazio.
-    Le tacche, se tacche è vero: TACCHE bip di TACCA_DURATA a TACCA_DB, al centro, da
-    TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1] su scala esponenziale; la k-esima finisce a k decimi
-    della scala, quindi l'ultima la chiude. Senza tacche, le prove sentono la scala da sola.
-    Fino alla 0.12.0 la funzione prendeva anche le varianti dei banchi d'ascolto, la forma, le
-    frequenze, le curve, il minimo della potenza, il volume delle tacche e la durata dei bip: i
-    banchi sono usciti con la 1.0.0, e con loro le varianti."""
+def _controlla_il_parametro(parametro):
     if parametro not in PARAMETRI:
         raise ValueError(f"parametro sconosciuto: {parametro!r}")
-    forma = SCIVOLATA_FORMA[parametro]
-    fs = int(fs)
-    campioni_bip = round(BIP_DURATA * fs)
-    campioni_distacco = round(BIP_DISTACCO * fs)
-    campioni_silenzio = round(BIP_SILENZIO_FINALE * fs)
-    campioni_scala = round(SCIVOLATA_DURATA * fs)
-    frequenze_bip = BIP_FREQUENZE[parametro]
-    quanti_bip = len(frequenze_bip)
-    inizio = quanti_bip * campioni_bip + max(0, quanti_bip - 1) * campioni_distacco + campioni_silenzio
-    sinistra_destra = np.zeros((inizio + campioni_scala, 2))
-    for i, frequenza in enumerate(frequenze_bip):
-        dove = i * (campioni_bip + campioni_distacco)
-        sinistra_destra[dove:dove + campioni_bip] += panoramica(_bip(frequenza, campioni_bip, BIP_DB, "seno", fs), 0.0)
-    frazioni = np.arange(campioni_scala) / campioni_scala
-    livello = db_in_lineare(SCIVOLATA_DB)
-    pan = 0.0
+
+
+def parametri_dell_asse(parametro, valori):
+    """(frequenze, pan, guadagni lineari) del suono di un valore della mira manuale che si muove, per i
+    valori da 0 a 1 (D29), nella forma SCIVOLATA_FORMA del parametro: i suoni delle scivolate di D19. La
+    direzione suona DIREZIONE_FREQUENZA a SCIVOLATA_DB, da tutto a sinistra a tutto a destra; l'alzo, al
+    centro, sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] su scala esponenziale; la potenza, al centro,
+    a POTENZA_FREQUENZA, cresce da POTENZA_DB_MINIMO sotto SCIVOLATA_DB fino a SCIVOLATA_DB, lineare in
+    decibel. Tre array lunghi come i valori."""
+    _controlla_il_parametro(parametro)
+    valori = np.clip(np.atleast_1d(np.asarray(valori, dtype=float)), 0.0, 1.0)
+    uno = np.ones_like(valori)
+    livello = db_in_lineare(SCIVOLATA_DB) * uno
     if parametro == "direzione":
-        hertz = _glissando(DIREZIONE_FREQUENZA, frazioni, True)
-        pan = 2.0 * frazioni - 1.0
-    elif parametro == "alzo":
-        hertz = _glissando(ALZO_FREQUENZE, frazioni, True)
-    else:
-        hertz = _glissando(POTENZA_FREQUENZA, frazioni, True)
-        livello = db_in_lineare(SCIVOLATA_DB + POTENZA_DB_MINIMO * (1.0 - frazioni))
-    scala = Oscillatore(forma, fs).rendi(hertz) * livello
-    _rampe(scala, round(RAMPA_DELLA_SCALA * fs))
-    sinistra_destra[inizio:] += panoramica(scala, pan)
-    posizioni = []
-    if tacche and TACCHE > 0:
-        campioni_tacca = round(TACCA_DURATA * fs)
-        for k, frequenza in enumerate(frequenze_delle_tacche(), start=1):
-            fine = inizio + round(k * campioni_scala / TACCHE)
-            dove = max(inizio, fine - campioni_tacca)
-            sinistra_destra[dove:fine] += panoramica(_bip(frequenza, fine - dove, TACCA_DB, "seno", fs), 0.0)
-            posizioni.append((dove, fine))
-    # Con i valori di costanti.py la somma resta ben sotto uno; una taratura nuova esagerata, per
-    # esempio tacche a zero decibel, si abbassa tutta insieme invece di tagliarsi.
-    picco = float(np.max(np.abs(sinistra_destra))) if len(sinistra_destra) else 0.0
-    if picco > 1.0:
-        sinistra_destra /= picco
-    return Scivolata(parametro, sinistra_destra.astype(np.float32), inizio, campioni_scala, fs, tuple(posizioni))
+        return DIREZIONE_FREQUENZA * uno, 2.0 * valori - 1.0, livello
+    if parametro == "alzo":
+        basso, alto = ALZO_FREQUENZE
+        return basso * (alto / basso) ** valori, 0.0 * uno, livello
+    return POTENZA_FREQUENZA * uno, 0.0 * uno, db_in_lineare(SCIVOLATA_DB + POTENZA_DB_MINIMO * (1.0 - valori))
+
+
+def tacca_dell_asse(parametro, k, fs=FS):
+    """La tacca k, da 1 a TACCHE meno 1, di un valore della mira manuale: il bip stereo float32 di
+    TACCA_DURATA a TACCA_DB, alla frequenza k-esima di frequenze_delle_tacche(TACCHE - 1), cioè le nove
+    tacche dei decimi su tutta la scala da TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1], nella forma del
+    parametro, al centro, e per la direzione con la panoramica di quel decimo (D29)."""
+    _controlla_il_parametro(parametro)
+    if not 1 <= int(k) < TACCHE:
+        raise ValueError(f"le tacche vanno da 1 a {TACCHE - 1}, non {k!r}")
+    frequenza = float(frequenze_delle_tacche(TACCHE - 1)[int(k) - 1])
+    pan = 2.0 * int(k) / TACCHE - 1.0 if parametro == "direzione" else 0.0
+    mono = _bip(frequenza, round(TACCA_DURATA * fs), TACCA_DB, SCIVOLATA_FORMA[parametro], int(fs))
+    return panoramica(mono, pan).astype(np.float32)
+
+
+def tick_del_tempo(secondo, secondi, fs=FS):
+    """Il tick del secondo dato, da 1 a secondi meno 1, di una mira a tempo di tanti secondi (D29): un bip
+    stereo float32 di TICK_DURATA a TICK_DB, al centro, nella forma TICK_FORMA, che sale col tempo che
+    scorre da TICK_FREQUENZE[0], al primo secondo, a TICK_FREQUENZE[1], all'ultimo, su scala esponenziale."""
+    basso, alto = TICK_FREQUENZE
+    frazione = 0.0 if secondi <= 2 else min(1.0, max(0.0, (float(secondo) - 1.0) / (float(secondi) - 2.0)))
+    mono = _bip(basso * (alto / basso) ** frazione, round(TICK_DURATA * fs), TICK_DB, TICK_FORMA, int(fs))
+    return panoramica(mono, 0.0).astype(np.float32)

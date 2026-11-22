@@ -1,63 +1,144 @@
 """
-La mira di Ciechino: dal campione che si sente quando si preme spazio al valore scelto con una scivolata.
+La mira manuale di Ciechino (D29): tre valori, direzione, alzo e potenza, che si muovono finché i loro tasti sono giù.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0.
-La funzione è una sola, la stessa per il gioco e per gli Ascolti, e fino alla 0.12.0 per il banco
-della mira, con cui Gabriele ha tarato le scivolate. Non sa niente di audio né di finestre: riceve
-il campione udibile dal motore e il buffer da sintesi.scivolata, e fa il conto. Il modulo resta
-leggero, senza numpy, perché lo importano anche le prove che non suonano.
+Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 la mira non è più fatta di scivolate da fermare con lo spazio.
+Gabriele, il 22 novembre 2026: «togliere gli scorrimenti dalle barre parametriche e passare ad un vero
+puntamento manuale», e poi «i 3 spostamenti 3d si fanno tutti in una unica operazione di puntamento».
+Ogni valore va da 0 a 1, parte dal centro della sua scala e, col suo tasto giù, la percorre a
+VELOCITA_DELLA_MIRA, da un capo all'altro in DURATA_DELLA_SCALA secondi, fino a fermarsi ai capi; con due
+tasti di valori diversi giù, i due valori si muovono insieme. Il tempo è quello dell'audio, in secondi,
+il campione udibile diviso la frequenza di campionamento: così il valore di un istante è quello che si
+sentiva in quell'istante.
+Il modulo non sa niente di audio né di finestre, e non usa numpy fuori da valore, che accetta anche un
+array di tempi per il motore: lo importano la partita e le prove.
 """
 
-from costanti import COMPENSAZIONE_DEL_TASTO, FS, MARGINE_DOPO_LA_SCIVOLATA
+import numpy as np
 
-# I quattro esiti di valore_scelto, nell'ordine in cui il buffer li attraversa.
-ESITI = ("pausa", "minimo", "scelto", "massimo")
-
-
-def campione_del_tasto(campione_udibile, scivolata, compensazione=None):
-    """Il campione che si sentiva quando il dito è sceso sullo spazio: campione_udibile meno compensazione
-    secondi, COMPENSAZIONE_DEL_TASTO se è None, alla frequenza di campionamento della scivolata. È l'istante
-    con cui valore_scelto sceglie il valore, e quello che il gioco passa a scaduta per lo spazio, così i due
-    conti guardano lo stesso momento."""
-    if compensazione is None:
-        compensazione = COMPENSAZIONE_DEL_TASTO
-    return float(campione_udibile) - float(compensazione) * getattr(scivolata, "fs", FS)
+from costanti import PARAMETRI, PARTENZA_DELLA_MIRA, TACCHE, VELOCITA_DELLA_MIRA
 
 
-def valore_scelto(campione_udibile, inizio_buffer, scivolata, compensazione=None):
-    """Il valore scelto premendo spazio quando dalle casse esce campione_udibile, per una scivolata
-    il cui buffer è partito al campione inizio_buffer del motore. Restituisce (valore, esito).
-    Al campione udibile si tolgono compensazione secondi (COMPENSAZIONE_DEL_TASTO se è None), il
-    ritardo fra il dito e il programma, perché conta ciò che si sentiva quando il dito è sceso: è il
-    conto di campione_del_tasto.
-    Prima del buffer, cioè nella pausa fra le barre, lo spazio non conta: (None, "pausa"). Nei
-    bip e nel silenzio che li segue sceglie il minimo: (0.0, "minimo"). Nella scala sceglie la
-    frazione percorsa, continua, senza gradini: (frazione, "scelto"). Dopo la fine della scala,
-    nel margine prima che la barra scada, sceglie il massimo: (1.0, "massimo").
-    scivolata è una sintesi.Scivolata, o qualunque oggetto con inizio_scivolata,
-    campioni_scivolata e, se diversa da FS, la frequenza di campionamento fs."""
-    posizione = campione_del_tasto(campione_udibile, scivolata, compensazione) - float(inizio_buffer)
-    if posizione < 0.0:
-        return None, "pausa"
-    inizio_scala = scivolata.inizio_scivolata
-    if posizione < inizio_scala:
-        return 0.0, "minimo"
-    if posizione < inizio_scala + scivolata.campioni_scivolata:
-        return (posizione - inizio_scala) / scivolata.campioni_scivolata, "scelto"
-    return 1.0, "massimo"
+class Asse:
+    """Un valore della mira. Lo stato è una tupla sola, (valore, verso, dal): il valore che aveva al
+    tempo dal, e il verso in cui si muove da allora, meno uno, zero o uno. La tupla si sostituisce tutta
+    insieme, così il filo dell'audio, che legge lo stato a ogni blocco, non vede mai un cambio a metà."""
+
+    def __init__(self, valore=PARTENZA_DELLA_MIRA):
+        self.stato = (min(1.0, max(0.0, float(valore))), 0, 0.0)
+
+    @property
+    def verso(self):
+        return self.stato[1]
+
+    def valore(self, tempo):
+        """Il valore al tempo dato, da 0 a 1: uno scalare per un tempo, un array per un array."""
+        valore, verso, dal = self.stato
+        tempi = np.asarray(tempo, dtype=float)
+        valori = np.clip(valore + verso * VELOCITA_DELLA_MIRA * np.maximum(tempi - dal, 0.0), 0.0, 1.0)
+        return float(valori) if valori.ndim == 0 else valori
+
+    def muovi(self, verso, tempo):
+        """Da tempo il valore si muove nel verso dato, meno uno verso lo zero, uno verso l'uno, zero fermo:
+        il valore di quell'istante resta, e la corsa riparte da lì."""
+        self.stato = (self.valore(tempo), int(verso), float(tempo))
+
+    def ferma(self, tempo):
+        self.muovi(0, tempo)
+
+    def capo(self):
+        """Il capo verso cui va, 0 o 1, o None da fermo."""
+        if self.verso > 0:
+            return 1.0
+        if self.verso < 0:
+            return 0.0
+        return None
+
+    def tempo_al_capo(self):
+        """Il tempo in cui arriva al capo verso cui va, o None da fermo. Un valore già al capo ci arriva
+        subito, al tempo dal, e allora il capo si sente appena il tasto scende."""
+        valore, _verso, dal = self.stato
+        capo = self.capo()
+        if capo is None:
+            return None
+        return dal + abs(capo - valore) / VELOCITA_DELLA_MIRA
+
+    def tacche_davanti(self):
+        """Le tacche che il valore attraverserà correndo verso il capo, come coppie (tempo, k), con k da
+        1 a TACCHE meno 1, cioè dal primo al nono decimo: quella su cui il valore sta già non conta, e i
+        capi hanno il loro suono. Vuota da fermo."""
+        valore, verso, dal = self.stato
+        if verso == 0:
+            return []
+        tacche = []
+        for k in range(1, TACCHE):
+            soglia = k / TACCHE
+            davanti = soglia > valore + 1e-12 if verso > 0 else soglia < valore - 1e-12
+            if davanti:
+                tacche.append((dal + abs(soglia - valore) / VELOCITA_DELLA_MIRA, k))
+        return sorted(tacche)
 
 
-def scaduta(campione_udibile, inizio_buffer, scivolata, margine=None):
-    """Vero quando il campione udibile ha passato la fine della scala di margine secondi
-    (MARGINE_DOPO_LA_SCIVOLATA se è None): la scivolata che nessuno ha fermato è scaduta. Nel gioco,
-    da D25, la barra scaduta ricomincia da capo, al più PASSAGGI_DELLA_BARRA volte, e poi il
-    proiettile è perduto.
-    Qui non si toglie la compensazione del tasto, che riguarda il dito, non il tempo che passa: il
-    battito, che guarda il tempo, passa il campione udibile; per lo spazio il gioco passa invece
-    campione_del_tasto, lo stesso istante di valore_scelto, così lo spazio che valore_scelto prende
-    come massimo non fa scadere la barra."""
-    if margine is None:
-        margine = MARGINE_DOPO_LA_SCIVOLATA
-    fs = getattr(scivolata, "fs", FS)
-    fine = float(inizio_buffer) + scivolata.inizio_scivolata + scivolata.campioni_scivolata
-    return float(campione_udibile) >= fine + float(margine) * fs
+class Mira:
+    """La mira di un tiro: un Asse per ogni parametro di PARAMETRI, e i tasti giù di ciascuno, nell'ordine
+    in cui sono scesi. Un valore va nel verso dell'ultimo tasto suo sceso e ancora giù: tenendo giù la
+    freccia sinistra e poi anche la destra va a destra, e lasciata la destra torna a sinistra.
+    premi e lascia restituiscono vero se il moto del valore è cambiato, e allora chi suona deve
+    rifare il suono di quel valore."""
+
+    def __init__(self, partenza=PARTENZA_DELLA_MIRA):
+        self.assi = {parametro: Asse(partenza) for parametro in PARAMETRI}
+        self._giu = {parametro: [] for parametro in PARAMETRI}
+        # I tasti premuti in tutta la mira, per le statistiche: una pressione vera, non le ripetizioni.
+        self.pressioni = 0
+
+    def _controlla(self, parametro, verso):
+        if parametro not in self.assi:
+            raise ValueError(f"parametro sconosciuto: {parametro!r}")
+        if verso not in (-1, 1):
+            raise ValueError(f"il verso di un tasto della mira è meno uno o uno, non {verso!r}")
+
+    def premi(self, parametro, verso, tempo):
+        """Il tasto del parametro nel verso dato scende al tempo dato. Un tasto già giù, come la sua
+        ripetizione automatica, non cambia niente."""
+        self._controlla(parametro, verso)
+        giu = self._giu[parametro]
+        if verso in giu:
+            return False
+        giu.append(verso)
+        self.pressioni += 1
+        self.assi[parametro].muovi(verso, tempo)
+        return True
+
+    def lascia(self, parametro, verso, tempo):
+        """Il tasto del parametro nel verso dato sale al tempo dato: il valore prende il verso dell'altro
+        tasto suo ancora giù, o si ferma. Un tasto che non era giù non cambia niente."""
+        self._controlla(parametro, verso)
+        giu = self._giu[parametro]
+        if verso not in giu:
+            return False
+        giu.remove(verso)
+        asse = self.assi[parametro]
+        nuovo = giu[-1] if giu else 0
+        if nuovo == asse.verso:
+            return False
+        asse.muovi(nuovo, tempo)
+        return True
+
+    def lascia_tutto(self, tempo):
+        """Tutti i tasti su al tempo dato, come allo sparo, all'Esc o alla pausa: i valori restano dove
+        sono. Restituisce i parametri il cui moto è cambiato."""
+        cambiati = []
+        for parametro, asse in self.assi.items():
+            self._giu[parametro] = []
+            if asse.verso != 0:
+                asse.ferma(tempo)
+                cambiati.append(parametro)
+        return cambiati
+
+    def tasti_giu(self):
+        """I tasti giù, come coppie (parametro, verso)."""
+        return [(parametro, verso) for parametro, giu in self._giu.items() for verso in giu]
+
+    def valori(self, tempo):
+        """I tre valori al tempo dato, nell'ordine di PARAMETRI."""
+        return [self.assi[parametro].valore(tempo) for parametro in PARAMETRI]

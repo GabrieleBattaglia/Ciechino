@@ -3,12 +3,12 @@ Gli Ascolti di Ciechino, il tutorial audio: i passi, ognuno col titolo, il testo
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-20 con la 0.9.0, dalla decisione D23 del 20 novembre 2026. Gabriele: «Facciamo una cosa
 ibrida. Il gioco lo lasciamo così ma nelle impostazioni aggiungiamo la voce ascolti.» Un passo alla volta,
-raccontato da un testo, si sentono il test stereo, il bersaglio al centro del cubo con la tratta orizzontale,
-l'altezza e la distanza, tre punti a caso, la grandezza, le forme dell'oscillazione, i timbri, le tre
-scivolate della mira, il proiettile in volo, i colpi a segno e il bonus che attraversa il cubo. Il dialogo
+raccontato da un testo, si sentono il test stereo, il bersaglio nel mezzo della cupola che va da un lato
+all'altro, l'altezza e la distanza, tre punti a caso, la grandezza, le forme dell'oscillazione, i timbri, la
+mira manuale e il suo tempo, il proiettile in volo, i colpi a segno e il bonus che attraversa la cupola. Il dialogo
 che li mostra sta in gui/dialoghi.py, e la finestra lo apre dal menu Aiuto, l'unica voce dalla 0.11.10.
 I suoni passano dal motore del gioco con le sue voci, VoceTono per i bersagli e il proiettile, VoceBuffer per
-le scivolate e i preset, e con le stesse regole dello spazio sonoro: fisica.suono_di per panoramica, nota e
+le tacche, i tick e i preset, e con le stesse regole dello spazio sonoro: fisica.suono_di per panoramica, nota e
 volume, l'LFO, la grandezza e il timbro dei bersagli di bersagli.py, la forma del proiettile scelta nelle
 impostazioni, gli effetti collocati nello spazio da Suoni.pronto. Ogni voce segue il tempo dell'audio, non
 quello di gioco, che col dialogo aperto è fermo; ogni tono entra ed esce con la rampa ASCOLTI_RAMPA, contro
@@ -50,33 +50,41 @@ from costanti import (
     ASCOLTI_VELOCITA,
     AZIMUT_DEL_PAN,
     COLPI_BONUS,
-    CUBO_LATO,
-    CUBO_X,
-    CUBO_Y,
-    CUBO_Z,
+    CUPOLA_RAGGIO,
+    CUPOLA_RAGGIO_INTERNO,
     DURATA_BONUS_MINIMA,
+    DURATA_DELLA_SCALA,
     FORME_LFO,
-    MARGINE_DOPO_LA_SCIVOLATA,
     METRI_PER_OTTAVA,
     MOLTIPLICATORE_BONUS,
     PARAMETRI,
-    PASSAGGI_DELLA_BARRA,
-    PAUSA_FRA_BARRE,
+    PARTENZA_DELLA_MIRA,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
     RAGGIO_BONUS_FATTORE,
-    SCIVOLATA_DURATA,
+    RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
+    SCIVOLATA_FORMA,
+    SETTORE_AZIMUT,
     SFUMATURA_STOP,
     TACCHE,
+    TEMPO_DELLA_MIRA_INIZIALE,
+    TEMPO_DELLA_MIRA_MINIMO,
     VELOCITA_DEL_TEMPO,
+    VELOCITA_DELLA_MIRA,
 )
 from lingua import _, plurale
 from motore_audio import VoceTono
-from sintesi import db_in_lineare, scivolata
+from sintesi import db_in_lineare, parametri_dell_asse, tacca_dell_asse, tick_del_tempo
 from statistiche import NOMI_DELLE_FORME, NOMI_DELLE_PORTANTI
 
-# Il centro del cubo dei bersagli, da cui partono e dove tornano le tratte.
-CENTRO = tuple((basso + alto) / 2 for basso, alto in (CUBO_X, CUBO_Y, CUBO_Z))
+# Il mezzo della cupola dei bersagli (D28), da cui partono e dove tornano le tratte: la sua distanza dal centro
+# della cupola e la sua elevazione, per le tratte che girano su un arco.
+CENTRO = fisica.MEZZO_DELLA_CUPOLA
+DISTANZA_DEL_MEZZO = (CUPOLA_RAGGIO_INTERNO + CUPOLA_RAGGIO) / 2.0
+ELEVAZIONE_DEL_MEZZO = 30.0
+# I passi della bisezione che cerca i capi delle tratte, dove il bersaglio tocca le pareti della sua zona: una
+# finezza di calcolo, non una taratura.
+PASSI_DEI_CAPI = 60
 # Il seme dei bersagli degli Ascolti, che conta per le forme casuale e deriva: fisso, così il tutorial suona
 # sempre uguale. Non è una taratura.
 SEME_DEI_BERSAGLI = 23
@@ -177,23 +185,88 @@ def bersaglio_degli_ascolti(portante, forma=ASCOLTI_FORMA, raggio=ASCOLTI_RAGGIO
 
 
 def zona():
-    """(minimi, massimi) della zona dove sta il centro del bersaglio degli Ascolti, quella del gioco."""
-    return fisica.zona_del_centro(ASCOLTI_RAGGIO)
+    """La fisica.Zona dove sta il centro del bersaglio degli Ascolti, quella del gioco (D28)."""
+    return fisica.Zona(ASCOLTI_RAGGIO)
+
+
+def _sferico(distanza, azimut, elevazione):
+    """Il punto della cupola a quella distanza dal suo centro, con quell'azimut e quell'elevazione: (3,) per
+    scalari, (N, 3) per array."""
+    return fisica.punto_della_cupola(distanza, azimut, elevazione)
+
+
+def _limite(punto_di, dentro, fuori):
+    """Il valore più vicino a fuori, cercato per bisezione da dentro, per cui punto_di(valore) sta ancora
+    nella zona del bersaglio: il capo di una tratta."""
+    zona_del_bersaglio = zona()
+    for _passo in range(PASSI_DEI_CAPI):
+        medio = (dentro + fuori) / 2.0
+        if zona_del_bersaglio.contiene(punto_di(medio), tolleranza=0.0):
+            dentro = medio
+        else:
+            fuori = medio
+    return dentro
 
 
 def _capi():
-    """I punti dei capi delle tre tratte, al centro degli altri due assi: sinistra, destra, terra,
-    soffitto, fronte e fondo della zona del bersaglio."""
-    minimi, massimi = zona()
-    x, y, z = CENTRO
-    return {"sinistra": (minimi[0], y, z), "destra": (massimi[0], y, z), "terra": (x, minimi[1], z), "soffitto": (x, massimi[1], z),
-            "fronte": (x, y, minimi[2]), "fondo": (x, y, massimi[2])}
+    """I capi delle tre tratte, dal mezzo della cupola: gli azimut di sinistra e di destra, sull'arco alla
+    distanza e all'elevazione del mezzo; le elevazioni di terra e di cima, sull'arco alla distanza del mezzo,
+    davanti; le profondità di fronte e di fondo, alla quota del mezzo, davanti. Fin dove il bersaglio sta
+    tutto nella cupola."""
+    distanza, elevazione = DISTANZA_DEL_MEZZO, ELEVAZIONE_DEL_MEZZO
+    _x, altezza, profondita = CENTRO
+    return {
+        "sinistra": _limite(lambda azimut: _sferico(distanza, azimut, elevazione), 0.0, -SETTORE_AZIMUT),
+        "destra": _limite(lambda azimut: _sferico(distanza, azimut, elevazione), 0.0, SETTORE_AZIMUT),
+        "terra": _limite(lambda gradi: _sferico(distanza, 0.0, gradi), elevazione, 0.0),
+        "cima": _limite(lambda gradi: _sferico(distanza, 0.0, gradi), elevazione, 90.0),
+        "fronte": _limite(lambda z: (0.0, altezza, z), profondita, 0.0),
+        "fondo": _limite(lambda z: (0.0, altezza, z), profondita, CUPOLA_RAGGIO),
+    }
 
 
-def tappe_della_tratta(primo, secondo):
-    """Le tappe di una tratta: dal centro al primo capo, poi al secondo, poi di nuovo al centro, con le soste."""
+def punti_dei_capi():
+    """I punti dei capi delle tratte, coi nomi di _capi, per i testi e gli effetti."""
     capi = _capi()
-    return [(CENTRO, ASCOLTI_SOSTA), (capi[primo], ASCOLTI_SOSTA_AI_CAPI), (capi[secondo], ASCOLTI_SOSTA_AI_CAPI), (CENTRO, ASCOLTI_SOSTA)]
+    distanza, elevazione = DISTANZA_DEL_MEZZO, ELEVAZIONE_DEL_MEZZO
+    _x, altezza, _z = CENTRO
+    punti = {lato: _sferico(distanza, capi[lato], elevazione) for lato in ("sinistra", "destra")}
+    punti.update({quota: _sferico(distanza, 0.0, capi[quota]) for quota in ("terra", "cima")})
+    punti.update({fila: np.array((0.0, altezza, capi[fila])) for fila in ("fronte", "fondo")})
+    return {nome: tuple(float(c) for c in punto) for nome, punto in punti.items()}
+
+
+def tratta(nome):
+    """La tratta di un passo, come (tappe, velocità, punto_di): i valori delle tappe, dal mezzo al primo capo,
+    al secondo e di nuovo al mezzo, con le soste; la velocità nelle unità di quei valori al secondo, perché il
+    bersaglio vada a ASCOLTI_VELOCITA metri al secondo; e la funzione che fa dei valori i punti. L'orizzontale
+    gira sull'azimut, l'altezza sull'elevazione, la distanza va in profondità a quota costante."""
+    capi = _capi()
+    distanza, elevazione = DISTANZA_DEL_MEZZO, ELEVAZIONE_DEL_MEZZO
+    _x, altezza, profondita = CENTRO
+    if nome == "orizzontale":
+        mezzo, primo, secondo = 0.0, capi["sinistra"], capi["destra"]
+        velocita = math.degrees(ASCOLTI_VELOCITA / (distanza * math.cos(math.radians(elevazione))))
+
+        def punto_di(valori):
+            return _sferico(distanza, valori, elevazione)
+    elif nome == "altezza":
+        mezzo, primo, secondo = elevazione, capi["terra"], capi["cima"]
+        velocita = math.degrees(ASCOLTI_VELOCITA / distanza)
+
+        def punto_di(valori):
+            return _sferico(distanza, 0.0, valori)
+    elif nome == "distanza":
+        mezzo, primo, secondo = profondita, capi["fronte"], capi["fondo"]
+        velocita = ASCOLTI_VELOCITA
+
+        def punto_di(valori):
+            valori = np.asarray(valori, dtype=float)
+            return np.stack(np.broadcast_arrays(0.0, altezza, valori), axis=-1)
+    else:
+        raise ValueError(f"tratta sconosciuta: {nome!r}")
+    tappe = [((mezzo,), ASCOLTI_SOSTA), ((primo,), ASCOLTI_SOSTA_AI_CAPI), ((secondo,), ASCOLTI_SOSTA_AI_CAPI), ((mezzo,), ASCOLTI_SOSTA)]
+    return tappe, velocita, punto_di
 
 
 def _metri(x):
@@ -228,47 +301,48 @@ def _testo_stereo():
 
 def _testo_orizzontale():
     capi = _capi()
-    angolo = math.degrees(math.atan2(capi["destra"][0] - fisica.CANNONE[0], capi["destra"][2] - fisica.CANNONE[2]))
+    _x, altezza, _z = CENTRO
     return _testo(
         # Traduttori: distanza e altezza sono misure come «55 metri», raggio come «5 metri».
-        _("Un bersaglio fermo al centro del cubo, {distanza} davanti a te e a {altezza} d'altezza, grande come quelli del primo livello, col "
-          "raggio di {raggio}.").format(distanza=_metri(CENTRO[2]), altezza=_metri(CENTRO[1]), raggio=_metri(ASCOLTI_RAGGIO)),
-        # Traduttori: lato è una misura, come «20 metri».
-        _("Poi va a sinistra fino alla parete del cubo, {lato} a sinistra del centro, attraversa tutto il cubo fino alla parete di destra, e torna "
-          "al centro.").format(lato=_metri(-capi["sinistra"][0])),
-        # Traduttori: distanza è come «55 metri», angolo e massimo come «20 gradi» e «45 gradi».
-        _("Ascolta la panoramica: il suono segue l'angolo del bersaglio visto dal cannone, e a {distanza} la parete del cubo sta a {angolo} dal "
-          "centro, quindi il bersaglio non arriva mai tutto da un lato, che sarebbe a {massimo}. Più un bersaglio è lontano, più la sua panoramica "
-          "si stringe verso il mezzo.").format(distanza=_metri(CENTRO[2]), angolo=testi.gradi(round(angolo)), massimo=testi.gradi(AZIMUT_DEL_PAN)),
+        _("Un bersaglio fermo nel mezzo della cupola, {distanza} davanti a te e a {altezza} d'altezza, grande come quelli del primo livello, "
+          "col raggio di {raggio}.").format(distanza=_metri(_distanza(CENTRO)), altezza=_metri(altezza), raggio=_metri(ASCOLTI_RAGGIO)),
+        # Traduttori: angolo è un angolo, come «34 gradi».
+        _("Poi gira verso sinistra fino al lato della cupola, a {angolo} a sinistra, attraversa la cupola fino al lato destro e torna al mezzo, "
+          "sempre alla stessa distanza da te e alla stessa altezza.").format(angolo=testi.gradi(round(-capi["sinistra"]))),
+        # Traduttori: massimo è come «40 gradi», angolo come «34 gradi».
+        _("Ascolta la panoramica: è l'unica cosa che cambia, e segue l'angolo del bersaglio visto dal cannone. Tutto da un lato vuol dire il "
+          "lato della cupola, a {massimo}; il bersaglio, che è grande, ci arriva vicino, a {angolo}, perché resta tutto dentro.").format(
+            massimo=testi.gradi(AZIMUT_DEL_PAN), angolo=testi.gradi(round(capi["destra"]))),
     )
 
 
 def _testo_altezza():
-    capi = _capi()
-    terra, soffitto = capi["terra"][1], capi["soffitto"][1]
+    punti = punti_dei_capi()
+    terra, cima = punti["terra"][1], punti["cima"][1]
     return _testo(
-        # Traduttori: terra e soffitto sono altezze, come «5 metri» e «45 metri».
-        _("Lo stesso bersaglio, dal centro, scende fino a terra, dove il suo centro sta a {terra} dal prato, perché il bersaglio resti tutto sopra "
-          "il suolo; poi sale fino al soffitto del cubo, col centro a {soffitto} d'altezza, e torna al centro.").format(terra=_metri(terra),
-                                                                                                                      soffitto=_metri(soffitto)),
-        # Traduttori: ottava è una misura come «16,7 metri»; grave e acuto sono frequenze già scritte, come 271 e 1.429.
+        # Traduttori: terra e cima sono altezze, come «5 metri» e «52 metri»; distanza come «55 metri».
+        _("Lo stesso bersaglio, dal mezzo, scende fino a terra, dove il suo centro sta a {terra} dal prato, perché il bersaglio resti tutto sopra "
+          "il suolo; poi sale fino a {cima} d'altezza, e torna al mezzo, sempre a {distanza} dal centro della cupola, sulla sua volta.").format(
+            terra=_metri(terra), cima=_metri(cima), distanza=_metri(DISTANZA_DEL_MEZZO)),
+        # Traduttori: ottava è una misura come «20,3 metri»; grave e acuto sono frequenze già scritte, come 262 e 1.315.
         _("Ascolta la nota: più è grave, più il bersaglio è in basso. Sale di un'ottava ogni {ottava}, da circa {grave} hertz a terra a circa "
-          "{acuto} hertz al soffitto, e oscilla attorno a quella nota, perché il bersaglio è grande.").format(
-            ottava=testi.metri(METRI_PER_OTTAVA), grave=testi.intero(fisica.frequenza_di(terra)), acuto=testi.intero(fisica.frequenza_di(soffitto))),
+          "{acuto} hertz in alto, e oscilla attorno a quella nota, perché il bersaglio è grande.").format(
+            ottava=testi.metri(METRI_PER_OTTAVA, 2), grave=testi.intero(fisica.frequenza_di(terra)), acuto=testi.intero(fisica.frequenza_di(cima))),
     )
 
 
 def _testo_distanza():
-    capi = _capi()
-    fronte, fondo = capi["fronte"], capi["fondo"]
+    punti = punti_dei_capi()
+    fronte, fondo = punti["fronte"], punti["fondo"]
     decibel = fisica.guadagno_db_di(_distanza(fronte)) - fisica.guadagno_db_di(_distanza(fondo))
     return _testo(
-        # Traduttori: vicino e lontano sono distanze, come «35 metri» e «75 metri».
-        _("Lo stesso bersaglio, dal centro, viene vicino al massimo, sul fronte del cubo, a {vicino} davanti a te; poi va lontano al massimo, sul "
-          "fondo, a {lontano}; e torna al centro.").format(vicino=_metri(fronte[2]), lontano=_metri(fondo[2])),
-        # Traduttori: decibel è un numero già scritto, come 9.
+        # Traduttori: vicino e lontano sono distanze, come «35 metri» e «75 metri»; altezza come «27,5 metri».
+        _("Lo stesso bersaglio, dal mezzo, viene vicino al massimo, a {vicino} da te; poi va lontano al massimo, a {lontano}; e torna al mezzo, "
+          "sempre davanti a te e a {altezza} d'altezza.").format(vicino=_metri(_distanza(fronte)), lontano=_metri(_distanza(fondo)),
+                                                                 altezza=_metri(fronte[1])),
+        # Traduttori: decibel è un numero già scritto, come 10.
         _("La nota e la panoramica restano quelle: cambia soltanto il volume, di circa {decibel} decibel fra il vicino e il lontano. Sono i due capi "
-          "della scala della distanza, al centro del cubo.").format(decibel=testi.intero(decibel)),
+          "della scala della distanza, nel mezzo della cupola.").format(decibel=testi.intero(decibel)),
         _("Il volume che senti dipende anche dal volume del computer, da quello di Ciechino e dalle cuffie o dagli altoparlanti: quando ne cambi "
           "uno, l'orecchio perde la sua misura della distanza. Per ritararlo torna qui, dal menu Aiuto, e riascolta questo "
           "passo, il vicino e il lontano, prima di giocare."),
@@ -278,7 +352,7 @@ def _testo_distanza():
 def _testo_punti():
     return _testo(
         # Traduttori: punti è come «3 punti».
-        _("Il bersaglio salta in {punti} presi a caso nel cubo, uno dopo l'altro, staccati da un breve silenzio. Prova a capire dove sta ognuno: "
+        _("Il bersaglio salta in {punti} presi a caso nella cupola, uno dopo l'altro, staccati da un breve silenzio. Prova a capire dove sta ognuno: "
           "a destra o a sinistra, in alto o in basso, vicino o lontano.").format(punti=plurale(ASCOLTI_PUNTI, "{n} punto", "{n} punti")),
         _("Quando l'ultimo ha finito di suonare, in fondo a questo testo compare dove erano, in metri, e il cursore va lì; poi lo spazio te li fa "
           "riascoltare, sapendo dove sono."),
@@ -289,7 +363,7 @@ def _testo_grandezza():
     piccolo, primo, gigante = ASCOLTI_GRANDEZZE
     return _testo(
         # Traduttori: piccolo, primo e gigante sono raggi, come «0,5 metri», «5 metri» e «10 metri».
-        _("Un bersaglio fermo al centro del cubo, che cresce: parte piccolissimo, col raggio di {piccolo}, il più piccolo del gioco; cresce fino a "
+        _("Un bersaglio fermo nel mezzo della cupola, che cresce: parte piccolissimo, col raggio di {piccolo}, il più piccolo del gioco; cresce fino a "
           "{primo}, il raggio dei bersagli del primo livello, i più grandi del gioco; poi diventa gigantesco, {gigante}, più di ogni bersaglio "
           "vero.").format(piccolo=_metri(piccolo), primo=_metri(primo), gigante=_metri(gigante)),
         # Traduttori: piccolo e gigante sono numeri di semitoni già scritti, come 0,4 e 7,2.
@@ -314,7 +388,7 @@ def _testo_forme(posto, forme, portante):
         prima = _testo(
             # Traduttori: quante è il numero delle forme, come 12; per_passo come 6; timbro è un timbro, come «organo»; secondi è un numero già scritto, come 2,5.
             _("Il modo in cui la nota oscilla è la forma del bersaglio: ogni bersaglio ne prende una a caso, fra {quante}. Qui le senti tutte, "
-              "{per_passo} per passo, nello stesso punto, al centro del cubo, con la stessa grandezza e sempre il timbro {timbro}: ognuna suona "
+              "{per_passo} per passo, nello stesso punto, nel mezzo della cupola, con la stessa grandezza e sempre il timbro {timbro}: ognuna suona "
               "per {secondi} secondi, staccata dalla seguente da un breve silenzio.").format(quante=len(FORME_LFO), per_passo=ASCOLTI_FORME_PER_PASSO,
                                                                                             timbro=NOMI_DELLE_PORTANTI.get(portante, portante),
                                                                                             secondi=durata),
@@ -332,7 +406,7 @@ def _testo_timbri(proiettile):
     timbri = portanti_senza(proiettile)
     return _testo(
         # Traduttori: quanti è un numero, come 3; secondi un numero già scritto, come 2,5; timbri l'elenco dei timbri, come «organo, triangolo e sega morbida».
-        _("Il timbro della voce, la sua forma d'onda, ogni bersaglio lo prende a caso, fra {quanti}: qui li senti tutti, al centro del cubo, con "
+        _("Il timbro della voce, la sua forma d'onda, ogni bersaglio lo prende a caso, fra {quanti}: qui li senti tutti, nel mezzo della cupola, con "
           "la stessa oscillazione, ognuno per {secondi} secondi. In quest'ordine: {timbri}.").format(quanti=len(timbri), secondi=testi.numero(ASCOLTI_SUONO, 1),
                                                                                                   timbri=_nomi(timbri, NOMI_DELLE_PORTANTI)),
         # Traduttori: proiettile è un timbro, come «seno».
@@ -344,19 +418,30 @@ def _testo_timbri(proiettile):
 
 def _testo_mira():
     return _testo(
-        # Traduttori: pausa è una durata, come «1 secondo»; basso e alto sono frequenze già scritte, come 150 e 2.400.
-        _("Le tre scivolate della mira, come in partita, ma senza sparare: prima il respiro che avvia la mira; poi, dopo {pausa} di silenzio, la "
-          "direzione, un suono che va da tutto a sinistra a tutto a destra; poi l'alzo, che sale dal grave all'acuto, da {basso} a {alto} hertz; "
-          "poi la potenza, che cresce dal quasi silenzio al pieno.").format(pausa=testi.durata(PAUSA_FRA_BARRE), basso=testi.intero(ALZO_FREQUENZE[0]),
-                                                                           alto=testi.intero(ALZO_FREQUENZE[1])),
-        # Traduttori: durata è come «3 secondi», tacche un numero, come 10.
-        _("Ognuna comincia con tre bip, ciascuna coi suoi, e scivola per {durata}, con {tacche} tacche che salgono, una ogni decimo della scala. "
-          "Qui nessuno la ferma: arriva in fondo, e lo scatto del valore preso passa alla seguente.").format(durata=testi.durata(SCIVOLATA_DURATA),
-                                                                                                         tacche=TACCHE),
-        # Traduttori: passaggi è un numero, come 5: quante volte al più suona una barra della mira in partita (D25).
-        _("In partita lo spazio ferma ogni scivolata sul valore che senti in quell'istante; una barra che arriva in fondo senza lo spazio "
-          "ricomincia da capo, al più {passaggi} volte, e poi il proiettile è perduto. Esc annulla la mira, e il proiettile resta nella "
-          "riserva.").format(passaggi=PASSAGGI_DELLA_BARRA),
+        # Traduttori: durata è come «3 secondi»; basso e alto sono frequenze già scritte, come 150 e 2.400.
+        _("La mira manuale, come in partita, ma senza sparare: prima il respiro che avvia la mira, coi tre valori al centro della loro scala. "
+          "Poi la direzione, come tenendo giù la freccia destra e poi la sinistra: un suono che va dal mezzo a tutto a destra, dove si ferma col "
+          "suo colpo sordo, e poi fino a tutto a sinistra; poi l'alzo, con le frecce su e giù, una nota che sale fino a {alto} hertz e scende fino "
+          "a {basso}; poi la potenza, con Fine e Home, che cresce fino al pieno e cala fino al quasi silenzio.").format(
+            basso=testi.intero(ALZO_FREQUENZE[0]), alto=testi.intero(ALZO_FREQUENZE[1])),
+        # Traduttori: durata è come «3 secondi».
+        _("Ogni valore percorre tutta la sua scala in {durata}, con una tacca a ogni decimo che attraversa, sempre più acuta verso il "
+          "massimo.").format(durata=testi.durata(DURATA_DELLA_SCALA)),
+        _("In partita un valore si muove finché tieni giù il suo tasto, e si ferma quando lo lasci; due tasti di valori diversi li muovono "
+          "insieme. Invio spara coi tre valori di quel momento; Esc annulla la mira, e il proiettile resta nella riserva."),
+    )
+
+
+def _testo_tempo():
+    return _testo(
+        # Traduttori: iniziale, riduzione e minimo sono durate, come «30 secondi», «1 secondo» e «10 secondi».
+        _("Fuori dalla palestra la mira ha un tempo, che si accorcia salendo di livello: {iniziale} al primo livello dopo la palestra, "
+          "{riduzione} in meno a ogni livello, fino a {minimo}. Nella palestra la mira non ha tempo.").format(
+            iniziale=testi.durata(TEMPO_DELLA_MIRA_INIZIALE), riduzione=testi.durata(RIDUZIONE_DEL_TEMPO_DELLA_MIRA),
+            minimo=testi.durata(TEMPO_DELLA_MIRA_MINIMO)),
+        # Traduttori: minimo è una durata, come «10 secondi».
+        _("Qui senti la mira più breve, di {minimo}: un tick a ogni secondo, sempre più acuto, e allo scadere lo sparo, perché il colpo parte "
+          "da solo, coi valori di quel momento.").format(minimo=testi.durata(TEMPO_DELLA_MIRA_MINIMO)),
     )
 
 
@@ -366,7 +451,7 @@ def _testo_volo(proiettile):
     volo = volo_d_esempio()
     return _testo(
         # Traduttori: altezza e gittata sono misure come «25,3 metri»; secondi è un numero già scritto, come 4,9.
-        _("Un tiro dal cannone verso il centro del cubo, dove non c'è nessun bersaglio: lo sparo ai tuoi piedi, poi il proiettile che sale fino a "
+        _("Un tiro dal cannone verso il mezzo della cupola, dove non c'è nessun bersaglio: lo sparo ai tuoi piedi, poi il proiettile che sale fino a "
           "{altezza}, si allontana e ricade, e il tonfo a terra, a {gittata} davanti a te, dopo {secondi} secondi di volo.").format(
             altezza=_metri(volo.altezza_massima), gittata=_metri(volo.gittata), secondi=testi.numero(volo.durata / VELOCITA_DEL_TEMPO, 1)),
         # Traduttori: forma è un timbro, come «seno».
@@ -377,12 +462,12 @@ def _testo_volo(proiettile):
 
 
 def _testo_colpi():
-    capi = _capi()
+    punti = punti_dei_capi()
     return _testo(
         # Traduttori: vicino e lontano sono distanze, come «35 metri» e «75 metri».
-        _("Gli effetti dei colpi a segno, ognuno col suo jingle: prima il bersaglio colpito, tre note, vicino, sul fronte del cubo, a {vicino}, e "
-          "lontano, sul fondo, a {lontano}; poi il bonus colpito, otto note più acute e più brillanti, vicino e lontano.").format(
-            vicino=_metri(capi["fronte"][2]), lontano=_metri(capi["fondo"][2])),
+        _("Gli effetti dei colpi a segno, ognuno col suo jingle: prima il bersaglio colpito, tre note, vicino, a {vicino}, e lontano, a "
+          "{lontano}; poi il bonus colpito, otto note più acute e più brillanti, vicino e lontano.").format(
+            vicino=_metri(_distanza(punti["fronte"])), lontano=_metri(_distanza(punti["fondo"]))),
         _("Anche gli effetti vengono dal punto dello spazio dove avvengono: più sono lontani, più suonano piano."),
     )
 
@@ -391,8 +476,8 @@ def _testo_bonus():
     livello = ASCOLTI_LIVELLO_DEL_BONUS
     return _testo(
         # Traduttori: durata è come «14 secondi», livello un numero, come 3.
-        _("Il bersaglio bonus: compare col suo suono, entra dalla parete di sinistra, attraversa il cubo passando dal centro ed esce dalla parete "
-          "di destra, in {durata}, come al livello {livello}, il primo dei bonus; quando esce, senti il suono del bonus uscito.").format(
+        _("Il bersaglio bonus: compare col suo suono, entra dal lato sinistro della cupola, la attraversa passando davanti a te, nel mezzo, ed "
+          "esce dal lato destro, in {durata}, come al livello {livello}, il primo dei bonus; quando esce, senti il suono del bonus uscito.").format(
             durata=testi.durata(durata_del_bonus(livello)), livello=livello),
         # Traduttori: minima è come «6 secondi»; volte e colpi sono numeri, come 5.
         _("Nel gioco il bonus entra da un lato preso a caso, a un'altezza e a una distanza prese a caso, e più si sale di livello più è svelto, "
@@ -441,18 +526,19 @@ def _suono_stereo(regia, inizio):
     return ascolto
 
 
-def _suono_del_percorso(nome, primo, secondo):
-    """Il costruttore di una tratta: il bersaglio dal centro al primo capo, al secondo e di nuovo al centro."""
+def _suono_del_percorso(nome):
+    """Il costruttore di una tratta: il bersaglio dal mezzo al primo capo, al secondo e di nuovo al mezzo."""
 
     def costruisci(regia, inizio):
         ascolto = Ascolto(nome, inizio, inizio)
-        percorso = Percorso(tappe_della_tratta(primo, secondo), ASCOLTI_VELOCITA)
+        tappe, velocita, punto_di = tratta(nome)
+        percorso = Percorso(tappe, velocita)
         bersaglio = bersaglio_degli_ascolti(regia.portante)
         partenza = inizio / regia.motore.fs
 
         def parametri(tempi_di_gioco, tempi_audio):
             tempi = np.atleast_1d(np.asarray(tempi_audio, dtype=float)) - partenza
-            return bersaglio.suono_in(percorso(tempi), tempi)
+            return bersaglio.suono_in(punto_di(percorso(tempi)[:, 0]), tempi)
 
         ascolto.percorso = percorso
         ascolto.bersagli.append(bersaglio)
@@ -524,20 +610,34 @@ def _suono_dei_timbri(regia, inizio):
     return ascolto
 
 
+# Le corse di ogni valore nella mira degli Ascolti: dal centro al massimo, poi dal massimo al minimo, come
+# tenendo giù un tasto e poi l'altro.
+CORSE_DELLA_MIRA = ((PARTENZA_DELLA_MIRA, 1.0), (1.0, 0.0))
+
+
 def _suono_della_mira(regia, inizio):
-    """Come in partita: il respiro della mira, poi ogni barra dopo PAUSA_FRA_BARRE, che arriva in fondo, e
-    lo scatto del valore preso quando la scivolata è scaduta, MARGINE_DOPO_LA_SCIVOLATA dopo la sua fine,
-    che qui fa passare alla barra seguente; in partita, da D25, la barra scaduta ricomincerebbe."""
+    """Come in partita: il respiro della mira, poi ogni valore che corre, con le sue tacche e il suono del capo,
+    una corsa dopo l'altra, staccate da ASCOLTI_PAUSA (D29)."""
     ascolto = Ascolto("mira", inizio, inizio)
-    fs = regia.motore.fs
-    regia.effetto(ascolto, "mira_avviata", inizio)
-    campione = inizio
+    pausa = round(ASCOLTI_PAUSA * regia.motore.fs)
+    campione = regia.effetto(ascolto, "mira_avviata", inizio) + pausa
     for parametro in PARAMETRI:
-        barra = regia.scivolata(parametro)
-        campione += round(PAUSA_FRA_BARRE * fs)
-        regia.buffer(ascolto, barra.buffer, campione)
-        campione += barra.fine_scivolata + round(MARGINE_DOPO_LA_SCIVOLATA * fs)
-        regia.effetto(ascolto, "valore_preso", campione)
+        for da, a in CORSE_DELLA_MIRA:
+            campione = regia.corsa(ascolto, parametro, da, a, campione) + pausa
+    return ascolto
+
+
+def _suono_del_tempo(regia, inizio):
+    """La mira a tempo più breve, TEMPO_DELLA_MIRA_MINIMO: un tick a ogni secondo, sempre più acuto, e allo
+    scadere lo sparo dal cannone (D29)."""
+    ascolto = Ascolto("tempo", inizio, inizio)
+    fs = regia.motore.fs
+    secondi = TEMPO_DELLA_MIRA_MINIMO
+    for secondo in range(1, math.ceil(secondi)):
+        regia.buffer(ascolto, tick_del_tempo(secondo, secondi, fs=fs), inizio + round(secondo * fs))
+    scadenza = inizio + round(secondi * fs)
+    ascolto.fine = max(ascolto.fine, scadenza)
+    regia.effetto(ascolto, "sparo", scadenza, fisica.CANNONE)
     return ascolto
 
 
@@ -567,7 +667,7 @@ def _suono_del_volo(regia, inizio):
 
 def _suono_dei_colpi(regia, inizio):
     ascolto = Ascolto("colpi", inizio, inizio)
-    capi = _capi()
+    capi = punti_dei_capi()
     pausa = round(ASCOLTI_PAUSA * regia.motore.fs)
     campione = inizio
     for evento in ("colpito", "colpito_bonus"):
@@ -577,16 +677,20 @@ def _suono_dei_colpi(regia, inizio):
 
 
 def bonus_degli_ascolti(portante):
-    """Il bonus che attraversa il cubo, da sinistra a destra, all'altezza e alla profondità del centro, col
-    raggio e la velocità del livello ASCOLTI_LIVELLO_DEL_BONUS, nato al tempo zero."""
+    """Il bonus che attraversa la cupola, da sinistra a destra, su una corda alla quota e alla profondità del
+    mezzo, col raggio e la velocità del livello ASCOLTI_LIVELLO_DEL_BONUS, nato al tempo zero: parte e arriva
+    a un raggio fuori dai lati, come quello del gioco (D28)."""
     livello = ASCOLTI_LIVELLO_DEL_BONUS
     raggio = raggio_del_livello(livello) * RAGGIO_BONUS_FATTORE
-    rapidita = (CUBO_LATO + 2.0 * raggio) / durata_del_bonus(livello)
-    return bersaglio_degli_ascolti(portante, raggio=raggio, punto=(CUBO_X[0] - raggio, CENTRO[1], CENTRO[2]), velocita=(rapidita, 0.0, 0.0), bonus=True)
+    settore = math.radians(SETTORE_AZIMUT)
+    _x, altezza, profondita = CENTRO
+    fuori = (profondita * math.sin(settore) + raggio) / math.cos(settore)
+    rapidita = 2.0 * fuori / durata_del_bonus(livello)
+    return bersaglio_degli_ascolti(portante, raggio=raggio, punto=(-fuori, altezza, profondita), velocita=(rapidita, 0.0, 0.0), bonus=True)
 
 
 def _suono_del_bonus(regia, inizio):
-    """Come in partita: il bonus nasce col suo avviso, attraversa il cubo, e all'uscita la sua voce si ferma e
+    """Come in partita: il bonus nasce col suo avviso, attraversa la cupola, e all'uscita la sua voce si ferma e
     suona il bonus uscito, dal punto dove esce."""
     ascolto = Ascolto("bonus", inizio, inizio)
     fs = regia.motore.fs
@@ -610,9 +714,9 @@ def passi(proiettile=PROIETTILE_FORMA):
     portante = portanti_senza(proiettile)[0]
     elenco = [
         Passo("stereo", _("Il test stereo"), _testo_stereo(), _suono_stereo),
-        Passo("orizzontale", _("Il centro del cubo e la tratta orizzontale"), _testo_orizzontale(), _suono_del_percorso("orizzontale", "sinistra", "destra")),
-        Passo("altezza", _("L'altezza, a terra e al soffitto"), _testo_altezza(), _suono_del_percorso("altezza", "terra", "soffitto")),
-        Passo("distanza", _("La distanza, vicino e lontano"), _testo_distanza(), _suono_del_percorso("distanza", "fronte", "fondo")),
+        Passo("orizzontale", _("Il mezzo della cupola, da un lato all'altro"), _testo_orizzontale(), _suono_del_percorso("orizzontale")),
+        Passo("altezza", _("L'altezza, a terra e in alto"), _testo_altezza(), _suono_del_percorso("altezza")),
+        Passo("distanza", _("La distanza, vicino e lontano"), _testo_distanza(), _suono_del_percorso("distanza")),
         Passo("punti", _("I punti a caso"), _testo_punti(), _suono_dei_punti),
         Passo("grandezza", _("La grandezza, da piccolissimo a gigantesco"), _testo_grandezza(), _suono_della_grandezza),
     ]
@@ -627,10 +731,11 @@ def passi(proiettile=PROIETTILE_FORMA):
         elenco.append(Passo(nome, titolo, _testo_forme(posto, forme, portante), _suono_delle_forme(nome, forme)))
     elenco.extend((
         Passo("timbri", _("I timbri dei bersagli"), _testo_timbri(proiettile), _suono_dei_timbri),
-        Passo("mira", _("Le tre scivolate della mira"), _testo_mira(), _suono_della_mira),
+        Passo("mira", _("La mira manuale"), _testo_mira(), _suono_della_mira),
+        Passo("tempo", _("Il tempo della mira"), _testo_tempo(), _suono_del_tempo),
         Passo("volo", _("Il proiettile in volo"), _testo_volo(proiettile), _suono_del_volo),
         Passo("colpi", _("Il centro e il bonus, vicino e lontano"), _testo_colpi(), _suono_dei_colpi),
-        Passo("bonus", _("Il bonus che attraversa il cubo"), _testo_bonus(), _suono_del_bonus),
+        Passo("bonus", _("Il bonus che attraversa la cupola"), _testo_bonus(), _suono_del_bonus),
     ))
     return tuple(elenco)
 
@@ -658,7 +763,6 @@ class Regia:
         self.passi = passi(proiettile)
         self.in_corso = None
         self.punti = None
-        self._scivolate = {}
 
     def suona(self, indice):
         """Ferma il suono di prima e fa partire quello del passo indice dal prossimo campione sicuro del
@@ -690,17 +794,34 @@ class Regia:
         return self.in_corso.rivelazione
 
     def punti_a_caso(self):
-        """I punti a caso, ASCOLTI_PUNTI, uniformi nella zona del bersaglio degli Ascolti, estratti una volta sola."""
+        """I punti a caso, ASCOLTI_PUNTI, nella zona del bersaglio degli Ascolti, estratti come quelli del gioco,
+        con fisica.Zona.punto_a_caso, una volta sola."""
         if self.punti is None:
-            minimi, massimi = zona()
-            self.punti = tuple(tuple(self.rng.uniform(basso, alto) for basso, alto in zip(minimi, massimi, strict=True)) for _punto in range(ASCOLTI_PUNTI))
+            zona_del_bersaglio = zona()
+            self.punti = tuple(tuple(float(c) for c in zona_del_bersaglio.punto_a_caso(self.rng)) for _punto in range(ASCOLTI_PUNTI))
         return self.punti
 
-    def scivolata(self, parametro):
-        """La Scivolata di sintesi.scivolata per il parametro, quella della partita, fatta una volta sola."""
-        if parametro not in self._scivolate:
-            self._scivolate[parametro] = scivolata(parametro, fs=self.motore.fs)
-        return self._scivolate[parametro]
+    def corsa(self, ascolto, parametro, da, a, inizio):
+        """Un valore della mira che corre da da ad a, come col suo tasto giù (D29): la sua voce dal campione
+        inizio, a VELOCITA_DELLA_MIRA, le tacche dei decimi che attraversa e, se arriva a un capo, il suono
+        fine_scala. Restituisce il campione della fine, il suono del capo compreso."""
+        fs = self.motore.fs
+        verso = 1.0 if a >= da else -1.0
+        secondi = abs(a - da) / VELOCITA_DELLA_MIRA
+        partenza = inizio / fs
+
+        def parametri(tempi_di_gioco, tempi_audio):
+            tempi = np.atleast_1d(np.asarray(tempi_audio, dtype=float)) - partenza
+            return parametri_dell_asse(parametro, da + verso * VELOCITA_DELLA_MIRA * np.clip(tempi, 0.0, secondi))
+
+        fine = self.tono(ascolto, parametri, SCIVOLATA_FORMA[parametro], inizio, secondi, attacco=SFUMATURA_STOP, sfumatura=SFUMATURA_STOP)
+        for k in range(1, TACCHE):
+            soglia = k / TACCHE
+            if min(da, a) < soglia < max(da, a):
+                self.buffer(ascolto, tacca_dell_asse(parametro, k, fs=fs), inizio + round(abs(soglia - da) / VELOCITA_DELLA_MIRA * fs))
+        if a in (0.0, 1.0):
+            fine = max(fine, self.effetto(ascolto, "fine_scala", fine))
+        return fine
 
     def tono(self, ascolto, parametri, forma, inizio, secondi, attacco=ASCOLTI_RAMPA, sfumatura=ASCOLTI_RAMPA):
         """Una VoceTono di forma, coi parametri, dal campione inizio per tanti secondi: entra con la rampa

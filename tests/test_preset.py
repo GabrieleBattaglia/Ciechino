@@ -3,7 +3,9 @@ Le prove dei suoni di Ciechino nella collezione condivisa di GBUtils: le tabelle
 strumenti/crea_preset.py su una copia della collezione, _rendi_preset e l'elenco dei suoni per
 Acu_Maker.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0, sul modello di tests/test_suoni.py di MESS.
+Nasce il 2026-11-19 con la 0.1.0, sul modello di tests/test_suoni.py di MESS; dalla 2.0.0 gli eventi sono
+quelli della mira manuale di D29: entrano fine_scala e vai_alla_mira, di F6, ed escono il valore preso e il proiettile perduto, i cui
+preset restano nella collezione senza che lo strumento li tocchi.
 La collezione vera non si scrive mai: per tutto il modulo una guardia sostituisce Acusticator.aggiorna,
 da cui passano anche le firme, e fa fallire la prova che provasse a scriverla. Lo strumento lavora su
 una copia in una cartella temporanea, dalla quale si tolgono prima i preset di Ciechino e la sua
@@ -23,12 +25,13 @@ import pytest
 from GBUtils import Acusticator, parse_banda, scomponi_nota
 
 import suoni
-from costanti import FS, PASSAGGI_DELLA_BARRA
+from costanti import DIREZIONE_FREQUENZA, FS, POTENZA_FREQUENZA, TACCA_FREQUENZE
 from strumenti import crea_preset, elenco_suoni
 
-# Gli eventi della 0.1.0, come li elenca docs/progetto.txt: per il gioco, poi per la finestra.
+# Gli eventi della 0.1.0, come li elenca docs/progetto.txt: per il gioco, poi per la finestra. Il valore preso è
+# uscito con la mira manuale della 2.0.0 (D29).
 EVENTI_DEL_CONTRATTO = (
-    "nuova_partita", "mira_avviata", "valore_preso", "sparo", "colpito", "colpito_bonus", "a_terra", "livello_su", "bonus_appare",
+    "nuova_partita", "mira_avviata", "sparo", "colpito", "colpito_bonus", "a_terra", "livello_su", "bonus_appare",
     "bonus_uscito", "ultimo_colpo", "partita_finita", "in_classifica", "fuori_classifica", "pausa", "ripresa", "non_ora",
     "avvio", "uscita", "classifica", "statistiche", "guida", "manuale", "novita", "informazioni", "caffe", "pub", "volume",
     "impostazioni", "vai_alla_vista", "vai_alla_barra", "primo_piano", "errore",
@@ -44,9 +47,15 @@ EVENTI_DEL_CONTRATTO = (
     "scheda_audio", "scheda_non_aperta",
     # Gli Ascolti, il tutorial audio (D23): il suono della loro apertura, dai menu o da soli all'avvio.
     "ascolti",
-    # Le barre che aspettano lo spazio (D25): Esc che annulla la mira, e il proiettile perduto.
-    "mira_annullata", "proiettile_perduto",
+    # Esc che annulla la mira (D25); il proiettile perduto delle barre che aspettavano lo spazio è uscito con la 2.0.0.
+    "mira_annullata",
+    # La mira manuale (D29): il valore che arriva al capo della sua scala e si ferma; F6, che riporta il fuoco sulla Mira.
+    "fine_scala", "vai_alla_mira",
 )
+# Gli eventi usciti con la mira manuale della 2.0.0 (D29), coi loro preset, che restano nella collezione.
+EVENTI_USCITI = {"valore_preso": "ciechino_valore_preso", "proiettile_perduto": "ciechino_proiettile_perduto"}
+# L'onda triangolare di Acusticator, il kind 3.
+ONDA_TRIANGOLARE = 3
 # Un buffer che arriva qui è saturo, o quasi: la sintesi taglia a 1, e il motore somma altre voci.
 PICCO_MASSIMO = 0.98
 # Un buffer che non arriva qui non si sente.
@@ -291,23 +300,74 @@ def test_il_suono_degli_ascolti(creata):
     assert "Ascolti" in suoni.AZIONI["ascolti"]
 
 
-def test_i_suoni_della_mira_annullata_e_del_proiettile_perduto(creata):
+def test_il_suono_della_mira_annullata(creata):
     """D25: la mira annullata con Esc sta con la mira, il respiro di ciechino_mira_avviata che si lascia andare, nello stesso rumore
-    marrone, con la banda che scende invece di salire; il proiettile perduto sta coi tiri, rumore bianco come lo sparo che non c'è.
-    Le descrizioni dicono la durata vera, e le azioni dicono Esc e i passaggi."""
-    gruppi = dict(suoni.GRUPPI)
-    assert "mira_annullata" in gruppi["La mira"] and "proiettile_perduto" in gruppi["Il tiro e i suoi esiti"]
-    for evento, millesimi in (("mira_annullata", 180), ("proiettile_perduto", 600)):
-        nome = suoni.EVENTI[evento]
-        assert nome == f"ciechino_{evento}"
-        assert round(crea_preset.durata(creata.dati[nome]["score"]) * 1000) == millesimi, evento
-        assert f"in {millesimi} ms" in creata.dati[nome]["descrizione"], evento
+    marrone, con la banda che scende invece di salire. La descrizione dice la durata vera, e l'azione dice Esc."""
+    assert "mira_annullata" in dict(suoni.GRUPPI)["La mira"]
+    nome = suoni.EVENTI["mira_annullata"]
+    assert nome == "ciechino_mira_annullata"
+    assert round(crea_preset.durata(creata.dati[nome]["score"]) * 1000) == 180
+    assert "in 180 ms" in creata.dati[nome]["descrizione"]
     annullata, avviata = creata.dati["ciechino_mira_annullata"], creata.dati["ciechino_mira_avviata"]
     assert annullata["kind"] == avviata["kind"] in KIND_DI_RUMORE
     inizio, fine = _altezze(annullata["score"][0][0], True)
     assert fine < inizio
-    assert creata.dati["ciechino_proiettile_perduto"]["kind"] == creata.dati[suoni.EVENTI["sparo"]]["kind"]
-    assert "Esc" in suoni.AZIONI["mira_annullata"] and str(PASSAGGI_DELLA_BARRA) in suoni.AZIONI["proiettile_perduto"]
+    assert "Esc" in suoni.AZIONI["mira_annullata"]
+
+
+def _hertz(semitoni):
+    return LA_4 * 2.0 ** ((semitoni - LA_4_MIDI) / SEMITONI_PER_OTTAVA)
+
+
+def test_il_suono_del_fine_scala(creata):
+    """D29: il valore che arriva al capo della sua scala sta con la mira e fra gli eventi frequenti, brevi e morbidi, e la
+    descrizione dice la durata vera. È un doppio colpo di triangolo, al centro, e grave: sotto le tacche, la nota della
+    direzione e quella della potenza."""
+    assert "fine_scala" in dict(suoni.GRUPPI)["La mira"]
+    assert "fine_scala" in crea_preset.EVENTI_FREQUENTI
+    nome = suoni.EVENTI["fine_scala"]
+    assert nome == "ciechino_fine_scala"
+    preset = creata.dati[nome]
+    assert round(crea_preset.durata(preset["score"]) * 1000) == 75 and "in 75 ms" in preset["descrizione"]
+    assert preset["kind"] == ONDA_TRIANGOLARE
+    note = [quartina for quartina in preset["score"] if quartina[0] != "p"]
+    assert len(note) == 2
+    assert all(quartina[2] == 0 for quartina in preset["score"])
+    hertz = [_hertz(altezza) for quartina in note for altezza in _altezze(quartina[0], False)]
+    assert max(hertz) < min(TACCA_FREQUENZE[0], DIREZIONE_FREQUENZA, POTENZA_FREQUENZA)
+    # Due re 3, dalle prove del 22 novembre 2026: prima erano due mi 3. Il re 3, circa 147 hertz, sta anche sotto i 150 dell'alzo
+    # al minimo, come dice la descrizione.
+    assert [quartina[0] for quartina in note] == ["d3", "d3"]
+    assert hertz == pytest.approx([_hertz(50)] * len(hertz)) and max(hertz) < 150.0
+    assert "due tocchi di re 3" in preset["descrizione"]
+    assert "capo" in suoni.AZIONI["fine_scala"]
+    # Invio spara (D29), e il colpo parte da solo allo scadere del tempo della mira.
+    assert "Invio" in suoni.AZIONI["sparo"]
+
+
+def test_il_suono_di_f6(creata):
+    """D29, dalle prove del 22 novembre 2026: F6 riporta il fuoco sulla Mira, col suono vai_alla_mira, nel gruppo del fuoco accanto
+    a quelli di F5 e F7 e fra gli eventi frequenti, col preset ciechino_vai_alla_mira, diverso dai loro; l'azione dice F6 e la Mira."""
+    gruppo = dict(suoni.GRUPPI)["La finestra, il fuoco"]
+    assert list(gruppo) == ["vai_alla_vista", "vai_alla_barra", "vai_alla_mira"]
+    assert suoni.EVENTI["vai_alla_mira"] == "ciechino_vai_alla_mira"
+    assert "vai_alla_mira" in crea_preset.EVENTI_FREQUENTI
+    assert len({suoni.EVENTI[evento] for evento in gruppo}) == len(gruppo)
+    preset = creata.dati["ciechino_vai_alla_mira"]
+    assert "F6" in preset["descrizione"] and f"in {round(crea_preset.durata(preset['score']) * 1000)} ms" in preset["descrizione"]
+    assert "F6" in suoni.AZIONI["vai_alla_mira"] and "Mira" in suoni.AZIONI["vai_alla_mira"]
+
+
+def test_gli_eventi_usciti_con_la_mira_manuale(creata, originale):
+    """D29: il valore preso e il proiettile perduto non sono più eventi, né azioni, né preset della tabella dello strumento,
+    che non li firma più; i loro preset restano nella collezione così com'erano, perché ogni suono unico è patrimonio comune."""
+    for evento, nome in EVENTI_USCITI.items():
+        assert evento not in suoni.EVENTI and evento not in suoni.AZIONI, evento
+        assert evento not in crea_preset.EVENTI_FREQUENTI, evento
+        assert nome not in crea_preset.PRESET and nome not in crea_preset.nomi_da_firmare(), nome
+        assert nome in originale, nome
+        assert creata.dati[nome] == originale[nome], nome
+        assert not crea_preset.firmato(creata.dati[nome]), nome
 
 
 def test_sparo_colpiti_e_terra_sono_di_rumore(creata):

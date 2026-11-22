@@ -9,6 +9,8 @@ misurabile in metri, qualcosa di realistico, e tutte le indicazioni usano il sis
 Gli assi: x verso destra, y verso l'alto, z in avanti, con il giocatore nell'origine.
 """
 
+import math
+
 from version import __version__
 
 VERSIONE = __version__
@@ -21,108 +23,106 @@ GRAVITA = 9.81
 VELOCITA_DEL_TEMPO = 1.0
 # Il cannone sta davanti ai piedi del giocatore, un metro sopra il suolo.
 ALTEZZA_CANNONE = 1.0
-# Lo spazio dei bersagli è un cubo di 50 metri di lato, che comincia 30 metri davanti al
-# giocatore: da 25 metri a sinistra a 25 a destra, da terra a 50 metri d'altezza, da 30 a 80
-# metri di distanza.
-CUBO_LATO = 50.0
-CUBO_DISTANZA = 30.0
-CUBO_X = (-CUBO_LATO / 2, CUBO_LATO / 2)
-CUBO_Y = (0.0, CUBO_LATO)
-CUBO_Z = (CUBO_DISTANZA, CUBO_DISTANZA + CUBO_LATO)
-# Il centro di un bersaglio sta almeno a questa altezza, e sempre col bersaglio tutto dentro il cubo.
+# Lo spazio dei bersagli è una cupola (D28, dal 22 novembre 2026; fino alla 1.0.0 era un cubo di 50
+# metri di lato, da 30 a 80 metri di distanza): un guscio di sfera centrato a terra sotto il cannone,
+# da CUPOLA_RAGGIO_INTERNO a CUPOLA_RAGGIO metri, nel settore di ±SETTORE_AZIMUT gradi davanti al
+# giocatore. Ne resta fuori il cono stretto attorno alla verticale, sopra ELEVAZIONE_MASSIMA gradi
+# d'elevazione vista dal centro: lassù arriverebbe soltanto un alzo vicino ai 90 gradi, dove la
+# potenza utile si stringe a niente.
+CUPOLA_RAGGIO = 80.0
+CUPOLA_RAGGIO_INTERNO = 30.0
+SETTORE_AZIMUT = 40.0
+ELEVAZIONE_MASSIMA = 80.0
+# Il centro di un bersaglio sta almeno a questa altezza, e sempre col bersaglio tutto dentro la cupola.
 ALTEZZA_MINIMA_BERSAGLIO = 3.0
 # Il raggio del proiettile, che conta nel contatto col bersaglio.
 RAGGIO_PROIETTILE = 0.1
 # Il passo, in secondi di volo, con cui si cerca il contatto fra proiettile e bersagli.
 PASSO_DEL_VOLO = 0.001
 
-# Il tiro: i tre valori scelti con le scivolate, da 0 a 1, diventano angoli e velocità.
-# La direzione va da 45 gradi a sinistra a 45 a destra: il cubo sta tutto dentro i 40 gradi.
-AZIMUT_MASSIMO = 45.0
-# L'alzo va da 0 a 85 gradi sull'orizzonte.
-ALZO_MINIMO = 0.0
+# Il tiro: i tre valori della mira, da 0 a 1, diventano angoli e velocità, e da D28 ogni loro
+# combinazione attraversa la cupola.
+# La direzione copre esattamente il settore della cupola.
+AZIMUT_MASSIMO = SETTORE_AZIMUT
+# L'alzo va da 15 a 85 gradi sull'orizzonte: sotto i 15 la potenza utile si stringe troppo, a 10
+# gradi a 2,4 m/s.
+ALZO_MINIMO = 15.0
 ALZO_MASSIMO = 85.0
-# La potenza è la velocità alla bocca del cannone, da 10 a 45 metri al secondo; l'esponente
-# piega la scala: 1 la tiene lineare.
-VELOCITA_MINIMA = 10.0
-VELOCITA_MASSIMA = 45.0
+# La potenza è la velocità alla bocca del cannone. La massima è la radice di 2 g R, circa 39,6 m/s:
+# l'apice del tiro più alto arriva in cima alla cupola, e nessun tiro ne esce senza attraversarla. La
+# minima dipende dall'alzo: è quella che a quell'alzo porta il proiettile nella cupola, e la calcola
+# fisica.velocita_minima. L'esponente piega la scala: 1 la tiene lineare.
+VELOCITA_MASSIMA = math.sqrt(2.0 * GRAVITA * CUPOLA_RAGGIO)
 ESPONENTE_POTENZA = 1.0
-# Ogni punto del cubo deve essere raggiungibile con i tre valori lontani almeno tanto dai capi
-# delle scale: idee.txt vuole che i parametri coprano tutto lo spazio dei bersagli.
-MARGINE_DI_COPERTURA = 0.02
+# Ogni punto della cupola dove può stare un bersaglio deve essere raggiungibile con i tre valori
+# lontani almeno tanto dai capi delle scale: idee.txt vuole che i parametri coprano tutto lo spazio
+# dei bersagli. Con le scivolate il margine era del 2%, perché fermarne una proprio in fondo era
+# difficile; da D29 ogni valore arriva al suo capo tenendo giù il tasto, e lì si ferma da solo, quindi
+# i capi si scelgono come ogni altro valore, e il margine è zero. Con il 2% i bersagli piccoli vicini ai
+# lati del settore e quelli più in alto sarebbero rimasti fuori.
+MARGINE_DI_COPERTURA = 0.0
 
 # Lo spazio nel suono: idee.txt dà al proiettile e ai bersagli tre parametri sonori, la
 # stereofonia per la direzione, l'altezza del suono per l'altezza dal suolo e il volume per la
 # distanza dal punto di sparo.
-# La panoramica: tutto a sinistra a 45 gradi a sinistra, tutto a destra a 45 a destra, come la
-# scivolata della direzione, così chi ferma la barra sulla panoramica del bersaglio mira giusto.
+# La panoramica: tutto a sinistra ai capi sinistri del settore, tutto a destra ai capi destri, come
+# la direzione della mira, così chi porta la direzione sulla panoramica del bersaglio mira giusto.
 AZIMUT_DEL_PAN = AZIMUT_MASSIMO
-# L'altezza: 220 hertz al suolo, un'ottava ogni 50/3 metri, cioè tre ottave sul lato del cubo
-# (1760 hertz in cima); sopra il tetto la frequenza non sale più (4 ottave, 3520 hertz).
+# L'altezza: 220 hertz al suolo e OTTAVE_DEL_SUONO ottave fino all'apice del tiro più alto, poco più
+# di 81 metri, circa 3500 hertz: da D28 nessun tiro sale oltre il tetto, e il suono non è mai piatto.
+# Fino alla 1.0.0 le ottave erano 3 sui 50 metri del cubo, col tetto a 66,7, sotto i 103 del tiro più alto.
 FREQUENZA_AL_SUOLO = 220.0
-METRI_PER_OTTAVA = CUBO_LATO / 3
-ALTEZZA_TETTO_DEL_SUONO = 4 * METRI_PER_OTTAVA
+OTTAVE_DEL_SUONO = 4
+ALTEZZA_TETTO_DEL_SUONO = ALTEZZA_CANNONE + VELOCITA_MASSIMA ** 2 / (2.0 * GRAVITA)
+METRI_PER_OTTAVA = ALTEZZA_TETTO_DEL_SUONO / OTTAVE_DEL_SUONO
 # La distanza: il volume scende in decibel, linearmente con i metri dal cannone, fino a un pavimento.
 GUADAGNO_DB_VICINO = -6.0
 DB_PER_METRO = 0.25
 GUADAGNO_DB_MINIMO = -36.0
 
-# La mira: tre scivolate, direzione, alzo e potenza, nell'ordine.
+# La mira manuale (D29, dal 22 novembre 2026; fino alla 1.0.0 erano tre scivolate da fermare con lo
+# spazio): tre valori, direzione, alzo e potenza, nell'ordine, che si muovono insieme finché i loro
+# tasti sono giù, le frecce orizzontali la direzione, quelle verticali l'alzo, Home e Fine la potenza.
 PARAMETRI = ("direzione", "alzo", "potenza")
-# Prima di ogni scivolata una pausa muta, che compensa il tempo di reazione: senza, dopo aver
-# fermato una barra non si farebbe in tempo a scegliere il minimo della seguente. Lo spazio
-# premuto nella pausa non conta.
-PAUSA_FRA_BARRE = 1.0
-# Poi tre brevi bip a frequenza crescente, distanti 33 millesimi l'uno dall'altro, e 33 millesimi di
-# silenzio: lo spazio premuto qui sceglie il minimo.
-BIP_DURATA = 0.012
-BIP_DISTACCO = 0.033
-BIP_SILENZIO_FINALE = 0.033
-BIP_DB = -12.0
-BIP_FREQUENZE = {
-    "direzione": (660.0, 880.0, 1100.0),
-    "alzo": (880.0, 1175.0, 1568.0),
-    "potenza": (523.0, 698.0, 932.0),
-}
-# Poi la scivolata, che dura 3 secondi e arriva al massimo se nessuno la ferma.
-SCIVOLATA_DURATA = 3.0
+# Ogni valore parte dal centro della sua scala, e la percorre da un capo all'altro in tanti secondi,
+# quanto durava la scivolata.
+PARTENZA_DELLA_MIRA = 0.5
+DURATA_DELLA_SCALA = 3.0
+VELOCITA_DELLA_MIRA = 1.0 / DURATA_DELLA_SCALA
+# Il suono di un valore che si muove, quello delle scivolate di D19: la direzione 440 hertz in seno, da
+# tutto a sinistra a tutto a destra; l'alzo una nota in seno che sale da 150 a 2400 hertz, quattro
+# ottave, su scala esponenziale; la potenza 330 hertz in triangolo, che cresce dal quasi silenzio al
+# massimo, linearmente in decibel, col minimo POTENZA_DB_MINIMO sotto SCIVOLATA_DB.
 SCIVOLATA_DB = -9.0
-# Le forme d'onda delle tre scivolate, fra quelle di sintesi.FORME_PORTANTI. La direzione è in seno
-# dal banco della mira del 19 novembre 2026 (D19); prima era in triangolo.
 SCIVOLATA_FORMA = {"direzione": "seno", "alzo": "seno", "potenza": "triangolo"}
-# La direzione: un suono fisso che va da tutto a sinistra a tutto a destra.
 DIREZIONE_FREQUENZA = 440.0
-# L'alzo: la frequenza sale dal grave all'acuto, su una scala esponenziale, da 150 a 2400 hertz,
-# quattro ottave, dal banco della mira del 19 novembre 2026 (D19); prima era da 220 a 1760.
 ALZO_FREQUENZE = (150.0, 2400.0)
-# La potenza: un suono fisso che cresce dal quasi silenzio al massimo, linearmente in decibel;
-# il minimo è in decibel sotto SCIVOLATA_DB.
 POTENZA_FREQUENZA = 330.0
 POTENZA_DB_MINIMO = -40.0
-# Insieme a ogni scivolata dieci tacche, piccolissimi bip che salgono di frequenza, una ogni decimo
-# della scivolata: la decima chiude la scala.
+# Le tacche: ogni valore ne suona una a ogni decimo della scala che attraversa, in tutte e due le
+# direzioni, piccolissimi bip che salgono di frequenza dal primo decimo al nono, nella forma del suo
+# valore e, per la direzione, con la sua panoramica. Ai capi, 0 e 100%, il valore si ferma col suono
+# fine_scala.
 TACCHE = 10
 TACCA_DURATA = 0.006
 TACCA_FREQUENZE = (1200.0, 2400.0)
 TACCA_DB = -18.0
-# Secondi da togliere all'istante in cui il programma vede lo spazio, per il ritardo fra il dito e
-# il programma: il banco della mira, uscito con la 1.0.0, l'ha lasciato a zero.
-COMPENSAZIONE_DEL_TASTO = 0.0
-# Durante la mira i bersagli restano fermi e si sentono più piano (scelta di Gabriele del 19
-# novembre 2026).
-ATTENUAZIONE_IN_MIRA_DB = -9.0
+# La mira a tempo (D29): dal livello dopo la palestra, 30 secondi al primo, uno in meno a ogni livello,
+# mai sotto 10. Nella palestra non c'è tempo. Un tick al secondo scandisce il tempo che scorre,
+# sempre più acuto, da TICK_FREQUENZE[0] al primo secondo a TICK_FREQUENZE[1] all'ultimo; allo
+# scadere il colpo parte da solo coi valori del momento.
+TEMPO_DELLA_MIRA_INIZIALE = 30.0
+RIDUZIONE_DEL_TEMPO_DELLA_MIRA = 1.0
+TEMPO_DELLA_MIRA_MINIMO = 10.0
+TICK_FREQUENZE = (300.0, 1200.0)
+TICK_DURATA = 0.02
+TICK_DB = -20.0
+TICK_FORMA = "triangolo"
+# Il colpo parte tanti secondi dopo il prossimo campione sicuro, perché il conto del volo, che parte
+# col tempo di gioco che scorre, abbia il tempo di finire prima che il colpo si senta.
+ANTICIPO_DELLO_SPARO = 0.05
 # Ogni cambio di guadagno di una voce si fa con una rampa di tanti secondi, contro i click.
 RAMPA_DEL_GUADAGNO = 0.05
-# Dopo la fine udibile di una scivolata non fermata, tanti secondi in cui lo spazio prende ancora il
-# massimo; passati questi, da D25 la barra ricomincia da capo, col suo secondo di silenzio e i suoi bip.
-# Erano 0,05 fino alla 0.11.0: dalla 0.11.8 Gabriele, il 20 novembre 2026, l'ha voluto di tre decimi, e
-# nessun suono nuovo per la barra che riparte, perché bastano i bip e la barra di stato.
-MARGINE_DOPO_LA_SCIVOLATA = 0.3
-# Quante volte al più suona ogni barra della mira, il primo passaggio compreso, se nessuno la ferma con lo
-# spazio (D25, scelta di Gabriele del 20 novembre 2026: «5 in tutto per ciascuna delle 3 barre»): se anche
-# l'ultimo passaggio finisce senza spazio, il colpo non parte e il proiettile è perduto, come un tiro a
-# vuoto. Le ripartenze dopo una pausa non contano.
-PASSAGGI_DELLA_BARRA = 5
 
 # I bersagli: il suono è una portante la cui frequenza oscilla con un LFO di pochi hertz attorno
 # all'altezza del centro; l'escursione copre le altezze da y meno il raggio a y più il raggio,
@@ -197,20 +197,24 @@ PROIETTILE_DB = -3.0
 # quanto basta perché l'orecchio li senta due. Da tarare ascoltando, come i suoni stessi.
 STACCO_FRA_GLI_AVVISI = 0.15
 
-# I livelli e i colpi. La riserva parte da 10 colpi; ogni tiro a vuoto ne toglie uno, i centri non
-# costano nulla; 10 centri chiudono il livello e danno altri 10 colpi, il bersaglio bonus ne dà 5;
-# a riserva vuota la partita finisce (scelta di Gabriele del 19 novembre 2026).
-COLPI_INIZIALI = 10
-COLPI_PER_LIVELLO = 10
-COLPI_BONUS = 5
+# I livelli e i colpi. La riserva parte da 20 colpi; ogni tiro a vuoto ne toglie uno, i centri non
+# costano nulla; 10 centri chiudono il livello e danno altri 15 colpi, il bersaglio bonus ne dà 8;
+# a riserva vuota la partita finisce (scelte di Gabriele del 19 novembre 2026, D2, e del 22 novembre,
+# D30, che ha portato i colpi da 10, 10 e 5 a 20, 15 e 8).
+COLPI_INIZIALI = 20
+COLPI_PER_LIVELLO = 15
+COLPI_BONUS = 8
 CENTRI_PER_LIVELLO = 10
+# Il primato della precisione globale media vale soltanto per le partite di almeno tanti tiri (D26):
+# erano i colpi iniziali di prima, e con D30 restano 10.
+TIRI_PER_IL_PRIMATO_DELLA_MEDIA = 10
 # Il raggio dei bersagli: 5 metri al primo livello, poi ogni livello lo moltiplica per 0,85, fino
 # al mezzo metro.
 RAGGIO_INIZIALE = 5.0
 RIDUZIONE_DEL_RAGGIO = 0.85
 RAGGIO_MINIMO = 0.5
 # Dal quarto livello i bersagli si muovono, prima piano, poi sempre più svelti, rimbalzando
-# sulle pareti del cubo.
+# sulle pareti della cupola.
 LIVELLO_DEI_MOBILI = 4
 VELOCITA_INIZIALE_BERSAGLI = 1.5
 AUMENTO_DI_VELOCITA = 0.75
@@ -218,7 +222,7 @@ VELOCITA_MASSIMA_BERSAGLI = 12.0
 # A questi livelli i bersagli in volo diventano uno di più: due dall'ottavo, tre dal dodicesimo,
 # quattro dal sedicesimo.
 LIVELLI_CON_UN_BERSAGLIO_IN_PIU = (8, 12, 16)
-# I bersagli bonus, dal terzo livello: attraversano il cubo da un lato all'altro e poi escono.
+# I bersagli bonus, dal terzo livello: attraversano la cupola da un lato all'altro e poi escono.
 # A ogni nuova fase d'ascolto, senza un bonus in volo, ne compare uno con questa probabilità.
 LIVELLO_DEI_BONUS = 3
 PROBABILITA_BONUS = 0.12
@@ -265,13 +269,12 @@ GRAZIA_DELL_ATTESA = 0.5
 # di silenzio» (D24).
 RITARDO_DEL_RESOCONTO = 1.0
 # Il display braille si legge a blocchi di tanti caratteri (D24): la riga del sommario mette i numeri
-# nel primo blocco e la legenda dal carattere seguente, e la riga della mira nella barra di stato fa lo
-# stesso col passaggio della barra.
+# nel primo blocco e la legenda dal carattere seguente.
 BLOCCO_DEL_BRAILLE = 40
 
 # Gli Ascolti, il tutorial audio chiesto da Gabriele il 20 novembre 2026 (D23): nel menu Aiuto, dalla 0.11.10
-# soltanto lì, un passo alla volta, il test stereo, il bersaglio che si muove nel cubo, i punti a caso, la grandezza, le
-# forme, i timbri, la mira, il volo e gli effetti, con le regole dello spazio sonoro del gioco. Tutti da tarare
+# soltanto lì, un passo alla volta, il test stereo, il bersaglio che si muove nella cupola, i punti a caso, la grandezza,
+# le forme, i timbri, la mira manuale e il suo tempo, il volo e gli effetti, con le regole dello spazio sonoro del gioco. Tutti da tarare
 # ascoltando. Ogni suono degli Ascolti entra ed esce con una rampa di tanti secondi, contro i click.
 ASCOLTI_RAMPA = 0.05
 # Il silenzio fra i suoni di uno stesso passo, fra due forme, due timbri, due punti o due effetti, e quanto suona
@@ -280,7 +283,7 @@ ASCOLTI_PAUSA = 0.6
 ASCOLTI_SUONO = 2.5
 # Il test stereo (D23): un suono fermo tutto a sinistra per ASCOLTI_STEREO_SOSTA secondi, poi la scivolata fino a
 # tutto a destra in ASCOLTI_STEREO_VIAGGIO, poi fermo lì; la forma d'onda, fra quelle di sintesi.FORME_PORTANTI,
-# la nota in hertz e il livello in decibel, quello delle scivolate della mira.
+# la nota in hertz e il livello in decibel, quello dei suoni della mira.
 ASCOLTI_STEREO_SOSTA = 1.0
 ASCOLTI_STEREO_VIAGGIO = 4.0
 ASCOLTI_STEREO_FORMA = "triangolo"
@@ -291,13 +294,14 @@ ASCOLTI_STEREO_DB = SCIVOLATA_DB
 ASCOLTI_RAGGIO = RAGGIO_INIZIALE
 ASCOLTI_FORMA = "seno"
 ASCOLTI_FREQUENZA_LFO = (FREQUENZA_LFO[0] + FREQUENZA_LFO[1]) / 2
-# Le tratte degli Ascolti (D23), in orizzontale, in altezza e in profondità: il bersaglio va a tanti metri al
-# secondo, partendo e arrivando dolce; si ferma al centro del cubo per ASCOLTI_SOSTA secondi, all'inizio e alla fine,
-# e a ogni capo della tratta per ASCOLTI_SOSTA_AI_CAPI.
-ASCOLTI_VELOCITA = 8.0
+# Le tratte degli Ascolti (D23), da un lato all'altro, in altezza e in profondità: il bersaglio va a tanti metri al
+# secondo, partendo e arrivando dolce; si ferma nel mezzo della cupola per ASCOLTI_SOSTA secondi, all'inizio e alla
+# fine, e a ogni capo della tratta per ASCOLTI_SOSTA_AI_CAPI. Erano 8 m/s nel cubo; da D28 sono 10, perché gli archi
+# della cupola sono più lunghi e un passo resta sotto ASCOLTI_DURATA_MASSIMA.
+ASCOLTI_VELOCITA = 10.0
 ASCOLTI_SOSTA = 1.5
 ASCOLTI_SOSTA_AI_CAPI = 1.0
-# Quanti punti a caso nel cubo (D23), dopo i quali il testo dice dove erano.
+# Quanti punti a caso nella cupola (D23), dopo i quali il testo dice dove erano.
 ASCOLTI_PUNTI = 3
 # La grandezza (D23): le tappe del raggio, in metri, dal più piccolo del gioco al primo livello, poi un gigante grande
 # il doppio di ogni bersaglio vero, e la velocità con cui il raggio cresce, in metri al secondo. A ogni tappa il
@@ -306,7 +310,7 @@ ASCOLTI_GRANDEZZE = (RAGGIO_MINIMO, RAGGIO_INIZIALE, 2 * RAGGIO_INIZIALE)
 ASCOLTI_CRESCITA = 1.5
 # Le forme dell'oscillazione, tante per passo, perché un passo non diventi troppo lungo (D23).
 ASCOLTI_FORME_PER_PASSO = 6
-# Il bonus che attraversa il cubo negli Ascolti (D23) va alla velocità di questo livello, il primo dei bonus.
+# Il bonus che attraversa la cupola negli Ascolti (D23) va alla velocità di questo livello, il primo dei bonus.
 ASCOLTI_LIVELLO_DEL_BONUS = LIVELLO_DEI_BONUS
 # Un passo degli Ascolti dura al massimo tanti secondi: se ne serve di più, si divide in due (D23).
 ASCOLTI_DURATA_MASSIMA = 20.0

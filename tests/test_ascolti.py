@@ -4,10 +4,16 @@ aiuti_audio, mai con la scheda vera.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-20 con la 0.9.0. I suoni si guardano in due modi: coi parametri delle voci dei bersagli, chiesti
 negli istanti che contano, e con ciò che il motore scrive, blocco per blocco, sul flusso finto. Nessun preset vero si
-sintetizza: _rendi_preset dà a tutti lo stesso buffer finto, e annota chi lo chiede.
+sintetizza: _rendi_preset dà a tutti lo stesso buffer finto, e annota chi lo chiede, oppure un silenzio lungo quanto
+il preset vero, dalla sua partitura, per misurare la durata dei passi.
+Dalla 2.0.0 i passi stanno nella cupola di D28: le tratte partono dal suo mezzo e girano sull'azimut, sull'elevazione
+o in profondità, restano nella zona del bersaglio e cambiano una cosa sola; la mira manuale di D29 suona le corse dei
+tre valori, con le tacche e il suono del capo; il passo nuovo del tempo dice i tick e lo sparo; il bonus attraversa
+la cupola su una corda. I numeri dei testi si rifanno col codice.
 """
 
 import itertools
+import math
 import random
 import re
 
@@ -19,36 +25,72 @@ import ascolti
 import fisica
 import suoni
 import testi
-from bersagli import Bersaglio, durata_del_bonus, mezza_escursione_ottave, portanti_senza
+from bersagli import Bersaglio, durata_del_bonus, mezza_escursione_ottave, portanti_senza, raggio_del_livello
 from costanti import (
+    ALTEZZA_CANNONE,
+    ALTEZZA_MINIMA_BERSAGLIO,
+    ALZO_FREQUENZE,
     ASCOLTI_DURATA_MASSIMA,
+    ASCOLTI_FORME_PER_PASSO,
     ASCOLTI_GRANDEZZE,
     ASCOLTI_LIVELLO_DEL_BONUS,
     ASCOLTI_PAUSA,
     ASCOLTI_PUNTI,
     ASCOLTI_RAGGIO,
+    ASCOLTI_SOSTA,
+    ASCOLTI_SOSTA_AI_CAPI,
     ASCOLTI_STEREO_FORMA,
     ASCOLTI_STEREO_SOSTA,
     ASCOLTI_STEREO_VIAGGIO,
     ASCOLTI_SUONO,
+    ASCOLTI_VELOCITA,
+    AZIMUT_DEL_PAN,
     BERSAGLIO_DB,
     BERSAGLIO_PORTANTI,
+    COLPI_BONUS,
+    CUPOLA_RAGGIO,
+    CUPOLA_RAGGIO_INTERNO,
+    DB_PER_METRO,
+    DURATA_BONUS_MINIMA,
+    DURATA_DELLA_SCALA,
+    ELEVAZIONE_MASSIMA,
     FORME_LFO,
-    MARGINE_DOPO_LA_SCIVOLATA,
+    FS,
+    METRI_PER_OTTAVA,
+    MOLTIPLICATORE_BONUS,
     PARAMETRI,
-    PAUSA_FRA_BARRE,
+    PARTENZA_DELLA_MIRA,
     PROIETTILE_FORME,
+    RAGGIO_BONUS_FATTORE,
+    RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
+    SCIVOLATA_FORMA,
+    SETTORE_AZIMUT,
+    TACCHE,
+    TEMPO_DELLA_MIRA_INIZIALE,
+    TEMPO_DELLA_MIRA_MINIMO,
+    VELOCITA_DEL_TEMPO,
+    VELOCITA_DELLA_MIRA,
 )
 from motore_audio import VoceBuffer, VoceTono
-from sintesi import scivolata
+from sintesi import parametri_dell_asse, tacca_dell_asse, tick_del_tempo
 from statistiche import NOMI_DELLE_FORME, NOMI_DELLE_PORTANTI
+from strumenti import crea_preset
 
 # Il buffer finto di ogni preset: corto, al centro, ben sotto il tetto del motore.
 CAMPIONI_FINTI = 2_000
 SEPARATORE = re.compile(r"-{3,}|={3,}|_{3,}")
-NOMI_DEI_PASSI = ["stereo", "orizzontale", "altezza", "distanza", "punti", "grandezza", "forme", "forme_2", "timbri", "mira", "volo", "colpi", "bonus"]
+NOMI_DEI_PASSI = ["stereo", "orizzontale", "altezza", "distanza", "punti", "grandezza", "forme", "forme_2", "timbri", "mira", "tempo", "volo", "colpi",
+                  "bonus"]
+# Le tratte, coi loro due capi nell'ordine in cui il bersaglio ci arriva.
+TRATTE = [("orizzontale", "sinistra", "destra"), ("altezza", "terra", "cima"), ("distanza", "fronte", "fondo")]
 # Un millesimo di secondo, per prendere un istante appena dentro una sosta.
 UN_MILLESIMO = 0.001
+# Di quanto si va oltre un capo, nelle unità della sua tratta, gradi o metri, per uscire dalla zona; e la tolleranza dei punti sui
+# confini, dove la bisezione dei capi si ferma a una finezza di calcolo.
+OLTRE_IL_CAPO = 1e-3
+TOLLERANZA = 1e-9
+# I campioni della trasformata che cerca la frequenza più forte di un tick: molti zeri in coda, per una lettura fine.
+PUNTI_DELLA_TRASFORMATA = 1 << 16
 
 
 @pytest.fixture
@@ -71,6 +113,19 @@ def chiesti(monkeypatch):
 
     monkeypatch.setattr(suoni, "_rendi_preset", rendi)
     return nomi
+
+
+@pytest.fixture
+def lunghi_come_i_veri(monkeypatch):
+    """Ogni preset suona un silenzio lungo quanto il preset vero, che la sua partitura in strumenti/crea_preset.py dice: così la durata
+    di un passo è quella che si sentirà, senza sintetizzare niente."""
+
+    def rendi(nome):
+        buffer = np.zeros((round(crea_preset.durata(crea_preset.PRESET[nome]["score"]) * FS), 2), dtype=np.float32)
+        buffer.flags.writeable = False
+        return buffer
+
+    monkeypatch.setattr(suoni, "_rendi_preset", rendi)
 
 
 def _regia(motore, proiettile="seno", **opzioni):
@@ -99,6 +154,17 @@ def _udito(motore, flusso, campione):
     assert motore.campione_udibile() >= campione
 
 
+def _pieno():
+    """Il guadagno lineare di BERSAGLIO_DB, che i bersagli hanno sopra quello della distanza."""
+    return 10 ** (BERSAGLIO_DB / 20)
+
+
+def _frequenza_dominante(mono, fs):
+    """La frequenza più forte di un suono breve, dalla trasformata con gli zeri in coda."""
+    spettro = np.abs(np.fft.rfft(np.asarray(mono, dtype=float), n=PUNTI_DELLA_TRASFORMATA))
+    return float(np.argmax(spettro)) * fs / PUNTI_DELLA_TRASFORMATA
+
+
 # I passi e i testi.
 
 def test_i_passi_coi_titoli_i_testi_e_i_suoni():
@@ -111,6 +177,8 @@ def test_i_passi_coi_titoli_i_testi_e_i_suoni():
         assert "{" not in passo.testo and "}" not in passo.testo and not SEPARATORE.search(passo.testo), passo.nome
         # I numeri all'italiana: mai un punto fra due cifre seguito da meno di tre cifre, come 2.5.
         assert not re.search(r"\d\.\d{1,2}(?!\d)", passo.testo), passo.nome
+        # Dalla 2.0.0 lo spazio dei bersagli è la cupola (D28), e la mira non ha più scivolate, barre né bip (D29).
+        assert not re.search(r"\bcub[oi]\b|scivolat|\bbarr[ae]\b|\bbip\b", f"{passo.titolo} {passo.testo}"), passo.nome
         assert callable(passo.costruisci)
     testi_dei_passi = {passo.nome: passo.testo for passo in passi}
     # Il passo della distanza dice come si ritara l'orecchio quando cambia il volume.
@@ -121,9 +189,65 @@ def test_i_passi_coi_titoli_i_testi_e_i_suoni():
     forme = testi_dei_passi["forme"] + testi_dei_passi["forme_2"]
     posti = [forme.index(NOMI_DELLE_FORME[forma]) for forma in FORME_LFO]
     assert posti == sorted(posti)
-    assert f"{testi.numero(ASCOLTI_SUONO, 1)} secondi" in testi_dei_passi["forme"]
     for portante in portanti_senza("seno"):
         assert NOMI_DELLE_PORTANTI[portante] in testi_dei_passi["timbri"]
+    # La mira manuale dice i suoi tasti, l'Invio ed Esc; il tempo dice lo sparo allo scadere.
+    mira = testi_dei_passi["mira"]
+    assert all(parola in mira for parola in ("freccia destra", "frecce su e giù", "Fine e Home", "Invio spara", "Esc annulla"))
+    assert "tick" in testi_dei_passi["tempo"] and "sparo" in testi_dei_passi["tempo"] and "palestra" in testi_dei_passi["tempo"]
+
+
+def test_i_numeri_dei_testi_vengono_dal_codice():
+    """D23: ogni numero dei testi viene dalle costanti e dalla fisica del gioco, così il testo dice sempre il vero; qui si rifà con le
+    stesse funzioni, e il testo lo deve dire."""
+    from partita import nella_palestra, tempo_della_mira, volo_d_esempio
+
+    testi_dei_passi = {passo.nome: passo.testo for passo in ascolti.passi("seno")}
+    capi, punti = ascolti._capi(), ascolti.punti_dei_capi()
+    centro = np.array(ascolti.CENTRO)
+    vicino, lontano = fisica.distanza_dal_cannone(punti["fronte"]), fisica.distanza_dal_cannone(punti["fondo"])
+    decibel = fisica.guadagno_db_di(vicino) - fisica.guadagno_db_di(lontano)
+    piccolo, gigante = ASCOLTI_GRANDEZZE[0], ASCOLTI_GRANDEZZE[-1]
+    volo = volo_d_esempio()
+    attesi = {
+        "orizzontale": [f"{testi.metri(fisica.distanza_dal_cannone(centro))} davanti a te", f"a {testi.metri(centro[1])} d'altezza",
+                        f"col raggio di {testi.metri(ASCOLTI_RAGGIO)}", f"a {testi.gradi(round(-capi['sinistra']))} a sinistra",
+                        f"a {testi.gradi(AZIMUT_DEL_PAN)};", f"a {testi.gradi(round(capi['destra']))}, perché"],
+        "altezza": [f"sta a {testi.metri(punti['terra'][1])} dal prato", f"fino a {testi.metri(punti['cima'][1])} d'altezza",
+                    f"sempre a {testi.metri(ascolti.DISTANZA_DEL_MEZZO)} dal centro della cupola, sulla sua volta",
+                    f"ogni {testi.metri(METRI_PER_OTTAVA, 2)}", f"ogni {testi.numero(METRI_PER_OTTAVA, 2)} metri,",
+                    f"circa {testi.intero(fisica.frequenza_di(punti['terra'][1]))} hertz a terra",
+                    f"circa {testi.intero(fisica.frequenza_di(punti['cima'][1]))} hertz in alto"],
+        "distanza": [f"a {testi.metri(vicino)} da te", f"a {testi.metri(lontano)};", f"a {testi.metri(punti['fronte'][1])} d'altezza",
+                     f"circa {testi.intero(decibel)} decibel"],
+        "punti": [f"in {ASCOLTI_PUNTI} punti"],
+        "grandezza": [f"raggio di {testi.metri(piccolo)}", f"fino a {testi.metri(ASCOLTI_GRANDEZZE[1])}", f"gigantesco, {testi.metri(gigante)}",
+                      f"di {testi.numero(ascolti.SEMITONI_PER_OTTAVA * mezza_escursione_ottave(piccolo), 1)} semitoni",
+                      f"di {testi.numero(ascolti.SEMITONI_PER_OTTAVA * mezza_escursione_ottave(gigante), 1)} semitoni"],
+        "forme": [f"fra {len(FORME_LFO)}.", f"{ASCOLTI_FORME_PER_PASSO} per passo", f"per {testi.numero(ASCOLTI_SUONO, 1)} secondi"],
+        "forme_2": [f"Altre {len(FORME_LFO) - ASCOLTI_FORME_PER_PASSO} forme"],
+        "timbri": [f"fra {len(portanti_senza('seno'))}:", f"per {testi.numero(ASCOLTI_SUONO, 1)} secondi"],
+        "mira": [f"fino a {testi.intero(ALZO_FREQUENZE[1])} hertz", f"fino a {testi.intero(ALZO_FREQUENZE[0])};",
+                 f"in {testi.durata(DURATA_DELLA_SCALA)}"],
+        "tempo": [f"{testi.durata(TEMPO_DELLA_MIRA_INIZIALE)} al primo livello dopo la palestra",
+                  f"{testi.durata(RIDUZIONE_DEL_TEMPO_DELLA_MIRA)} in meno a ogni livello, fino a {testi.durata(TEMPO_DELLA_MIRA_MINIMO)}.",
+                  f"di {testi.durata(TEMPO_DELLA_MIRA_MINIMO)}:"],
+        "volo": [f"fino a {testi.metri(volo.altezza_massima)}", f"a {testi.metri(volo.gittata)} davanti a te",
+                 f"dopo {testi.numero(volo.durata / VELOCITA_DEL_TEMPO, 1)} secondi"],
+        "colpi": [f"vicino, a {testi.metri(vicino)}", f"lontano, a {testi.metri(lontano)}"],
+        "bonus": [f"in {testi.durata(durata_del_bonus(ASCOLTI_LIVELLO_DEL_BONUS))}", f"al livello {ASCOLTI_LIVELLO_DEL_BONUS},",
+                  f"fino a {testi.durata(DURATA_BONUS_MINIMA)}", f"{MOLTIPLICATORE_BONUS} volte", f"{COLPI_BONUS} colpi"],
+    }
+    for nome, pezzi in attesi.items():
+        for pezzo in pezzi:
+            assert pezzo in testi_dei_passi[nome], (nome, pezzo)
+    # Il tempo della mira dice quello della partita (D29): nessun tempo nella palestra, TEMPO_DELLA_MIRA_INIZIALE al primo livello
+    # dopo, RIDUZIONE_DEL_TEMPO_DELLA_MIRA in meno a ogni livello, «1 secondo in meno a ogni livello», fino a TEMPO_DELLA_MIRA_MINIMO.
+    primo = next(livello for livello in itertools.count(1) if not nella_palestra(livello))
+    assert all(tempo_della_mira(livello) is None for livello in range(1, primo))
+    assert tempo_della_mira(primo) == TEMPO_DELLA_MIRA_INIZIALE and tempo_della_mira(primo) - tempo_della_mira(primo + 1) == RIDUZIONE_DEL_TEMPO_DELLA_MIRA == 1
+    assert "1 secondo in meno a ogni livello" in testi_dei_passi["tempo"]
+    assert min(tempo_della_mira(livello) for livello in range(primo, primo + 100)) == TEMPO_DELLA_MIRA_MINIMO
 
 
 def test_il_proiettile_sconosciuto_non_ha_ascolti(finto):
@@ -132,8 +256,9 @@ def test_il_proiettile_sconosciuto_non_ha_ascolti(finto):
         ascolti.Regia(motore, None, "organo")
 
 
-def test_ogni_passo_suona_e_dura_poco(finto, chiesti):
-    """Ogni passo mette le sue voci nel motore e dura al massimo ASCOLTI_DURATA_MASSIMA: oltre, si divide in due."""
+def test_ogni_passo_suona_e_dura_poco(finto, lunghi_come_i_veri):
+    """Ogni passo mette le sue voci nel motore e dura al massimo ASCOLTI_DURATA_MASSIMA, coi preset lunghi come quelli veri: oltre, si
+    divide in due."""
     motore, _flusso = finto
     regia = _regia(motore)
     for indice, passo in enumerate(regia.passi):
@@ -167,87 +292,171 @@ def test_il_test_stereo_va_da_tutto_a_sinistra_a_tutto_a_destra(finto):
     assert np.abs(uscita[ascolto.fine:]).max() == 0.0
 
 
-def _tappe(ascolto):
-    """I punti delle tappe di una tratta, negli istanti d'arrivo, e quegli istanti, appena dentro la sosta."""
-    istanti = np.array(ascolto.percorso.arrivi) + UN_MILLESIMO
-    return ascolto.percorso(istanti), istanti
+# Le tratte nella cupola (D28).
+
+def _oltre(nome, valore):
+    """Il punto di un capo spostato appena oltre, nel verso in cui la sua tratta usciva dalla zona."""
+    distanza, elevazione = ascolti.DISTANZA_DEL_MEZZO, ascolti.ELEVAZIONE_DEL_MEZZO
+    _x, altezza, profondita = ascolti.CENTRO
+    if nome in ("sinistra", "destra"):
+        return fisica.punto_della_cupola(distanza, valore + math.copysign(OLTRE_IL_CAPO, valore), elevazione)
+    if nome in ("terra", "cima"):
+        return fisica.punto_della_cupola(distanza, 0.0, valore + math.copysign(OLTRE_IL_CAPO, valore - elevazione))
+    return np.array((0.0, altezza, valore + math.copysign(OLTRE_IL_CAPO, valore - profondita)))
 
 
-def test_la_tratta_orizzontale_dal_centro_a_sinistra_a_destra_e_al_centro(finto):
+def test_i_capi_delle_tratte_sul_bordo_della_zona_del_bersaglio():
+    """D28: la zona degli Ascolti è quella del gioco per il loro bersaglio, e le tratte partono dal mezzo della cupola, a metà fra le
+    due sfere. I capi stanno dove il bersaglio, tutto dentro, tocca una parete: dentro la zona, e appena oltre fuori. Sono quelli dei
+    conti a mano sulla cupola: il lato del settore alla distanza orizzontale del mezzo, il suolo, il cono di ELEVAZIONE_MASSIMA
+    ristretto dall'angolo del raggio, e le due sfere alla quota del mezzo."""
+    zona = ascolti.zona()
+    assert isinstance(zona, fisica.Zona) and zona.raggio == ASCOLTI_RAGGIO
+    assert ascolti.CENTRO == fisica.MEZZO_DELLA_CUPOLA and zona.contiene(ascolti.CENTRO, tolleranza=0.0)
+    distanza, elevazione = ascolti.DISTANZA_DEL_MEZZO, ascolti.ELEVAZIONE_DEL_MEZZO
+    assert distanza == (CUPOLA_RAGGIO_INTERNO + CUPOLA_RAGGIO) / 2 and np.linalg.norm(ascolti.CENTRO) == pytest.approx(distanza)
+    _x, altezza, _z = ascolti.CENTRO
+    assert altezza == pytest.approx(distanza * math.sin(math.radians(elevazione)))
+    orizzontale = distanza * math.cos(math.radians(elevazione))
+    destra = SETTORE_AZIMUT - math.degrees(math.asin(ASCOLTI_RAGGIO / orizzontale))
+    attesi = {
+        "sinistra": -destra, "destra": destra,
+        "terra": math.degrees(math.asin(max(ALTEZZA_MINIMA_BERSAGLIO, ASCOLTI_RAGGIO) / distanza)),
+        "cima": ELEVAZIONE_MASSIMA - math.degrees(math.asin(ASCOLTI_RAGGIO / (CUPOLA_RAGGIO_INTERNO + ASCOLTI_RAGGIO))),
+        "fronte": math.sqrt((CUPOLA_RAGGIO_INTERNO + ASCOLTI_RAGGIO) ** 2 - altezza ** 2),
+        "fondo": math.sqrt((CUPOLA_RAGGIO - ASCOLTI_RAGGIO) ** 2 - altezza ** 2),
+    }
+    capi = ascolti._capi()
+    assert capi == pytest.approx(attesi, abs=1e-9)
+    punti = ascolti.punti_dei_capi()
+    assert set(punti) == set(capi)
+    for nome, valore in capi.items():
+        assert zona.contiene(punti[nome], tolleranza=TOLLERANZA), nome
+        assert not zona.contiene(_oltre(nome, valore), tolleranza=0.0), nome
+    # I punti dei capi: i lati sull'arco del mezzo, terra e cima sulla volta davanti, fronte e fondo alla quota del mezzo.
+    assert np.allclose(punti["destra"], fisica.punto_della_cupola(distanza, destra, elevazione))
+    assert np.allclose(punti["sinistra"], fisica.punto_della_cupola(distanza, -destra, elevazione))
+    assert np.allclose(punti["terra"], fisica.punto_della_cupola(distanza, 0.0, attesi["terra"]))
+    assert np.allclose(punti["cima"], fisica.punto_della_cupola(distanza, 0.0, attesi["cima"]))
+    assert np.allclose(punti["fronte"], (0.0, altezza, attesi["fronte"])) and np.allclose(punti["fondo"], (0.0, altezza, attesi["fondo"]))
+    with pytest.raises(ValueError, match="tratta"):
+        ascolti.tratta("diagonale")
+
+
+@pytest.mark.parametrize(("nome", "primo", "secondo"), TRATTE)
+def test_ogni_tratta_dal_mezzo_ai_due_capi_e_ritorno_dentro_la_zona(finto, nome, primo, secondo):
+    """Ogni tratta va dal mezzo della cupola al primo capo, al secondo e di nuovo al mezzo, ferma ASCOLTI_SOSTA nel mezzo e
+    ASCOLTI_SOSTA_AI_CAPI ai capi; fra una tappa e l'altra il bersaglio fa la sua strada a ASCOLTI_VELOCITA metri al secondo, in
+    media, partendo e arrivando dolce, e resta sempre dentro la zona del bersaglio."""
     motore, _flusso = finto
-    ascolto = ascolti.Regia(motore).suona(_indice("orizzontale"))
+    tappe, _velocita, punto_di = ascolti.tratta(nome)
+    capi, punti_dei_capi = ascolti._capi(), ascolti.punti_dei_capi()
+    (mezzo,), _sosta = tappe[0]
+    assert [sosta for _valore, sosta in tappe] == [ASCOLTI_SOSTA, ASCOLTI_SOSTA_AI_CAPI, ASCOLTI_SOSTA_AI_CAPI, ASCOLTI_SOSTA]
+    assert [valore for (valore,), _sosta in tappe] == [mezzo, capi[primo], capi[secondo], mezzo]
+    attesi = np.array([ascolti.CENTRO, punti_dei_capi[primo], punti_dei_capi[secondo], ascolti.CENTRO])
+    assert np.allclose(punto_di(np.array([mezzo, capi[primo], capi[secondo], mezzo])), attesi)
+    ascolto = ascolti.Regia(motore).suona(_indice(nome))
+    percorso = ascolto.percorso
+    assert np.allclose(punto_di(percorso(np.array(percorso.arrivi) + UN_MILLESIMO)[:, 0]), attesi)
+    assert ascolto.fine - ascolto.inizio == round(percorso.durata * motore.fs) and percorso.durata <= ASCOLTI_DURATA_MASSIMA
+    secondi = np.linspace(0.0, percorso.durata, 4000)
+    assert np.all(ascolti.zona().contiene(punto_di(percorso(secondi)[:, 0]), tolleranza=TOLLERANZA))
+    soste = [sosta for _valore, sosta in tappe]
+    for k in range(1, len(tappe)):
+        partenza = percorso.arrivi[k - 1] + soste[k - 1]
+        tratto = punto_di(percorso(np.linspace(partenza, percorso.arrivi[k], 2001))[:, 0])
+        strada = float(np.sum(np.linalg.norm(np.diff(tratto, axis=0), axis=1)))
+        assert strada / (percorso.arrivi[k] - partenza) == pytest.approx(ASCOLTI_VELOCITA, rel=1e-4), (nome, k)
+
+
+def _cammino(motore, nome, quanti=2000):
+    """L'ascolto di una tratta, la sua voce e il suo bersaglio, quanti istanti lungo tutto il cammino e i punti del bersaglio in quegli
+    istanti."""
+    ascolto = ascolti.Regia(motore).suona(_indice(nome))
     (voce,), (bersaglio,) = ascolto.voci, ascolto.bersagli
-    minimi, massimi = fisica.zona_del_centro(ASCOLTI_RAGGIO)
-    punti, istanti = _tappe(ascolto)
+    _tappe, _velocita, punto_di = ascolti.tratta(nome)
+    secondi = np.linspace(0.0, ascolto.percorso.durata, quanti)
+    return ascolto, voce, bersaglio, secondi, punto_di(ascolto.percorso(secondi)[:, 0])
+
+
+def test_la_tratta_orizzontale_cambia_soltanto_la_panoramica(finto):
+    """La tratta orizzontale gira sull'arco del mezzo, alla stessa distanza dal centro della cupola, dal cannone e alla stessa altezza:
+    cambia soltanto la panoramica, che è l'azimut visto dal cannone diviso AZIMUT_DEL_PAN, prima a sinistra e poi a destra."""
+    motore, _flusso = finto
+    ascolto, voce, bersaglio, secondi, punti = _cammino(motore, "orizzontale")
     centro = np.array(ascolti.CENTRO)
-    attesi = [centro, (minimi[0], centro[1], centro[2]), (massimi[0], centro[1], centro[2]), centro]
-    assert np.allclose(punti, attesi)
-    _frequenze, pan, guadagni = _parametri(voce, istanti)
-    assert np.allclose(pan, [fisica.pan_di(x, z) for x, _y, z in attesi])
-    assert pan[1] < 0.0 < pan[2] and pan[0] == pytest.approx(0.0)
-    # Su tutta la tratta la panoramica non esce dai capi, e la nota del centro resta quella dell'altezza del centro.
-    secondi = np.linspace(0.0, ascolto.percorso.durata, 2000)
-    tutte = _parametri(voce, secondi)[1]
-    assert tutte.min() == pytest.approx(fisica.pan_di(minimi[0], centro[2])) and tutte.max() == pytest.approx(fisica.pan_di(massimi[0], centro[2]))
+    assert np.allclose(np.linalg.norm(punti, axis=1), ascolti.DISTANZA_DEL_MEZZO) and np.allclose(punti[:, 1], centro[1])
+    assert np.allclose(fisica.distanza_dal_cannone(punti), fisica.distanza_dal_cannone(centro))
+    _frequenze, pan, guadagni = _parametri(voce, secondi)
     assert np.allclose(_nota_del_centro(bersaglio, voce, secondi), fisica.frequenza_di(centro[1]))
-    # Il guadagno è quello della distanza, con BERSAGLIO_DB.
-    assert guadagni[0] == pytest.approx(fisica.guadagno_di(fisica.distanza_dal_cannone(centro)) * 10 ** (BERSAGLIO_DB / 20))
+    assert np.allclose(guadagni, fisica.guadagno_di(fisica.distanza_dal_cannone(centro)) * _pieno())
+    assert np.allclose(pan, np.degrees(np.arctan2(punti[:, 0], punti[:, 2] - fisica.CANNONE[2])) / AZIMUT_DEL_PAN)
+    capi = ascolti._capi()
+    assert pan.min() == pytest.approx(capi["sinistra"] / AZIMUT_DEL_PAN) and pan.max() == pytest.approx(capi["destra"] / AZIMUT_DEL_PAN)
+    nelle_tappe = _parametri(voce, np.array(ascolto.percorso.arrivi) + UN_MILLESIMO)[1]
+    assert nelle_tappe[0] == pytest.approx(0.0) and nelle_tappe[1] < 0.0 < nelle_tappe[2] and nelle_tappe[3] == pytest.approx(0.0)
 
 
-def test_l_altezza_a_terra_e_al_soffitto_col_minimo_e_il_massimo_della_nota(finto):
+def test_la_tratta_dell_altezza_cambia_soltanto_l_altezza_a_distanza_costante(finto):
+    """La tratta dell'altezza scende a terra e sale in cima sulla volta davanti, alla distanza del mezzo dal centro della cupola: la
+    panoramica resta al centro, la nota segue l'altezza, dalla più grave a terra alla più acuta in cima, e il volume cambia appena,
+    soltanto perché il cannone sta ALTEZZA_CANNONE sopra il centro della cupola."""
     motore, _flusso = finto
-    ascolto = ascolti.Regia(motore).suona(_indice("altezza"))
-    (voce,), (bersaglio,) = ascolto.voci, ascolto.bersagli
-    minimi, massimi = fisica.zona_del_centro(ASCOLTI_RAGGIO)
-    punti, istanti = _tappe(ascolto)
-    assert punti[1][1] == pytest.approx(minimi[1]) and punti[2][1] == pytest.approx(massimi[1])
-    assert np.allclose(_nota_del_centro(bersaglio, voce, istanti), [fisica.frequenza_di(y) for y in punti[:, 1]])
-    secondi = np.arange(0.0, ascolto.percorso.durata, 1.0 / motore.fs)
-    frequenze, pan, _guadagni = _parametri(voce, secondi)
-    mezza = bersaglio.mezza_escursione_ottave()
-    # La nota più grave e la più acuta: quella di terra e quella del soffitto, ciascuna in fondo e in cima all'oscillazione.
-    assert frequenze.min() == pytest.approx(fisica.frequenza_di(minimi[1]) * 2.0 ** -mezza, rel=1e-4)
-    assert frequenze.max() == pytest.approx(fisica.frequenza_di(massimi[1]) * 2.0 ** mezza, rel=1e-4)
+    ascolto, voce, bersaglio, secondi, punti = _cammino(motore, "altezza")
+    assert np.allclose(np.linalg.norm(punti, axis=1), ascolti.DISTANZA_DEL_MEZZO) and np.allclose(punti[:, 0], 0.0)
+    _frequenze, pan, guadagni = _parametri(voce, secondi)
     assert np.allclose(pan, 0.0)
+    assert np.allclose(_nota_del_centro(bersaglio, voce, secondi), fisica.frequenza_di(punti[:, 1]))
+    assert np.allclose(guadagni, fisica.guadagno_di(fisica.distanza_dal_cannone(punti)) * _pieno())
+    decibel = 20 * np.log10(guadagni)
+    assert decibel.max() - decibel.min() <= DB_PER_METRO * 2 * ALTEZZA_CANNONE
+    # La nota più grave e la più acuta: quella di terra e quella della cima, ciascuna in fondo e in cima all'oscillazione.
+    terra, cima = ascolti.punti_dei_capi()["terra"][1], ascolti.punti_dei_capi()["cima"][1]
+    tutti = np.arange(0.0, ascolto.percorso.durata, 1.0 / motore.fs)
+    frequenze = _parametri(voce, tutti)[0]
+    mezza = bersaglio.mezza_escursione_ottave()
+    assert frequenze.min() == pytest.approx(fisica.frequenza_di(terra) * 2.0 ** -mezza, rel=1e-4)
+    assert frequenze.max() == pytest.approx(fisica.frequenza_di(cima) * 2.0 ** mezza, rel=1e-4)
 
 
-def test_la_distanza_vicino_e_lontano_cambia_soltanto_il_volume(finto):
+def test_la_tratta_della_distanza_cambia_soltanto_il_volume(finto):
+    """La tratta della distanza va in profondità, davanti, alla quota del mezzo: la panoramica resta al centro e la nota del centro
+    quella della quota; cambia soltanto il volume, il più forte al fronte e il più piano al fondo, e il testo dice di quanti decibel."""
     motore, _flusso = finto
-    ascolto = ascolti.Regia(motore).suona(_indice("distanza"))
-    (voce,), (bersaglio,) = ascolto.voci, ascolto.bersagli
-    minimi, massimi = fisica.zona_del_centro(ASCOLTI_RAGGIO)
-    punti, istanti = _tappe(ascolto)
-    vicino, lontano = punti[1], punti[2]
-    assert vicino[2] == pytest.approx(minimi[2]) and lontano[2] == pytest.approx(massimi[2])
-    _frequenze, pan, guadagni = _parametri(voce, istanti)
-    pieno = 10 ** (BERSAGLIO_DB / 20)
-    assert guadagni[1] == pytest.approx(fisica.guadagno_di(fisica.distanza_dal_cannone(vicino)) * pieno)
-    assert guadagni[2] == pytest.approx(fisica.guadagno_di(fisica.distanza_dal_cannone(lontano)) * pieno)
-    assert guadagni[1] > guadagni[0] > guadagni[2]
-    secondi = np.linspace(0.0, ascolto.percorso.durata, 2000)
-    tutti = _parametri(voce, secondi)
-    assert tutti[2].max() == pytest.approx(guadagni[1]) and tutti[2].min() == pytest.approx(guadagni[2])
-    assert np.allclose(tutti[1], 0.0) and np.allclose(pan, 0.0)
-    assert np.allclose(_nota_del_centro(bersaglio, voce, secondi), fisica.frequenza_di(ascolti.CENTRO[1]))
-    # Il testo dice di quanti decibel, coi numeri della fisica.
-    decibel = fisica.guadagno_db_di(fisica.distanza_dal_cannone(vicino)) - fisica.guadagno_db_di(fisica.distanza_dal_cannone(lontano))
+    ascolto, voce, bersaglio, secondi, punti = _cammino(motore, "distanza")
+    centro = np.array(ascolti.CENTRO)
+    assert np.allclose(punti[:, 0], 0.0) and np.allclose(punti[:, 1], centro[1])
+    _frequenze, pan, guadagni = _parametri(voce, secondi)
+    assert np.allclose(pan, 0.0)
+    assert np.allclose(_nota_del_centro(bersaglio, voce, secondi), fisica.frequenza_di(centro[1]))
+    assert np.allclose(guadagni, fisica.guadagno_di(fisica.distanza_dal_cannone(punti)) * _pieno())
+    capi = ascolti.punti_dei_capi()
+    vicino, lontano = fisica.distanza_dal_cannone(capi["fronte"]), fisica.distanza_dal_cannone(capi["fondo"])
+    assert guadagni.max() == pytest.approx(fisica.guadagno_di(vicino) * _pieno()) and guadagni.min() == pytest.approx(fisica.guadagno_di(lontano) * _pieno())
+    nelle_tappe = _parametri(voce, np.array(ascolto.percorso.arrivi) + UN_MILLESIMO)[2]
+    assert nelle_tappe[1] > nelle_tappe[0] > nelle_tappe[2]
+    decibel = fisica.guadagno_db_di(vicino) - fisica.guadagno_db_di(lontano)
     assert f"circa {testi.intero(decibel)} decibel" in ascolti.passi()[_indice("distanza")].testo
 
 
-def test_i_punti_a_caso_stanno_nel_cubo_e_si_rivelano_dopo_l_ascolto(finto):
+def test_i_punti_a_caso_stanno_nella_cupola_e_si_rivelano_dopo_l_ascolto(finto):
     motore, flusso = finto
     regia = ascolti.Regia(motore, rng=random.Random(11))
     ascolto = regia.suona(_indice("punti"))
     assert len(ascolto.voci) == len(ascolto.bersagli) == len(regia.punti) == ASCOLTI_PUNTI
-    minimi, massimi = fisica.zona_del_centro(ASCOLTI_RAGGIO)
+    # Si estraggono come quelli del gioco (D28), con Zona.punto_a_caso, e stanno tutti nella zona del bersaglio.
+    rng = random.Random(11)
+    zona = ascolti.zona()
+    assert regia.punti == tuple(tuple(float(c) for c in zona.punto_a_caso(rng)) for _punto in range(ASCOLTI_PUNTI))
     fs = motore.fs
     for numero, (voce, punto) in enumerate(zip(ascolto.voci, regia.punti, strict=True)):
-        assert np.all(np.asarray(punto) >= minimi) and np.all(np.asarray(punto) <= massimi)
+        assert zona.contiene(punto, tolleranza=0.0)
         # Ogni punto suona ASCOLTI_SUONO secondi, staccato dal seguente da ASCOLTI_PAUSA di silenzio.
         assert voce.inizio == ascolto.inizio + numero * round(ASCOLTI_SUONO * fs + ASCOLTI_PAUSA * fs)
         _frequenze, pan, guadagni = _parametri(voce, [0.5, 1.5])
         assert np.allclose(pan, fisica.pan_di(punto[0], punto[2]))
-        assert np.allclose(guadagni, fisica.guadagno_di(fisica.distanza_dal_cannone(punto)) * 10 ** (BERSAGLIO_DB / 20))
+        assert np.allclose(guadagni, fisica.guadagno_di(fisica.distanza_dal_cannone(punto)) * _pieno())
     # Finché il suono non è finito il testo non si rivela; poi sì, una riga per punto.
     _udito(motore, flusso, ascolto.inizio + round(ASCOLTI_SUONO * fs))
     assert not regia.sentito() and regia.rivelazione() == ""
@@ -286,6 +495,8 @@ def test_la_grandezza_cresce_da_piccolissima_a_gigantesca(finto):
     assert all(dopo >= prima - 1e-6 for prima, dopo in itertools.pairwise(ampiezze))
     assert ampiezze[0] == pytest.approx(mezza_escursione_ottave(ASCOLTI_GRANDEZZE[0]), rel=1e-3)
     assert ampiezze[-1] == pytest.approx(mezza_escursione_ottave(ASCOLTI_GRANDEZZE[-1]), rel=1e-3)
+    # Il gigante, fermo nel mezzo della cupola, ci sta tutto dentro.
+    assert fisica.Zona(max(ASCOLTI_GRANDEZZE)).contiene(bersaglio.partenza, tolleranza=0.0)
 
 
 def test_tutte_le_forme_dell_oscillazione_e_tutti_i_timbri(finto):
@@ -307,21 +518,89 @@ def test_tutte_le_forme_dell_oscillazione_e_tutti_i_timbri(finto):
         assert regia.portante != proiettile
 
 
-def test_le_tre_scivolate_della_mira_come_in_partita(finto, chiesti):
-    motore, _flusso = finto
-    ascolto = _regia(motore).suona(_indice("mira"))
-    fs = motore.fs
-    barre = [voce for voce in ascolto.voci if len(voce.buffer) != CAMPIONI_FINTI]
-    campione = ascolto.inizio
-    attesi = [("mira_avviata", ascolto.inizio, None)]
-    for voce, parametro in zip(barre, PARAMETRI, strict=True):
-        buffer = scivolata(parametro, fs=fs)
-        campione += round(PAUSA_FRA_BARRE * fs)
-        assert voce.inizio == campione and np.array_equal(voce.buffer, buffer.buffer)
-        campione += buffer.fine_scivolata + round(MARGINE_DOPO_LA_SCIVOLATA * fs)
-        attesi.append(("valore_preso", campione, None))
-    assert ascolto.eventi == attesi
+# La mira manuale e il suo tempo (D29).
 
+def test_la_mira_manuale_come_in_partita_con_le_corse_le_tacche_e_i_capi(finto, chiesti):
+    """D29: il respiro che avvia la mira, poi per ogni valore, nell'ordine di PARAMETRI, le corse di CORSE_DELLA_MIRA, dal centro al
+    massimo e dal massimo al minimo, come col suo tasto giù: la voce del valore, coi suoni delle scivolate di D19, a
+    VELOCITA_DELLA_MIRA; la tacca di tacca_dell_asse a ogni decimo che attraversa, nell'istante in cui lo passa; e il suono fine_scala
+    al capo. Ogni corsa è staccata dalla seguente da ASCOLTI_PAUSA, e niente spara."""
+    assert ascolti.CORSE_DELLA_MIRA == ((PARTENZA_DELLA_MIRA, 1.0), (1.0, 0.0))
+    motore, _flusso = finto
+    fs = motore.fs
+    ascolto = _regia(motore).suona(_indice("mira"))
+    pausa = round(ASCOLTI_PAUSA * fs)
+    voci = iter(ascolto.voci)
+    respiro = next(voci)
+    assert isinstance(respiro, VoceBuffer) and respiro.inizio == ascolto.inizio
+    campione = ascolto.inizio + CAMPIONI_FINTI + pausa
+    eventi = [("mira_avviata", ascolto.inizio, None)]
+    for parametro in PARAMETRI:
+        for da, a in ascolti.CORSE_DELLA_MIRA:
+            secondi = abs(a - da) / VELOCITA_DELLA_MIRA
+            voce = next(voci)
+            assert isinstance(voce, VoceTono) and voce.forma == SCIVOLATA_FORMA[parametro] and voce.inizio == campione, parametro
+            # La voce suona il valore che corre: al via quello di partenza, a metà il mezzo, in fondo il capo, e poi resta lì.
+            for istante, valore in ((0.0, da), (secondi / 2, (da + a) / 2), (secondi, a), (secondi + 1.0, a)):
+                ottenuti, attesi = _parametri(voce, istante), parametri_dell_asse(parametro, valore)
+                assert all(np.allclose(x, y) for x, y in zip(ottenuti, attesi, strict=True)), (parametro, da, a, istante)
+            fine = campione + round(secondi * fs)
+            # Le tacche: i decimi che il valore attraversa, esclusi quello da cui parte e il capo, che ha il suo suono.
+            decimi = sorted((k for k in range(1, TACCHE) if min(da, a) < k / TACCHE < max(da, a)), key=lambda k: abs(k / TACCHE - da))
+            tacche = sorted(itertools.islice(voci, len(decimi)), key=lambda tacca: tacca.inizio)
+            assert [tacca.inizio for tacca in tacche] == [campione + round(abs(k / TACCHE - da) / VELOCITA_DELLA_MIRA * fs) for k in decimi]
+            assert all(isinstance(tacca, VoceBuffer) and campione < tacca.inizio < fine for tacca in tacche)
+            assert all(np.array_equal(tacca.buffer, tacca_dell_asse(parametro, k, fs=fs)) for tacca, k in zip(tacche, decimi, strict=True))
+            capo = next(voci)
+            assert isinstance(capo, VoceBuffer) and capo.inizio == fine
+            eventi.append(("fine_scala", fine, None))
+            campione = fine + CAMPIONI_FINTI + pausa
+    assert next(voci, None) is None
+    assert ascolto.eventi == eventi and ascolto.fine == campione - pausa
+    # La direzione va dal mezzo a tutto a destra, e poi a tutto a sinistra, come dice il testo.
+    direzione = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)][:2]
+    capi = [_parametri(voce, abs(a - da) / VELOCITA_DELLA_MIRA)[1][0] for voce, (da, a) in zip(direzione, ascolti.CORSE_DELLA_MIRA, strict=True)]
+    assert _parametri(direzione[0], 0.0)[1][0] == pytest.approx(0.0) and capi == pytest.approx([1.0, -1.0])
+
+
+def test_una_corsa_che_non_arriva_al_capo_non_ha_il_suo_suono(finto, chiesti):
+    """Regia.corsa: un valore che si ferma prima del capo ha la voce e le tacche dei decimi che passa, e non il suono fine_scala."""
+    motore, _flusso = finto
+    fs = motore.fs
+    regia = _regia(motore)
+    ascolto = ascolti.Ascolto("prova", 0, 0)
+    inizio = motore.prossimo_campione()
+    da, a = 0.45, 0.2
+    fine = regia.corsa(ascolto, "alzo", da, a, inizio)
+    assert fine == inizio + round(abs(a - da) / VELOCITA_DELLA_MIRA * fs) and ascolto.fine == fine and ascolto.eventi == []
+    (voce,) = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)]
+    assert voce.inizio == inizio and voce.forma == SCIVOLATA_FORMA["alzo"]
+    tacche = sorted((voce for voce in ascolto.voci if isinstance(voce, VoceBuffer)), key=lambda tacca: tacca.inizio)
+    assert [tacca.inizio for tacca in tacche] == [inizio + round(abs(k / TACCHE - da) / VELOCITA_DELLA_MIRA * fs) for k in (4, 3)]
+    assert np.array_equal(tacche[0].buffer, tacca_dell_asse("alzo", 4, fs=fs)) and np.array_equal(tacche[1].buffer, tacca_dell_asse("alzo", 3, fs=fs))
+
+
+def test_il_tempo_della_mira_coi_tick_e_lo_sparo(finto, chiesti):
+    """D29: il passo del tempo è la mira a tempo più breve, TEMPO_DELLA_MIRA_MINIMO secondi: un tick a ogni secondo, quello di
+    tick_del_tempo come in partita, sempre più acuto, dal primo secondo fino a un secondo prima della scadenza, e allo scadere lo
+    sparo dal cannone, perché il colpo parte da solo. Niente altro suona."""
+    motore, _flusso = finto
+    fs = motore.fs
+    ascolto = _regia(motore).suona(_indice("tempo"))
+    secondi = TEMPO_DELLA_MIRA_MINIMO
+    scadenza = ascolto.inizio + round(secondi * fs)
+    assert ascolto.eventi == [("sparo", scadenza, tuple(float(c) for c in fisica.CANNONE))]
+    assert all(isinstance(voce, VoceBuffer) for voce in ascolto.voci)
+    tick = [voce for voce in ascolto.voci if voce.inizio != scadenza]
+    assert len(tick) == len(ascolto.voci) - 1 == math.ceil(secondi) - 1
+    assert [voce.inizio for voce in tick] == [ascolto.inizio + round(secondo * fs) for secondo in range(1, math.ceil(secondi))]
+    assert all(np.array_equal(voce.buffer, tick_del_tempo(secondo, secondi, fs=fs)) for secondo, voce in enumerate(tick, 1))
+    altezze = [_frequenza_dominante(voce.buffer[:, 0], fs) for voce in tick]
+    assert all(dopo > prima for prima, dopo in itertools.pairwise(altezze)), altezze
+    assert ascolto.fine == scadenza + CAMPIONI_FINTI
+
+
+# Il volo, i colpi e il bonus.
 
 def test_il_proiettile_in_volo_dal_cannone_a_terra(finto, chiesti):
     from partita import volo_d_esempio
@@ -332,7 +611,7 @@ def test_il_proiettile_in_volo_dal_cannone_a_terra(finto, chiesti):
         ascolto = _regia(motore, proiettile).suona(_indice("volo"))
         # I comandi arrivano al motore col blocco seguente: la fine della voce la mette lui.
         flusso.avanza(1)
-        a_terra = ascolto.inizio + round(volo.durata * motore.fs)
+        a_terra = ascolto.inizio + round(volo.durata / VELOCITA_DEL_TEMPO * motore.fs)
         assert ascolto.eventi == [("sparo", ascolto.inizio, fisica.CANNONE), ("a_terra", a_terra, tuple(volo.punto_finale.tolist()))]
         (voce,) = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)]
         assert voce.forma == proiettile and voce.inizio == ascolto.inizio
@@ -343,31 +622,51 @@ def test_il_proiettile_in_volo_dal_cannone_a_terra(finto, chiesti):
         assert voce.fine == a_terra
 
 
-def test_i_colpi_vicino_e_lontano_e_il_bonus_che_attraversa(finto, chiesti):
-    motore, flusso = finto
-    regia = _regia(motore)
-    minimi, massimi = fisica.zona_del_centro(ASCOLTI_RAGGIO)
-    x, y, _z = ascolti.CENTRO
-    vicino, lontano = (x, y, minimi[2]), (x, y, massimi[2])
-    ascolto = regia.suona(_indice("colpi"))
+def test_i_colpi_vicino_e_lontano(finto, chiesti):
+    """Il centro e il bonus colpiti, ognuno vicino e lontano: ai due capi della tratta della distanza, staccati da ASCOLTI_PAUSA."""
+    motore, _flusso = finto
+    capi = ascolti.punti_dei_capi()
+    ascolto = _regia(motore).suona(_indice("colpi"))
     pausa = round(ASCOLTI_PAUSA * motore.fs)
     attesi, campione = [], ascolto.inizio
     for evento in ("colpito", "colpito_bonus"):
-        for punto in (vicino, lontano):
-            attesi.append((evento, campione, tuple(float(c) for c in punto)))
+        for capo in ("fronte", "fondo"):
+            attesi.append((evento, campione, capi[capo]))
             campione += CAMPIONI_FINTI + pausa
     assert ascolto.eventi == attesi
-    # Il bonus: compare col suo avviso, attraversa il cubo da sinistra a destra nella durata del suo livello, ed esce.
-    ascolto = regia.suona(_indice("bonus"))
+
+
+def test_il_bonus_attraversa_la_cupola_su_una_corda(finto, chiesti):
+    """Il bonus compare col suo avviso, entra a un raggio fuori dal lato sinistro, attraversa la cupola su una corda alla quota e alla
+    profondità del mezzo, davanti al cannone, ed esce a un raggio fuori dal lato destro nella durata del livello
+    ASCOLTI_LIVELLO_DEL_BONUS, col raggio di quel livello; dentro il settore sta tutto nella cupola. All'uscita suona il bonus uscito."""
+    motore, flusso = finto
+    fs = motore.fs
+    ascolto = _regia(motore).suona(_indice("bonus"))
     flusso.avanza(1)
-    (voce,), (bonus,) = [v for v in ascolto.voci if isinstance(v, VoceTono)], ascolto.bersagli
-    assert bonus.bonus and bonus.raggio < ASCOLTI_RAGGIO
+    (voce,), (bonus,) = [voce for voce in ascolto.voci if isinstance(voce, VoceTono)], ascolto.bersagli
+    _x, altezza, profondita = ascolti.CENTRO
+    assert bonus.bonus and bonus.raggio == pytest.approx(raggio_del_livello(ASCOLTI_LIVELLO_DEL_BONUS) * RAGGIO_BONUS_FATTORE)
+    assert np.allclose(bonus.partenza[1:], (altezza, profondita)) and bonus.velocita[0] > 0.0 and np.allclose(bonus.velocita[1:], 0.0)
     durata = durata_del_bonus(ASCOLTI_LIVELLO_DEL_BONUS)
-    uscita = ascolto.inizio + round(durata * motore.fs)
+    assert bonus.tempo_di_uscita - bonus.nato == pytest.approx(durata)
+    cupola = fisica.Zona(0.0)
+    sinistra, destra = fisica.Zona.PARETI.index("sinistra"), fisica.Zona.PARETI.index("destra")
+    assert cupola.scarti(bonus.posizione(bonus.nato))[sinistra] == pytest.approx(bonus.raggio)
+    assert cupola.scarti(bonus.posizione(bonus.tempo_di_uscita))[destra] == pytest.approx(bonus.raggio)
+    assert np.allclose(bonus.posizione(bonus.nato + durata / 2), (0.0, altezza, profondita))
+    tempi = np.linspace(bonus.nato, bonus.tempo_di_uscita, 1000)
+    scarti = fisica.Zona(bonus.raggio).scarti(bonus.posizione(tempi))
+    altre = [indice for indice, parete in enumerate(fisica.Zona.PARETI) if parete not in ("sinistra", "destra")]
+    assert np.all(scarti[:, altre] <= 0.0)
+    uscita = ascolto.inizio + round(durata / VELOCITA_DEL_TEMPO * fs)
     assert [evento[:2] for evento in ascolto.eventi] == [("bonus_appare", ascolto.inizio), ("bonus_uscito", uscita)]
-    assert ascolto.eventi[1][2][0] > massimi[0] and voce.fine == uscita
-    pan = _parametri(voce, np.linspace(0.0, durata, 200))[1]
-    assert pan[0] < -0.5 and pan[-1] > 0.5 and np.all(np.diff(pan) > 0.0)
+    assert ascolto.eventi[1][2] == pytest.approx(tuple(bonus.posizione(bonus.tempo_di_uscita))) and voce.fine == uscita
+    # Da tutto a sinistra a tutto a destra: la panoramica sale sempre, piena fuori dal settore.
+    pan = _parametri(voce, np.linspace(0.0, durata, 400))[1]
+    assert pan[0] == -1.0 and pan[-1] == 1.0 and np.all(np.diff(pan) >= 0.0)
+    dentro = np.abs(pan) < 1.0
+    assert dentro.sum() > len(pan) / 2 and np.all(np.diff(pan[dentro]) > 0.0)
 
 
 def test_lo_spazio_ferma_il_suono_di_prima_e_ferma_zittisce_tutto(finto, chiesti):
@@ -393,15 +692,17 @@ def test_si_contano_i_passi_ascoltati_e_mai_gli_effetti_fra_i_suoni(finto, chies
     motore, _flusso = finto
     contati, suonati = [], []
     regia = ascolti.Regia(motore, suoni.Suoni(motore, conta=suonati.append), conta=contati.append)
-    for nome in ("mira", "volo", "colpi", "bonus"):
+    nomi = ("mira", "tempo", "volo", "colpi", "bonus")
+    for nome in nomi:
         regia.suona(_indice(nome))
-    assert contati == ["passi_ascoltati"] * 4 and suonati == []
-    # I preset sono quelli degli eventi del gioco, nella collezione.
-    assert set(chiesti) == {suoni.EVENTI[evento] for evento in ("mira_avviata", "valore_preso", "sparo", "a_terra", "colpito", "colpito_bonus", "bonus_appare",
+    assert contati == ["passi_ascoltati"] * len(nomi) and suonati == []
+    # I preset sono quelli degli eventi del gioco, nella collezione; dalla 2.0.0 il capo della scala, e non più il valore preso.
+    assert set(chiesti) == {suoni.EVENTI[evento] for evento in ("mira_avviata", "fine_scala", "sparo", "a_terra", "colpito", "colpito_bonus", "bonus_appare",
                                                                 "bonus_uscito")}
-    # Senza i suoni della finestra gli effetti tacciono, e le voci dei bersagli suonano lo stesso.
+    # Senza i suoni della finestra gli effetti tacciono, e le voci dei bersagli, i suoni dei valori e i tick suonano lo stesso.
     muta = ascolti.Regia(motore)
-    assert muta.suona(_indice("volo")).eventi == [] and muta.in_corso.voci
+    for nome in ("volo", "mira", "tempo"):
+        assert muta.suona(_indice(nome)).eventi == [] and muta.in_corso.voci, nome
 
 
 def test_il_percorso_a_tappe():

@@ -5,11 +5,14 @@ vicino, confrontato con un minimo cercato senza i passi del volo, anche fra due 
 dell'artigliere del sommario (D21), confrontate con una ricerca fine senza i passi del volo e, per i
 bersagli fermi, con le formule chiuse della parabola, in salita e in discesa, coi segni che portano
 alla correzione giusta e coi casi limite; e la precisione globale di D26 con la scala del terzo
-collaudo, dal centro del bersaglio all'angolo più lontano del cubo, coi casi costruiti a mano: il
-bersaglio nel centro del cubo e in un angolo, in moto, il bonus fuori dalla parete, il centro pieno
-e il tiro che passa più lontano dell'angolo.
+collaudo, dal centro del bersaglio al punto più lontano dello spazio dei bersagli, coi casi costruiti
+a mano: il bersaglio nel mezzo e vicino a un angolo, in moto, il bonus fuori dal lato, il centro pieno
+e il tiro che passa più lontano del punto più lontano.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
+Dalla 2.0.0 lo spazio dei bersagli è la cupola di D28: il punto più lontano non è più uno degli otto
+angoli del cubo ma uno degli otto angoli della cupola, che le prove contano da sé; il bonus esce dai lati
+del settore, e i mobili rimbalzano sulle pareti della cupola, anche durante il calcolo del volo.
 """
 
 import itertools
@@ -23,7 +26,19 @@ import pytest
 import fisica
 import volo
 from bersagli import Bersaglio, genera
-from costanti import ALTEZZA_CANNONE, CUBO_X, CUBO_Y, CUBO_Z, GRAVITA, PROIETTILE_DB, RAGGIO_INIZIALE, RAGGIO_PROIETTILE
+from costanti import (
+    ALTEZZA_CANNONE,
+    ALTEZZA_MINIMA_BERSAGLIO,
+    CUPOLA_RAGGIO,
+    CUPOLA_RAGGIO_INTERNO,
+    ELEVAZIONE_MASSIMA,
+    GRAVITA,
+    PROIETTILE_DB,
+    RAGGIO_INIZIALE,
+    RAGGIO_MINIMO,
+    RAGGIO_PROIETTILE,
+    SETTORE_AZIMUT,
+)
 
 PARTENZA = 20.0
 # Quante volte si ripete il calcolo nella prova del tempo: conta il più veloce, che non risente
@@ -40,14 +55,15 @@ PASSO_FINE = 1e-5
 # in secondi per i tempi.
 TOLLERANZA_DELLE_MISURE = 1e-4
 TOLLERANZA_DEI_TEMPI = 1e-6
-# Il passo, nei valori da 0 a 1 delle scivolate, delle derivate nella prova dei segni.
+# Il passo, nei valori da 0 a 1 della mira, delle derivate nella prova dei segni.
 PASSO_DELLE_DERIVATE = 1e-4
-# La precisione globale di D26, dal terzo collaudo: gli otto angoli del cubo, il suo centro e mezza diagonale, la distanza dal centro
-# del cubo al suo angolo più lontano, la più piccola possibile; quanto l'istante del passaggio più vicino può scostarsi da quello della
-# ricerca senza i passi del volo.
-ANGOLI_DEL_CUBO = np.array(list(itertools.product(CUBO_X, CUBO_Y, CUBO_Z)))
-CENTRO_DEL_CUBO = ((CUBO_X[0] + CUBO_X[1]) / 2, (CUBO_Y[0] + CUBO_Y[1]) / 2, (CUBO_Z[0] + CUBO_Z[1]) / 2)
-MEZZA_DIAGONALE = (CUBO_X[1] - CUBO_X[0]) * math.sqrt(3) / 2
+# La precisione globale di D26, dal terzo collaudo, nella cupola di D28: i suoi otto angoli, le due sfere a terra e sul cono, ai due
+# lati del settore, dove sta sempre il punto più lontano da un bersaglio; il mezzo della cupola; quanto l'istante del passaggio più
+# vicino può scostarsi da quello della ricerca senza i passi del volo.
+ANGOLI_DELLA_CUPOLA = np.array([fisica.punto_della_cupola(distanza, azimut, elevazione)
+                                for distanza, azimut in itertools.product((CUPOLA_RAGGIO_INTERNO, CUPOLA_RAGGIO), (-SETTORE_AZIMUT, SETTORE_AZIMUT))
+                                for elevazione in (math.degrees(math.asin(ALTEZZA_MINIMA_BERSAGLIO / distanza)), ELEVAZIONE_MASSIMA)])
+MEZZO = np.array(fisica.MEZZO_DELLA_CUPOLA)
 TOLLERANZA_DEL_PASSAGGIO = 1e-4
 # La distanza del passaggio più vicino del volo sbaglia al più di un decimo di millimetro, e la precisione globale di qualche
 # milionesimo: si confronta fino a un centomillesimo.
@@ -76,13 +92,14 @@ def _tiro_con_apice(punto):
 def _minimo_esatto(traiettoria, bersaglio, da=0.0, a=None):
     """Il tempo di volo della distanza minima fra il proiettile e il centro del bersaglio, dove il
     bersaglio sta in quell'istante, cercato senza i passi del volo: un campionamento a un decimillesimo
-    di secondo, poi la sezione aurea attorno al campione migliore."""
+    di secondo, l'ultimo istante compreso, perché un tiro corto passa più vicino proprio quando tocca
+    terra, poi la sezione aurea attorno al campione migliore."""
     a = traiettoria.tempo_a_terra() if a is None else a
 
     def distanza(t):
         return float(np.linalg.norm(traiettoria.posizione(t) - bersaglio.posizione(PARTENZA + t)))
 
-    tempi = np.arange(da, a, 1e-4)
+    tempi = np.append(np.arange(da, a, 1e-4), a)
     distanze = np.linalg.norm(traiettoria.posizione(tempi) - bersaglio.posizione(PARTENZA + tempi), axis=1)
     migliore = int(np.argmin(distanze))
     basso, alto = float(tempi[max(migliore - 1, 0)]), float(tempi[min(migliore + 1, len(tempi) - 1)])
@@ -585,8 +602,8 @@ def test_i_segni_portano_alla_correzione_giusta():
 
 
 def test_bonus_gia_uscito_non_si_colpisce():
-    # Un tiro che passa fuori dal cubo, oltre la parete di destra.
-    punto = (CUBO_X[1] + 5.0, 12.0, 45.0)
+    # Un tiro che passa fuori dal settore, otto gradi oltre il lato destro, dove il bonus è uscito del tutto.
+    punto = tuple(float(c) for c in fisica.punto_della_cupola(50.0, SETTORE_AZIMUT + 8.0, 13.0))
     traiettoria = _tiro_per(punto, 45.0)
     tempo = math.hypot(punto[0], punto[2]) / (traiettoria.velocita * math.cos(math.radians(45.0)))
     raggio = 1.0
@@ -635,13 +652,23 @@ def test_senza_bersagli():
 
 
 def _piu_lontano(punto):
-    """La distanza fra il punto e il più lontano degli otto angoli del cubo, cercata angolo per angolo."""
-    return float(np.max(np.linalg.norm(ANGOLI_DEL_CUBO - np.asarray(punto, dtype=float), axis=1)))
+    """La distanza fra il punto e il più lontano degli otto angoli della cupola, cercata angolo per angolo: da un punto davanti al
+    cannone il punto più lontano della cupola è sempre uno di loro, come prova test_fisica."""
+    return float(np.max(np.linalg.norm(ANGOLI_DELLA_CUPOLA - np.asarray(punto, dtype=float), axis=1)))
+
+
+def _angolo_della_zona(raggio):
+    """L'angolo della zona di quel raggio più vicino all'angolo della cupola a sinistra, lontano e a terra: il centro di un bersaglio
+    il più possibile in fondo alla cupola."""
+    zona = fisica.Zona(raggio)
+    elevazione = math.degrees(math.asin(zona.pavimento / zona.esterno))
+    limite = SETTORE_AZIMUT - math.degrees(math.asin(zona.raggio / (zona.esterno * math.cos(math.radians(elevazione)))))
+    return fisica.punto_della_cupola(zona.esterno, -limite, elevazione)
 
 
 def _globale_attesa(esito, bersaglio):
     """La precisione globale che il terzo collaudo vuole, ricavata qui dalle sue parti: la distanza del passaggio più vicino, cercata
-    senza i passi del volo, sulla distanza fra il centro del bersaglio in quell'istante e l'angolo più lontano, mai sotto zero."""
+    senza i passi del volo, sulla distanza fra il centro del bersaglio in quell'istante e il punto più lontano della cupola, mai sotto zero."""
     tempo = _minimo_esatto(esito.traiettoria, bersaglio)
     assert esito.tempo_del_passaggio == pytest.approx(tempo, abs=TOLLERANZA_DEL_PASSAGGIO)
     centro = bersaglio.posizione(PARTENZA + tempo)
@@ -660,34 +687,38 @@ def _a_mano(bersaglio, distanza, tempo=0.0, colpito=False):
     return volo.Volo(colpito=None, precisione=None, distanza_al_centro=None, vicino=bersaglio, distanza_dal_vicino=distanza - bersaglio.raggio, **campi)
 
 
-def test_precisione_globale_nel_centro_e_in_un_angolo():
-    """D26, il terzo collaudo di Gabriele: «Considero retta che va dal centro del bersaglio al punto più lontano dello spazio colpibile
-    nel cubo.» Per un bersaglio nel centro del cubo quella retta è mezza diagonale, 43,3 metri, per uno in un angolo la diagonale
-    intera, 86,6: lo stesso tiro vale di meno vicino al centro, dove sbagliare di tanto è più difficile. Oltre la retta si resta a zero."""
-    nel_centro = _fermo(CENTRO_DEL_CUBO, raggio=RAGGIO_INIZIALE)
-    nell_angolo = _fermo(ANGOLI_DEL_CUBO[0], raggio=RAGGIO_INIZIALE)
-    for distanza in (0.0, 5.0, 10.0, 20.0, 47.0):
-        assert _a_mano(nel_centro, distanza).precisione_globale == pytest.approx(max(0.0, 1.0 - distanza / MEZZA_DIAGONALE))
-        assert _a_mano(nell_angolo, distanza).precisione_globale == pytest.approx(1.0 - distanza / (2.0 * MEZZA_DIAGONALE))
-    # I numeri del manuale: a 10 metri il 76,9% nel centro e l'88,5% nell'angolo, a 47 metri lo 0% e il 45,7%.
-    assert round(_a_mano(nel_centro, 10.0).precisione_globale, 3) == 0.769 and round(_a_mano(nell_angolo, 10.0).precisione_globale, 3) == 0.885
-    assert _a_mano(nel_centro, 47.0).precisione_globale == 0.0 and round(_a_mano(nell_angolo, 47.0).precisione_globale, 3) == 0.457
-    # Un centro, nel caso peggiore, il bersaglio nel centro del cubo sfiorato sul bordo, sta sopra 1 meno raggio più RAGGIO_PROIETTILE
-    # diviso mezza diagonale: l'88,2% al primo livello.
-    sfiorato = _a_mano(nel_centro, RAGGIO_INIZIALE + RAGGIO_PROIETTILE, colpito=True)
-    assert sfiorato.precisione_globale == pytest.approx(1.0 - (RAGGIO_INIZIALE + RAGGIO_PROIETTILE) / MEZZA_DIAGONALE)
-    assert round(sfiorato.precisione_globale, 3) == 0.882
+def test_precisione_globale_nel_mezzo_e_in_un_angolo():
+    """D26, il terzo collaudo di Gabriele: «Considero retta che va dal centro del bersaglio al punto più lontano dello spazio colpibile»,
+    e con D28 lo spazio colpibile è la cupola. Per un bersaglio nel mezzo della cupola quella retta è lunga poco meno di 64 metri, per
+    uno in fondo a un angolo più di cento: lo stesso tiro vale di meno nel mezzo, dove sbagliare di tanto è più difficile. Oltre la
+    retta si resta a zero."""
+    nel_mezzo = _fermo(MEZZO, raggio=RAGGIO_INIZIALE)
+    angolo = _angolo_della_zona(RAGGIO_MINIMO)
+    nell_angolo = _fermo(angolo, raggio=RAGGIO_MINIMO)
+    retta_nel_mezzo, retta_nell_angolo = _piu_lontano(MEZZO), _piu_lontano(angolo)
+    assert retta_nel_mezzo == pytest.approx(fisica.distanza_dal_punto_piu_lontano(MEZZO), abs=1e-9)
+    assert retta_nell_angolo == pytest.approx(fisica.distanza_dal_punto_piu_lontano(angolo), abs=1e-9)
+    assert 60.0 < retta_nel_mezzo < 64.0 and retta_nell_angolo > 100.0
+    for distanza in (0.0, 5.0, 10.0, 20.0, 47.0, 70.0):
+        assert _a_mano(nel_mezzo, distanza).precisione_globale == pytest.approx(max(0.0, 1.0 - distanza / retta_nel_mezzo))
+        assert _a_mano(nell_angolo, distanza).precisione_globale == pytest.approx(1.0 - distanza / retta_nell_angolo)
+        assert _a_mano(nell_angolo, distanza).precisione_globale >= _a_mano(nel_mezzo, distanza).precisione_globale
+    assert _a_mano(nel_mezzo, 70.0).precisione_globale == 0.0
+    # Un centro sul bersaglio del primo livello nel mezzo, sfiorato sul bordo, sta sopra 1 meno raggio più RAGGIO_PROIETTILE diviso la
+    # retta: più del 91%.
+    sfiorato = _a_mano(nel_mezzo, RAGGIO_INIZIALE + RAGGIO_PROIETTILE, colpito=True)
+    assert sfiorato.precisione_globale == pytest.approx(1.0 - (RAGGIO_INIZIALE + RAGGIO_PROIETTILE) / retta_nel_mezzo)
+    assert sfiorato.precisione_globale > 0.91
     # Un Volo costruito senza l'istante del passaggio prende il bersaglio alla fine del volo, che per uno fermo è lo stesso punto.
     senza = _a_mano(nell_angolo, 10.0, tempo=None)
-    assert senza.centro_nel_passaggio == pytest.approx(ANGOLI_DEL_CUBO[0]) and senza.precisione_globale == _a_mano(nell_angolo, 10.0).precisione_globale
+    assert senza.centro_nel_passaggio == pytest.approx(angolo) and senza.precisione_globale == _a_mano(nell_angolo, 10.0).precisione_globale
 
 
 def test_precisione_globale_del_centro_pieno():
-    """D26: il proiettile che passa proprio per il centro del bersaglio, nel centro del cubo, vale quasi il 100%, e l'istante del
+    """D26: il proiettile che passa proprio per il centro del bersaglio, nel mezzo della cupola, vale quasi il 100%, e l'istante del
     passaggio più vicino è quello in cui ci passa, dopo il contatto, che avviene sulla superficie."""
-    centro = np.array(CENTRO_DEL_CUBO)
-    traiettoria = _tiro_per(centro, 45.0)
-    bersaglio = _fermo(centro, raggio=RAGGIO_INIZIALE)
+    traiettoria = _tiro_per(MEZZO, 45.0)
+    bersaglio = _fermo(MEZZO, raggio=RAGGIO_INIZIALE)
     esito = volo.calcola_volo(traiettoria, [bersaglio], PARTENZA)
     assert esito.colpito is bersaglio and esito.distanza_al_centro < 1e-3
     assert esito.tempo_del_passaggio > esito.durata
@@ -695,12 +726,12 @@ def test_precisione_globale_del_centro_pieno():
     assert esito.precisione_globale > 0.9999
 
 
-def test_precisione_globale_dei_tiri_a_vuoto_nel_centro_e_in_un_angolo():
-    """D26: due tiri a vuoto veri, passati sopra un bersaglio nel centro del cubo e sopra uno vicino a un angolo; il secondo vale di
-    più, perché da lì il cubo lasciava sbagliare di più. Un centro di striscio sul bersaglio del primo livello nel centro del cubo sta
-    sopra l'88,2% del caso peggiore."""
+def test_precisione_globale_dei_tiri_a_vuoto_nel_mezzo_e_in_un_angolo():
+    """D26: due tiri a vuoto veri, passati sopra un bersaglio nel mezzo della cupola e sopra uno in fondo a un angolo; il secondo vale
+    di più, perché da lì la cupola lasciava sbagliare di più. Un centro di striscio sul bersaglio del primo livello nel mezzo della
+    cupola sta sopra il caso peggiore."""
     globali = []
-    for punto in (np.array(CENTRO_DEL_CUBO), np.array((CUBO_X[0] + 1.0, 3.0, CUBO_Z[0] + 1.0))):
+    for punto in (MEZZO, _angolo_della_zona(1.0)):
         # Il tiro mira otto metri più in alto del centro del bersaglio, e gli passa sopra.
         traiettoria = _tiro_per(punto + np.array((0.0, 8.0, 0.0)), 45.0)
         bersaglio = _fermo(punto, raggio=1.0)
@@ -708,21 +739,20 @@ def test_precisione_globale_dei_tiri_a_vuoto_nel_centro_e_in_un_angolo():
         assert esito.colpito is None and esito.vicino is bersaglio and 1.0 < esito.distanza_dal_centro < 8.0 + 1e-6
         assert esito.precisione_globale == pytest.approx(_globale_attesa(esito, bersaglio), abs=TOLLERANZA_DELLA_GLOBALE)
         globali.append((esito.distanza_dal_centro, esito.precisione_globale, _piu_lontano(punto)))
-    (d_centro, g_centro, lontano_centro), (d_angolo, g_angolo, lontano_angolo) = globali
-    assert lontano_centro == pytest.approx(MEZZA_DIAGONALE) and lontano_angolo > 1.9 * MEZZA_DIAGONALE
-    assert d_angolo / lontano_angolo < d_centro / lontano_centro and g_angolo > g_centro
-    # Di striscio sul bersaglio del primo livello nel centro del cubo: il tiro mira al suo bordo di sopra.
-    centro = np.array(CENTRO_DEL_CUBO)
-    traiettoria = _tiro_per(centro + np.array((0.0, RAGGIO_INIZIALE, 0.0)), 45.0)
-    bersaglio = _fermo(centro, raggio=RAGGIO_INIZIALE)
+    (d_mezzo, g_mezzo, lontano_mezzo), (d_angolo, g_angolo, lontano_angolo) = globali
+    assert lontano_angolo > 1.5 * lontano_mezzo
+    assert d_angolo / lontano_angolo < d_mezzo / lontano_mezzo and g_angolo > g_mezzo
+    # Di striscio sul bersaglio del primo livello nel mezzo della cupola: il tiro mira al suo bordo di sopra.
+    traiettoria = _tiro_per(MEZZO + np.array((0.0, RAGGIO_INIZIALE, 0.0)), 45.0)
+    bersaglio = _fermo(MEZZO, raggio=RAGGIO_INIZIALE)
     esito = volo.calcola_volo(traiettoria, [bersaglio], PARTENZA)
     assert esito.colpito is bersaglio
     assert esito.precisione_globale == pytest.approx(_globale_attesa(esito, bersaglio), abs=TOLLERANZA_DELLA_GLOBALE)
-    assert esito.precisione_globale > 1.0 - (RAGGIO_INIZIALE + RAGGIO_PROIETTILE) / MEZZA_DIAGONALE
+    assert esito.precisione_globale > 1.0 - (RAGGIO_INIZIALE + RAGGIO_PROIETTILE) / lontano_mezzo
 
 
 def test_precisione_globale_di_un_bersaglio_in_moto():
-    """D26: per un bersaglio in moto l'angolo più lontano si misura dal suo centro nell'istante del passaggio più vicino, non da dove
+    """D26: per un bersaglio in moto il punto più lontano si misura dal suo centro nell'istante del passaggio più vicino, non da dove
     stava allo sparo, nei tiri a vuoto e nei centri."""
     traiettoria = fisica.Traiettoria(0.0, 45.0, 30.0)
     incrocio = traiettoria.posizione(1.6)
@@ -745,10 +775,10 @@ def test_precisione_globale_di_un_bersaglio_in_moto():
     assert centro.precisione_globale == pytest.approx(_globale_attesa(centro, in_orario), abs=TOLLERANZA_DELLA_GLOBALE)
 
 
-def test_precisione_globale_del_bonus_appena_fuori_dalla_parete():
-    """D26: il bonus si misura dal suo centro nell'istante del passaggio più vicino anche quando è appena fuori da una parete, dove è
-    ancora vivo finché non è uscito del tutto; il suo angolo più lontano sta più in là di quello del punto sulla parete."""
-    punto = np.array((CUBO_X[1] + 0.5, 12.0, 45.0))
+def test_precisione_globale_del_bonus_appena_fuori_dal_lato():
+    """D26: il bonus si misura dal suo centro nell'istante del passaggio più vicino anche quando è appena fuori dal lato destro del
+    settore, dove è ancora vivo finché non è uscito del tutto; il suo punto più lontano sta più in là di quello del punto sul lato."""
+    punto = fisica.punto_della_cupola(50.0, SETTORE_AZIMUT + 0.5, 13.0)
     traiettoria = _tiro_per(punto, 45.0)
     tempo = math.hypot(punto[0], punto[2]) / (traiettoria.velocita * math.cos(math.radians(45.0)))
     raggio = 1.5
@@ -761,23 +791,29 @@ def test_precisione_globale_del_bonus_appena_fuori_dalla_parete():
     esito = volo.calcola_volo(traiettoria, [bonus], PARTENZA)
     assert esito.colpito is bonus and esito.distanza_dal_centro < 1.0 + 1e-6
     assert esito.precisione_globale == pytest.approx(_globale_attesa(esito, bonus), abs=TOLLERANZA_DELLA_GLOBALE)
-    assert esito.centro_nel_passaggio[0] > CUBO_X[1]
-    sulla_parete = np.array((CUBO_X[1], *esito.centro_nel_passaggio[1:]))
-    assert fisica.distanza_dall_angolo_piu_lontano(esito.centro_nel_passaggio) > fisica.distanza_dall_angolo_piu_lontano(sulla_parete)
+    centro = esito.centro_nel_passaggio
+    normale = bonus.zona.normale_destra
+    assert 0.0 < centro @ normale < raggio
+    sul_lato = centro - (centro @ normale) * normale
+    assert fisica.distanza_dal_punto_piu_lontano(centro) > fisica.distanza_dal_punto_piu_lontano(sul_lato)
 
 
-def test_precisione_globale_a_zero_oltre_l_angolo():
-    """D26: un tiro sparato lontano passa dal bersaglio più lontano del suo angolo più lontano, e la precisione globale resta a zero,
-    mai sotto; un tiro a vuoto vicino, invece, vale più di zero."""
-    bersaglio = _fermo(CENTRO_DEL_CUBO, raggio=RAGGIO_INIZIALE)
+def test_precisione_globale_a_zero_oltre_il_punto_piu_lontano():
+    """D26: un tiro sparato lontano passa dal bersaglio più lontano del suo punto più lontano, e la precisione globale resta a zero,
+    mai sotto; un tiro a vuoto vicino, invece, vale più di zero. Nella cupola succede ai bersagli in alto e in fondo, che il cannone ha
+    più lontani della cupola stessa; nel mezzo no: anche il tiro che cade sul cannone gli passa più vicino del punto più lontano."""
+    punto = np.array((0.0, 40.0, 66.0))
+    bersaglio = _fermo(punto, raggio=RAGGIO_MINIMO)
+    assert bersaglio.zona.contiene(punto)
     # Tutto a sinistra, basso e debole: cade a pochi metri dal cannone.
-    lontano = volo.calcola_volo(fisica.Traiettoria(-45.0, 10.0, 12.0), [bersaglio], PARTENZA)
+    lontano = volo.calcola_volo(fisica.Traiettoria(-SETTORE_AZIMUT, 15.0, 8.0), [bersaglio], PARTENZA)
     assert lontano.colpito is None and lontano.vicino is bersaglio
-    assert lontano.distanza_dal_centro > MEZZA_DIAGONALE
+    assert lontano.distanza_dal_centro > _piu_lontano(punto)
     assert lontano.precisione_globale == 0.0
     assert _globale_attesa(lontano, bersaglio) == 0.0
-    vicino = volo.calcola_volo(_tiro_per(np.array(CENTRO_DEL_CUBO) + np.array((0.0, 10.0, 0.0)), 45.0), [bersaglio], PARTENZA)
+    vicino = volo.calcola_volo(_tiro_per(punto + np.array((0.0, 10.0, 0.0)), 45.0), [bersaglio], PARTENZA)
     assert vicino.colpito is None and 0.0 < vicino.precisione_globale < 1.0
+    assert fisica.distanza_dal_cannone(MEZZO) < _piu_lontano(MEZZO)
 
 
 def test_parametri_del_proiettile():
@@ -818,22 +854,32 @@ def test_parametri_del_proiettile_dopo_un_centro():
 
 def test_tempo_di_calcolo():
     """Dieci secondi di volo fra cinque bersagli, mobili e bonus compresi, in meno di 50 millesimi:
-    il volo si calcola nel filo principale, allo sparo, e non deve farsi sentire."""
+    il volo si calcola nel filo principale, allo sparo, e non deve farsi sentire. Da D28 i mobili
+    rimbalzano sulle pareti della cupola, e quelli nati cinque minuti prima dello sparo allungano il loro
+    percorso proprio durante il calcolo: ogni ripetizione ha bersagli nuovi, e il cronometro conta anche quello."""
     verticale = 49.0
     traiettoria = fisica.Traiettoria(-30.0, math.degrees(math.atan2(verticale, 5.0)), math.hypot(verticale, 5.0))
     assert traiettoria.tempo_a_terra() == pytest.approx(10.0, abs=0.1)
-    gruppo = [
-        Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=(20.0, 30.0, 60.0), velocita=(6.0, 3.0, -2.0)),
-        Bersaglio(numero=2, forma="deriva", raggio=0.5, partenza=(10.0, 40.0, 70.0), velocita=(-4.0, 5.0, 8.0), seme=3),
-        Bersaglio(numero=3, forma="quadra", raggio=2.0, partenza=(15.0, 10.0, 40.0)),
-        Bersaglio(numero=4, forma="casuale", raggio=1.5, partenza=(5.0, 20.0, 50.0), velocita=(11.0, -2.0, 1.0)),
-        Bersaglio(numero=5, forma="sega", raggio=0.8, partenza=(-25.8, 30.0, 60.0), velocita=(4.0, 0.0, 0.0), bonus=True),
-    ]
-    volo.calcola_volo(traiettoria, gruppo, 0.0)
+    nato = -300.0
+
+    def gruppo():
+        return [
+            Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=(20.0, 30.0, 60.0), velocita=(6.0, 3.0, -2.0), nato=nato),
+            Bersaglio(numero=2, forma="deriva", raggio=0.5, partenza=(10.0, 40.0, 55.0), velocita=(-4.0, 5.0, 8.0), seme=3, nato=nato),
+            Bersaglio(numero=3, forma="quadra", raggio=2.0, partenza=(15.0, 10.0, 40.0)),
+            Bersaglio(numero=4, forma="casuale", raggio=1.5, partenza=(5.0, 20.0, 50.0), velocita=(11.0, -2.0, 1.0), nato=nato),
+            Bersaglio(numero=5, forma="sega", raggio=0.8, partenza=(-25.8, 30.0, 60.0), velocita=(4.0, 0.0, 0.0), bonus=True),
+        ]
+
+    volo.calcola_volo(traiettoria, gruppo(), 0.0)
     durate = []
     for _ in range(RIPETIZIONI_DEL_CRONOMETRO):
+        bersagli = gruppo()
+        allungati = [b._percorso for b in bersagli if b._percorso is not None]
+        assert len(allungati) == 3 and all(percorso._fine < -nato for percorso in allungati)
         inizio = time.perf_counter()
-        esito = volo.calcola_volo(traiettoria, gruppo, 0.0)
+        esito = volo.calcola_volo(traiettoria, bersagli, 0.0)
         durate.append(time.perf_counter() - inizio)
+        assert all(percorso._fine >= -nato + esito.durata for percorso in allungati)
     assert esito.durata > 9.9
     assert min(durate) < TEMPO_MASSIMO_DEL_CALCOLO, f"il volo più veloce ha chiesto {min(durate) * 1000:.1f} millesimi"

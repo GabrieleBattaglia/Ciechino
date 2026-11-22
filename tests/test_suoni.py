@@ -3,7 +3,8 @@ Le prove della classe Suoni di suoni.py: la voce al campione chiesto, i buffer c
 il guadagno, la memoria dei preset, gli eventi sconosciuti e il conteggio; e, sulla collezione vera in
 sola lettura, che ogni preset degli eventi ci sia e porti la firma di Ciechino.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0.
+Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 i punti delle prove stanno nella cupola di D28, e il suono
+frequente che si conta è fine_scala della mira manuale di D29, al posto del valore preso, uscito con lei.
 Nessuna prova sintetizza né suona un preset vero: _rendi_preset è sostituito da una fabbrica finta,
 che dà a ogni preset lo stesso buffer al centro e si ricorda chi glielo ha chiesto; il motore è
 quello muto del conftest o quello col flusso finto di aiuti_audio, che dice al campione che cosa esce.
@@ -19,8 +20,8 @@ import pytest
 from aiuti_audio import motore_finto
 
 import suoni
-from costanti import CUBO_DISTANZA, CUBO_X, CUBO_Z, FS
-from fisica import distanza_dal_cannone, guadagno_di
+from costanti import CUPOLA_RAGGIO, CUPOLA_RAGGIO_INTERNO, FS, SETTORE_AZIMUT
+from fisica import Zona, distanza_dal_cannone, guadagno_di, punto_della_cupola
 from motore_audio import Motore, VoceBuffer
 from sintesi import db_in_lineare, panoramica
 from statistiche import Statistiche
@@ -32,10 +33,11 @@ from suoni import EVENTI, Suoni
 # lontano dal tetto morbido del motore, che altrimenti lo piegherebbe.
 LUNGHEZZA_FINTA = 2_000
 AMPIEZZA_FINTA = 0.5
-# Un punto proprio davanti al cannone, uno vicino e uno lontano a destra, dentro il cubo dei bersagli.
+# Un punto proprio davanti al cannone, uno vicino, pure davanti, e uno lontano a destra, dentro la cupola dei
+# bersagli: il vicino appena oltre la sfera interna, il lontano appena dentro quella esterna e il lato destro.
 DAVANTI = (0.0, 20.0, 50.0)
-VICINO = (0.0, 10.0, CUBO_DISTANZA)
-LONTANO_A_DESTRA = (CUBO_X[1] - 1.0, 10.0, CUBO_Z[1] - 1.0)
+VICINO = tuple(float(c) for c in punto_della_cupola(CUPOLA_RAGGIO_INTERNO + 1.0, 0.0, 15.0))
+LONTANO_A_DESTRA = tuple(float(c) for c in punto_della_cupola(CUPOLA_RAGGIO - 1.0, SETTORE_AZIMUT - 5.0, 10.0))
 # Il campione da cui far partire una voce col motore muto: dieci secondi avanti, così il filo muto,
 # che corre col tempo vero, non lo passa prima che il comando arrivi.
 AVANTI_COL_MOTORE_MUTO = 10 * FS
@@ -85,6 +87,14 @@ def _energia(buffer, lato=None):
     if lato is not None:
         dati = dati[:, lato]
     return float(np.sum(dati * dati))
+
+
+def test_i_punti_delle_prove_stanno_nella_cupola():
+    zona = Zona()
+    for punto in (DAVANTI, VICINO, LONTANO_A_DESTRA):
+        assert zona.contiene(np.array(punto)), punto
+    assert VICINO[0] == DAVANTI[0] == 0.0 and LONTANO_A_DESTRA[0] > 0.0
+    assert distanza_dal_cannone(np.array(VICINO)) < distanza_dal_cannone(np.array(LONTANO_A_DESTRA))
 
 
 def test_suona_parte_al_campione_chiesto(fabbrica, finto):
@@ -214,12 +224,27 @@ def test_il_conteggio(fabbrica, finto):
     suoni_ = Suoni(motore, conta=contati.append)
     suoni_.suona("sparo")
     suoni_.pronto("colpito", posizione=LONTANO_A_DESTRA)
-    suoni_.suona("valore_preso")
-    suoni_.suona("valore_preso", posizione=VICINO, guadagno_db=-3.0)
-    assert contati == ["sparo", "colpito", "valore_preso", "valore_preso"]
+    suoni_.suona("fine_scala")
+    suoni_.suona("fine_scala", posizione=VICINO, guadagno_db=-3.0)
+    assert contati == ["sparo", "colpito", "fine_scala", "fine_scala"]
     # precarica prepara, non suona: non conta.
     suoni_.precarica()
     assert len(contati) == 4
+
+
+def test_gli_eventi_usciti_con_la_mira_manuale_non_suonano(fabbrica, finto, capsys):
+    """D29: il valore preso e il proiettile perduto non sono più eventi del gioco, e suonarli è come suonare un evento
+    sconosciuto, che non si conta; il capo della scala ha il suo evento, fine_scala."""
+    motore, _flusso = finto
+    contati = []
+    suoni_ = Suoni(motore, conta=contati.append)
+    for evento in ("valore_preso", "proiettile_perduto"):
+        assert evento not in EVENTI
+        assert suoni_.suona(evento) is None
+    assert capsys.readouterr().err.count("evento sonoro sconosciuto") == 2
+    assert contati == [] and fabbrica.chiesti == []
+    assert isinstance(suoni_.suona("fine_scala"), VoceBuffer)
+    assert fabbrica.chiesti == ["ciechino_fine_scala"] and contati == ["fine_scala"]
 
 
 def test_un_effetto_preparato_si_conta_quando_suona(fabbrica, finto, capsys):

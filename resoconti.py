@@ -20,14 +20,14 @@ ciascuno con la sua iniziale e i due punti, dalla 0.11.8 senza spazio, come
 parole, e dalla 0.11.8 la precisione globale e la legenda vanno sempre sotto, su una riga loro. Nell'annuncio i valori o le parole
 vengono dopo l'esito, senza la legenda. La riga del mancato di D6 dice le stesse misure, nello stesso
 ordine, a parole.
-La precisione globale di D26, quanto il proiettile si è avvicinato al bersaglio nell'intero cubo, sta
+La precisione globale di D26, quanto il proiettile si è avvicinato al bersaglio in tutta la cupola, sta
 nel resoconto di ogni tiro che ha un bersaglio vicino: nel sommario coi numeri come G:, in quello a parole
 sulla seconda riga, e dove il sommario tace nella riga dell'esito; l'annuncio la dice sempre. Non l'hanno
-il proiettile perduto, che non ha volo, e il tiro senza bersagli vivi.
+il tiro senza bersagli vivi.
 Nella palestra delle attese di D22 i messaggi di un tiro finiscono con la riga che dice che cosa farà
 lo spazio, e la barra di stato lo ripete; fuori dalla palestra Ctrl+P ha il suo messaggio di rifiuto.
-Da D25 il proiettile perduto, quando una barra della mira passa PASSAGGI_DELLA_BARRA volte senza lo
-spazio, ha il suo resoconto, e la mira annullata con Esc il suo messaggio.
+La mira annullata con Esc ha il suo messaggio (D25), e da D29 la barra di stato della mira manuale dice i
+tre valori, in gradi e in percentuale, e i secondi che restano alla mira a tempo.
 """
 
 import math
@@ -41,7 +41,6 @@ from costanti import (
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
     MOLTIPLICATORE_BONUS,
-    PASSAGGI_DELLA_BARRA,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     SOMMARIO_SOGLIA_INCLINAZIONE,
@@ -51,28 +50,17 @@ from costanti import (
 )
 from fisica import CANNONE
 from lingua import _, ngettext, plurale
-from statistiche import NOMI_DEI_PARAMETRI, NOMI_DELLE_FORME
+from statistiche import NOMI_DELLE_FORME
 
 # I tipi dei messaggi, come li vuole il contratto in docs/progetto.txt: la finestra può trattarli in
 # modo diverso, per esempio aggiungere la classifica dopo quello di fine.
 TIPI = ("info", "resoconto", "livello", "bonus", "fine", "avviso")
 
-# Le sottofasi della mira come le dice la barra di stato: la pausa muta prima della scivolata, i tre
-# bip col silenzio che li segue, e la scala.
-NOMI_DELLE_SOTTOFASI = {
-    # Traduttori: da qui, le parti di una barra della mira, nella barra di stato: «Mira: alzo, bip».
-    "pausa": _("pausa"), "conto": _("bip"), "scivolata": _("scivolata"),
-}
-
 # I gradi della palestra di D21, dal più aiutato al meno: il sommario coi numeri, il sommario a sole
 # parole, nessun sommario.
 GRADI_DELLA_PALESTRA = ("numeri", "parole", "niente")
 
-# Le tre barre della mira come le dice il resoconto del proiettile perduto (D25), con l'articolo.
-NOMI_DELLE_BARRE = {
-    # Traduttori: da qui, le barre della mira nel resoconto del proiettile perduto: «La barra dell'alzo è passata 5 volte senza lo Spazio».
-    "direzione": _("la barra della direzione"), "alzo": _("la barra dell'alzo"), "potenza": _("la barra della potenza"),
-}
+
 
 
 @dataclass
@@ -366,7 +354,7 @@ class Sommario:
 
 def frase_della_globale(globale):
     """La precisione globale di D26 in una frase, col decimale: «Precisione globale 61,2%.»."""
-    # Traduttori: la precisione globale di un tiro (D26), quanto il proiettile si è avvicinato al bersaglio nell'intero cubo; percentuale è come «61,2%».
+    # Traduttori: la precisione globale di un tiro (D26), quanto il proiettile si è avvicinato al bersaglio in tutta la cupola; percentuale è come «61,2%».
     return _("Precisione globale {percentuale}.").format(percentuale=testi.percento(globale, 1))
 
 
@@ -648,31 +636,6 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
     return Messaggio("resoconto", "\n".join(righe), annuncio, dati)
 
 
-def proiettile_perduto(numero, livello, parametro, passaggi, riserva, totale=0):
-    """Il messaggio «resoconto» del proiettile perduto (D25): la barra del parametro è passata passaggi
-    volte senza lo spazio, il colpo non è partito, e conta come un tiro a vuoto. numero è il numero del
-    tiro, livello quello della mira, riserva i colpi rimasti dopo, totale il punteggio. Non c'è volo,
-    quindi niente sommario, mira, traiettoria né precisione globale."""
-    tiro, scritto_il_livello = testi.intero(numero), testi.intero(livello)
-    if riserva > 0:
-        restano = plurale(riserva, "resta {n} colpo", "restano {n} colpi", come=testi.intero(riserva))
-        # Traduttori: il resoconto del proiettile perduto (D25), quando una barra della mira è passata cinque volte senza lo Spazio; restano è come «restano 8 colpi».
-        esito = _("Tiro {tiro}, livello {livello}: proiettile perduto; nella riserva {restano}.").format(tiro=tiro, livello=scritto_il_livello, restano=restano)
-        # Traduttori: l'annuncio breve del proiettile perduto; riserva è un numero.
-        annuncio = _("Proiettile perduto, riserva {riserva}.").format(riserva=testi.intero(riserva))
-    else:
-        esito = _("Tiro {tiro}, livello {livello}: proiettile perduto; la riserva è vuota.").format(tiro=tiro, livello=scritto_il_livello)
-        annuncio = _("Proiettile perduto, riserva vuota.")
-    barra = NOMI_DELLE_BARRE.get(parametro, str(parametro).replace("_", " "))
-    volte = plurale(passaggi, "{n} volta", "{n} volte", come=testi.intero(passaggi))
-    # Traduttori: barra è come «la barra dell'alzo», con la maiuscola messa dal programma, volte come «5 volte».
-    perche = _("{barra} è passata {volte} senza lo Spazio: il colpo non è partito, e il proiettile conta come un tiro a vuoto.").format(
-        barra=_maiuscola(barra), volte=volte)
-    dati = {"tiro": numero, "livello": livello, "colpito": False, "bonus": False, "punti": 0, "totale": totale, "riserva": riserva, "precisione": None,
-            "precisione_globale": None, "perduto": True, "parametro": parametro, "passaggi": passaggi}
-    return Messaggio("resoconto", "\n".join((esito, perche)), annuncio, dati)
-
-
 # La partita: inizio, livelli, bonus, primati e fine.
 
 def inizio_partita(livello, riserva):
@@ -682,7 +645,8 @@ def inizio_partita(livello, riserva):
         _("Partita nuova, livello {livello}: nella riserva {colpi}.").format(livello=testi.intero(livello), colpi=_colpi(riserva)),
         # Traduttori: bersagli è come «1 bersaglio fermo, raggio 5 metri».
         _("In volo: {bersagli}.").format(bersagli=bersagli_del_livello(livello)),
-        _("Ascolta i bersagli e premi Spazio per mirare: tre scivolate, direzione, alzo e potenza, ognuna fermata con lo Spazio."),
+        _("Ascolta i bersagli e premi Spazio per mirare: le frecce orizzontali muovono la direzione, quelle verticali l'alzo, Home e Fine la "
+          "potenza, finché le tieni giù; Invio spara, Esc annulla."),
     ]
     return Messaggio("info", "\n".join(righe), _("Partita nuova: Spazio per mirare."), {"livello": livello, "riserva": riserva})
 
@@ -827,11 +791,11 @@ def partita_abbandonata(riepilogo, primati=(), valori=None):
 # La pausa.
 
 def in_pausa(nella_mira=False):
-    """La pausa chiesta con Ctrl+P (D14). Nella mira dice anche che la barra interrotta, alla ripresa,
-    ricomincia da capo, e che i valori già presi restano."""
+    """La pausa chiesta con Ctrl+P (D14). Nella mira dice anche che i valori restano dove sono, e che alla
+    ripresa si muovono di nuovo coi loro tasti (D29)."""
     if nella_mira:
-        return Messaggio("info", _("Partita in pausa: la mira è sospesa e i bersagli tacciono. Alla ripresa la barra in corso ricomincia da capo, "
-                                   "e i valori già presi restano. Ctrl+P per riprendere."), _("Pausa."))
+        return Messaggio("info", _("Partita in pausa: la mira è sospesa, i valori restano dove sono e i bersagli tacciono. Alla ripresa i valori si "
+                                   "muovono di nuovo coi loro tasti. Ctrl+P per riprendere."), _("Pausa."))
     return Messaggio("info", _("Partita in pausa: il tempo è fermo e i bersagli tacciono. Ctrl+P per riprendere."), _("Pausa."))
 
 
@@ -854,8 +818,8 @@ def pausa_solo_in_palestra(fino_al_livello):
 # La mira annullata con Esc (D25).
 
 def mira_annullata(riserva, in_pausa=False):
-    """Esc nella mira (D25): la mira è annullata, il proiettile resta nella riserva, che ha riserva colpi,
-    e i bersagli tornano a cantare; in pausa la partita resta ferma, fino a Ctrl+P."""
+    """Esc nella mira (D25): la mira è annullata e il proiettile resta nella riserva, che ha riserva colpi;
+    in pausa la partita resta ferma, fino a Ctrl+P."""
     colpi = _colpi(riserva)
     if in_pausa:
         # Traduttori: Esc nella mira messa in pausa con Ctrl+P (D25); colpi è come «10 colpi».
@@ -863,8 +827,7 @@ def mira_annullata(riserva, in_pausa=False):
             colpi=colpi)
     else:
         # Traduttori: Esc nella mira (D25): il colpo non parte, e si torna ad ascoltare; colpi è come «10 colpi».
-        testo = _("Mira annullata con Esc: il proiettile resta nella riserva, che ha {colpi}, e i bersagli tornano a cantare. Spazio per mirare di "
-                  "nuovo.").format(colpi=colpi)
+        testo = _("Mira annullata con Esc: il proiettile resta nella riserva, che ha {colpi}. Spazio per mirare di nuovo.").format(colpi=colpi)
     return Messaggio("info", testo, _("Mira annullata."), {"riserva": riserva})
 
 
@@ -901,10 +864,9 @@ def riga_dell_attesa(attesa_ferma=False, nasceranno=0):
 
 # La barra di stato.
 
-def riga_della_fase(fase, in_pausa=False, parametro=None, sottofase=None, attesa_ferma=False, nasceranno=0, passaggio=None):
+def riga_della_fase(fase, in_pausa=False, attesa_ferma=False, nasceranno=0):
     """La riga della fase, l'ultima della barra di stato; nell'attesa della palestra, quella di
-    riga_dell_attesa. Nella mira dice anche che Esc annulla, e dal secondo passaggio della barra, nel
-    secondo blocco del display braille, quale passaggio suona su PASSAGGI_DELLA_BARRA (D25)."""
+    riga_dell_attesa. Nella mira dice che Invio spara e Esc annulla (D29)."""
     if fase == "pronta":
         return _("Nessuna partita: Spazio per cominciare")
     if fase == "finita":
@@ -916,27 +878,47 @@ def riga_della_fase(fase, in_pausa=False, parametro=None, sottofase=None, attesa
     if fase == "ascolto":
         return _("Ascolto: Spazio per mirare")
     if fase == "mira":
-        nome = NOMI_DEI_PARAMETRI.get(parametro, str(parametro or "").replace("_", " "))
-        if sottofase in NOMI_DELLE_SOTTOFASI:
-            # Traduttori: parametro è direzione, alzo o potenza; parte è pausa, bip o scivolata. La riga sta nei 40 caratteri del display braille, e Esc annulla la mira (D25).
-            riga = _("Mira: {parametro}, {parte}; Esc annulla").format(parametro=nome, parte=NOMI_DELLE_SOTTOFASI[sottofase])
-        else:
-            # Traduttori: parametro è direzione, alzo o potenza.
-            riga = _("Mira: {parametro}; Esc annulla").format(parametro=nome)
-        if passaggio is not None and passaggio > 1:
-            # Traduttori: il secondo blocco della riga della mira (D25): la barra ricomincia da capo senza lo Spazio, e n e totale sono numeri, come «passaggio 2 di 5».
-            return in_blocchi(riga, _("passaggio {n} di {totale}").format(n=testi.intero(passaggio), totale=testi.intero(PASSAGGI_DELLA_BARRA)))
-        return riga
+        return _("Mira: Invio spara, Esc annulla")
     return _("Volo")
 
 
-def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centri_del_livello=0, bersagli=0, bonus=False, parametro=None, sottofase=None,
-                      attesa_ferma=False, nasceranno=0, passaggio=None):
+def riga_dei_valori_della_mira(azimut, alzo, potenza, secondi=None):
+    """La riga dei valori della mira manuale (D29), sopra quella della fase: la direzione in gradi, a
+    sinistra o a destra, l'alzo in gradi, la potenza in percentuale, e i secondi che restano alla mira a
+    tempo, o che la mira non ha tempo, nella palestra."""
+    angolo = round(abs(float(azimut)), 1)
+    if angolo == 0:
+        # Traduttori: la direzione della mira dritta davanti, nella barra di stato.
+        direzione = _("direzione davanti")
+    elif azimut < 0:
+        # Traduttori: gradi è come «12,5 gradi», sempre col decimale.
+        direzione = _("direzione {gradi} a sinistra").format(gradi=_gradi_della_barra(angolo))
+    else:
+        direzione = _("direzione {gradi} a destra").format(gradi=_gradi_della_barra(angolo))
+    if secondi is None:
+        tempo = _("senza tempo")
+    else:
+        tempo = plurale(math.ceil(secondi), "{n} secondo", "{n} secondi")
+    # Traduttori: la riga della mira nella barra di stato: «Direzione 12,5 gradi a sinistra, alzo 45,0 gradi, potenza 63%, 24 secondi».
+    riga = _("{direzione}, alzo {alzo}, potenza {potenza}, {tempo}").format(direzione=direzione, alzo=_gradi_della_barra(alzo),
+                                                                           potenza=testi.percento(potenza), tempo=tempo)
+    return _maiuscola(riga)
+
+
+def _gradi_della_barra(x):
+    """Un angolo della riga della mira, sempre con un decimale, anche quando è intero: la riga cambia in tempo
+    reale, e sul braille deve tenere la sua forma mentre i valori si muovono."""
+    # Traduttori: un angolo con un decimale, nella barra di stato della mira, come «12,5 gradi» o «45,0 gradi».
+    return _("{n} gradi").format(n=testi.numero(round(float(x), 1), 1))
+
+
+def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centri_del_livello=0, bersagli=0, bonus=False, attesa_ferma=False,
+                      nasceranno=0, mira=None):
     """Le righe della barra di stato, brevi, una cosa per riga: livello e punti; riserva e centri del
-    livello su CENTRI_PER_LIVELLO; i bersagli in volo, col bonus se c'è; la fase. Senza partita c'è
-    soltanto la fase; a partita finita i bersagli non ci sono più, e la riga si omette. attesa_ferma
-    e nasceranno servono alla fase «attesa» della palestra (D22), come in riga_dell_attesa; passaggio
-    alla mira, il passaggio della barra in corso (D25), come in riga_della_fase."""
+    livello su CENTRI_PER_LIVELLO; i bersagli in volo, col bonus se c'è; nella mira i suoi valori; la
+    fase. Senza partita c'è soltanto la fase; a partita finita i bersagli non ci sono più, e la riga si
+    omette. attesa_ferma e nasceranno servono alla fase «attesa» della palestra (D22), come in
+    riga_dell_attesa; mira, nella mira, è (azimut, alzo, potenza, secondi) per riga_dei_valori_della_mira (D29)."""
     if fase == "pronta":
         return [riga_della_fase(fase)]
     righe = [
@@ -951,5 +933,7 @@ def righe_della_barra(fase, in_pausa=False, livello=0, punti=0, riserva=0, centr
             righe.append(_("Bersagli in volo: {n} e il bonus").format(n=testi.intero(bersagli)))
         else:
             righe.append(_("Bersagli in volo: {n}").format(n=testi.intero(bersagli)))
-    righe.append(riga_della_fase(fase, in_pausa, parametro, sottofase, attesa_ferma, nasceranno, passaggio))
+    if fase == "mira" and mira is not None:
+        righe.append(riga_dei_valori_della_mira(*mira))
+    righe.append(riga_della_fase(fase, in_pausa, attesa_ferma, nasceranno))
     return righe

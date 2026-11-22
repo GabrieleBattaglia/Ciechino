@@ -9,6 +9,10 @@ prova che aspetta un tasto non finirebbe mai; i tasti sono l'evento wxEVT_CHAR_H
 crea per un tasto vero, rifatto dalla prova: SendInput li manderebbe allo schermo vero. Nessuna prova
 parla: la voce finta del conftest raccoglie gli annunci. Classifica, statistiche e impostazioni si
 scrivono nella cartella temporanea del conftest.
+Dalla 2.0.0 la mira manuale di D29: la partita finta conosce muovi, lascia, spara e tasti_giu; le prove
+guardano i tasti della mira e l'Invio che vanno alla partita e non all'area di testo, il rilascio che
+arriva al controllo col fuoco, i tasti lasciati che la tastiera dice su, con wx.GetKeyState sostituito,
+il fuoco che va sul controllo Mira e torna alla vista, la barra di cinque righe e la guida coi tasti nuovi.
 """
 
 import itertools
@@ -29,6 +33,7 @@ import costanti
 import impostazioni
 import partita as modulo_partita
 import percorsi
+import resoconti
 import schede
 import suoni
 from gui import dialoghi
@@ -72,6 +77,12 @@ class PartitaFinta:
         # partita in corso, o di quella che comincerà, come nella partita vera.
         self.proiettili = []
         self.proiettile = self._proiettile_scelto = costanti.PROIETTILE_FORMA
+        # La mira manuale (D29): i tasti che la partita crede giù, come coppie (parametro, verso), i messaggi del
+        # prossimo Invio, e le fasi in cui vanno la partita allo spazio e allo sparo, se la prova le vuole.
+        self.giu = []
+        self.allo_sparo = []
+        self.fase_allo_spazio = None
+        self.fase_allo_sparo = None
 
     def in_corso(self):
         return self.fase not in ("pronta", "finita")
@@ -104,8 +115,36 @@ class PartitaFinta:
 
     def spazio(self):
         self.chiamate.append("spazio")
+        if self.fase_allo_spazio is not None:
+            self.fase = self.fase_allo_spazio
         messaggi, self.allo_spazio = self.allo_spazio, []
         return messaggi
+
+    def muovi(self, parametro, verso):
+        """Il tasto di un valore della mira scende (D29): si annota, e il tasto è giù."""
+        self.chiamate.append(("muovi", parametro, verso))
+        if (parametro, verso) not in self.giu:
+            self.giu.append((parametro, verso))
+        return []
+
+    def lascia(self, parametro, verso):
+        """Il tasto di un valore della mira sale (D29): si annota, e il tasto non è più giù."""
+        self.chiamate.append(("lascia", parametro, verso))
+        if (parametro, verso) in self.giu:
+            self.giu.remove((parametro, verso))
+        return []
+
+    def spara(self):
+        """Invio nella mira (D29): si annota, e restituisce i messaggi preparati dalla prova."""
+        self.chiamate.append("spara")
+        if self.fase_allo_sparo is not None:
+            self.fase = self.fase_allo_sparo
+        messaggi, self.allo_sparo = self.allo_sparo, []
+        return messaggi
+
+    def tasti_giu(self):
+        """Come la partita vera: i tasti giù soltanto nella mira."""
+        return list(self.giu) if self.fase == "mira" else []
 
     def battito(self):
         if self.guasta:
@@ -235,13 +274,14 @@ def _leggi(nome):
 
 # La finestra com'è all'apertura.
 
-def test_la_finestra_nasce_coi_due_controlli_etichettati(finestra):
+def test_la_finestra_nasce_coi_controlli_etichettati(finestra):
     assert finestra.GetTitle() == "Ciechino"
     figli = list(finestra.pannello.GetChildren())
-    for controllo, nome in ((finestra.vista, "Partita"), (finestra.barra, "Barra di stato")):
+    for controllo, nome in ((finestra.vista, "Partita"), (finestra.barra, "Barra di stato"), (finestra.controllo_mira, "Mira")):
         etichetta = figli[figli.index(controllo) - 1]
         assert isinstance(etichetta, wx.StaticText) and etichetta.GetLabel() == nome
         assert controllo.GetName() == nome
+    for controllo in (finestra.vista, finestra.barra):
         stile = controllo.GetWindowStyleFlag()
         assert stile & wx.TE_MULTILINE and stile & wx.TE_READONLY and stile & wx.TE_RICH2
     assert finestra.barra.GetWindowStyleFlag() & wx.TE_DONTWRAP and not finestra.vista.GetWindowStyleFlag() & wx.TE_DONTWRAP
@@ -249,8 +289,19 @@ def test_la_finestra_nasce_coi_due_controlli_etichettati(finestra):
     assert sizer.GetItem(finestra.vista).GetProportion() == 1
     barra = sizer.GetItem(finestra.barra)
     assert barra.GetProportion() == 0 and barra.GetFlag() & wx.EXPAND
-    # Alta quanto le sue righe nel suo carattere, non una misura fissa.
+    # Alta quanto le sue righe nel suo carattere, non una misura fissa; da D29 le righe sono cinque, perché nella mira, col bonus in
+    # volo, c'è anche quella dei tre valori.
     assert finestra.barra.GetMinSize().height >= finestra.barra.GetCharHeight() * modulo_finestra.RIGHE_DELLA_BARRA
+    righe_della_mira = resoconti.righe_della_barra("mira", livello=4, bersagli=1, bonus=True, mira=(-12.5, 38.2, 0.63, 23.2))
+    assert len(righe_della_mira) == modulo_finestra.RIGHE_DELLA_BARRA == 5
+    # Il controllo Mira (D29) non è un testo, così NVDA lascia passare frecce, Home e Fine: un pannello che prende i tasti, che
+    # accetta il fuoco ma non da Tab, sotto la barra, alto almeno una riga del suo carattere.
+    mira = finestra.controllo_mira
+    assert isinstance(mira, modulo_finestra.ControlloDellaMira) and not isinstance(mira, wx.TextCtrl)
+    assert mira.GetLabel() == "Mira" and mira.GetWindowStyleFlag() & wx.WANTS_CHARS
+    assert mira.AcceptsFocus() and not mira.AcceptsFocusFromKeyboard()
+    assert figli.index(mira) > figli.index(finestra.barra) and sizer.GetItem(mira).GetProportion() == 0
+    assert mira.GetMinSize().height >= mira.GetCharHeight()
 
 
 def test_i_menu_coi_tasti_giusti(finestra):
@@ -373,6 +424,215 @@ def test_esc_nella_mira_la_annulla_e_non_va_avanti(finestra, monkeypatch, voce_f
     monkeypatch.setattr(evento, "IsAutoRepeat", lambda: True)
     finestra._tasto(evento)
     assert not evento.GetSkipped() and finestra.partita.chiamate == ["annulla_mira"]
+
+
+def _ripetuto(finestra, codice, monkeypatch):
+    """Un tasto ripetuto dalla tastiera, perché il dito lo tiene giù: arriva al gancio come gli altri, con IsAutoRepeat vero."""
+    evento = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    evento.SetEventObject(finestra.vista)
+    evento.SetKeyCode(codice)
+    monkeypatch.setattr(evento, "IsAutoRepeat", lambda: True)
+    finestra._tasto(evento)
+    return evento
+
+
+def _rilascio(controllo, codice):
+    """Il rilascio di un tasto, come lo riceve il controllo col fuoco."""
+    evento = wx.KeyEvent(wx.wxEVT_KEY_UP)
+    evento.SetEventObject(controllo)
+    evento.SetKeyCode(codice)
+    controllo.GetEventHandler().ProcessEvent(evento)
+    return evento
+
+
+# I tasti della mira manuale di D29, nell'ordine in cui la finestra li tiene, coi valori che muovono.
+TASTI_ATTESI_DELLA_MIRA = {wx.WXK_LEFT: ("direzione", -1), wx.WXK_RIGHT: ("direzione", 1), wx.WXK_UP: ("alzo", 1), wx.WXK_DOWN: ("alzo", -1),
+                           wx.WXK_HOME: ("potenza", -1), wx.WXK_END: ("potenza", 1)}
+
+
+def test_i_tasti_della_mira_vanno_alla_partita_e_non_all_area_di_testo(finestra, monkeypatch, voce_finta):
+    """D29: nella mira, a finestra attiva e senza dialoghi, col fuoco sul controllo Mira, le frecce orizzontali muovono la direzione,
+    quelle verticali l'alzo, Home e Fine la potenza, e Invio spara: sono della partita e si fermano nel gancio, così nessuna area di
+    testo li riceve. La ripetizione del tasto tenuto giù non chiama di nuovo la partita. Fuori dalla mira, coi modificatori, con un
+    dialogo aperto o a finestra non attiva vanno avanti come sempre. Il tastierino resta fuori, perché NVDA se lo tiene. Col fuoco
+    nella vista o nella barra li prova test_col_fuoco_nella_vista_o_nella_barra_i_tasti_dei_valori_leggono."""
+    assert modulo_finestra.TASTI_DELLA_MIRA == TASTI_ATTESI_DELLA_MIRA
+    assert set(modulo_finestra.TASTI_DELLO_SPARO) == {wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER}
+    tastierino = {wx.WXK_NUMPAD_LEFT, wx.WXK_NUMPAD_RIGHT, wx.WXK_NUMPAD_UP, wx.WXK_NUMPAD_DOWN, wx.WXK_NUMPAD_HOME, wx.WXK_NUMPAD_END}
+    assert not tastierino & set(modulo_finestra.TASTI_DELLA_MIRA)
+    partita = finestra.partita
+    tutti = [*TASTI_ATTESI_DELLA_MIRA, *modulo_finestra.TASTI_DELLO_SPARO]
+    for fase in ("pronta", "ascolto", "volo"):
+        partita.fase = fase
+        assert all(_tasto(finestra, codice).GetSkipped() for codice in tutti), fase
+    assert partita.chiamate == []
+    # La mira che comincia porta il fuoco sul controllo Mira, al battito come allo spazio.
+    partita.fase = "mira"
+    finestra._al_battito()
+    assert finestra.controllo_mira.HasFocus()
+    vista = finestra.vista
+    prima = (vista.GetValue(), vista.GetInsertionPoint())
+    for codice in TASTI_ATTESI_DELLA_MIRA:
+        assert not _tasto(finestra, codice).GetSkipped()
+    assert partita.chiamate == [("muovi", parametro, verso) for parametro, verso in TASTI_ATTESI_DELLA_MIRA.values()]
+    assert (vista.GetValue(), vista.GetInsertionPoint()) == prima
+    # Tenuti giù, si ripetono senza chiamare di nuovo la partita, e restano suoi.
+    for codice in tutti:
+        assert not _ripetuto(finestra, codice, monkeypatch).GetSkipped()
+    assert len(partita.chiamate) == len(TASTI_ATTESI_DELLA_MIRA)
+    # Coi modificatori, con un dialogo aperto o a finestra non attiva, vanno avanti.
+    assert _tasto(finestra, wx.WXK_LEFT, controllo=True).GetSkipped() and _tasto(finestra, wx.WXK_END, maiuscolo=True).GetSkipped()
+    assert _tasto(finestra, wx.WXK_RETURN, controllo=True).GetSkipped()
+    finestra._modali = 1
+    assert all(_tasto(finestra, codice).GetSkipped() for codice in tutti)
+    finestra._modali = 0
+    monkeypatch.setattr(finestra, "IsActive", lambda: False)
+    assert all(_tasto(finestra, codice).GetSkipped() for codice in tutti)
+    monkeypatch.setattr(finestra, "IsActive", lambda: True)
+    assert len(partita.chiamate) == len(TASTI_ATTESI_DELLA_MIRA)
+    # Invio spara, e i messaggi del tiro vanno nella vista e alla sintesi; anche l'Invio del tastierino.
+    partita.allo_sparo = [Messaggio("resoconto", "Tiro 1, livello 1: colpito.", "Colpito.")]
+    assert not _tasto(finestra, wx.WXK_RETURN).GetSkipped()
+    assert partita.chiamate[-1] == "spara" and vista.GetValue().endswith("\nTiro 1, livello 1: colpito.") and voce_finta == ["Colpito."]
+    assert not _tasto(finestra, wx.WXK_NUMPAD_ENTER).GetSkipped() and partita.chiamate[-2:] == ["spara", "spara"]
+    # Lo spazio nella mira resta della partita, che decide lei che cosa farne.
+    assert not _tasto(finestra, wx.WXK_SPACE).GetSkipped() and partita.chiamate[-1] == "spazio"
+
+
+def test_il_rilascio_dei_tasti_della_mira_arriva_alla_partita(finestra):
+    """D29: il rilascio di un tasto della mira arriva al controllo col fuoco, la vista, la barra o il controllo Mira, e la partita
+    lascia il valore dove si sentiva. Fuori dalla mira, e per gli altri tasti, il rilascio va avanti come sempre."""
+    partita = finestra.partita
+    controlli = (finestra.vista, finestra.barra, finestra.controllo_mira)
+    partita.fase = "ascolto"
+    assert all(_rilascio(controllo, wx.WXK_LEFT).GetSkipped() for controllo in controlli) and partita.chiamate == []
+    partita.fase = "mira"
+    for controllo in controlli:
+        for codice, (parametro, verso) in TASTI_ATTESI_DELLA_MIRA.items():
+            assert not _rilascio(controllo, codice).GetSkipped()
+            assert partita.chiamate[-1] == ("lascia", parametro, verso), controllo.GetName()
+        assert _rilascio(controllo, ord("A")).GetSkipped() and _rilascio(controllo, wx.WXK_RETURN).GetSkipped()
+    assert len(partita.chiamate) == len(controlli) * len(TASTI_ATTESI_DELLA_MIRA)
+
+
+def test_col_fuoco_nella_vista_o_nella_barra_i_tasti_dei_valori_leggono(finestra, monkeypatch):
+    """D29, dalle prove del 22 novembre 2026: i tasti dei valori, frecce, Home e Fine, muovono la mira soltanto col fuoco sul controllo
+    Mira. Col fuoco nella vista o nella barra, portato lì con F5 o F7, proseguono come sempre, per leggere, anche ripetuti, e la
+    partita non li riceve; il rilascio dei tasti della mira arriva alla partita anche da lì, e l'Invio spara e l'Esc annulla la mira
+    da tutti e due."""
+    partita = finestra.partita
+    partita.fase_allo_sparo = "volo"
+    for tasto, controllo in ((wx.WXK_F5, finestra.vista), (wx.WXK_F7, finestra.barra)):
+        partita.fase = "mira"
+        finestra._al_battito()
+        assert finestra.controllo_mira.HasFocus()
+        assert not _tasto(finestra, tasto).GetSkipped() and controllo.HasFocus()
+        prima = len(partita.chiamate)
+        assert all(_tasto(finestra, codice).GetSkipped() for codice in TASTI_ATTESI_DELLA_MIRA), controllo.GetName()
+        assert all(_ripetuto(finestra, codice, monkeypatch).GetSkipped() for codice in TASTI_ATTESI_DELLA_MIRA), controllo.GetName()
+        assert partita.chiamate[prima:] == [] and controllo.HasFocus()
+        # Il rilascio di un tasto premuto sulla Mira, che sale dopo F5 o F7, arriva lo stesso.
+        assert not _rilascio(controllo, wx.WXK_RIGHT).GetSkipped() and partita.chiamate[prima:] == [("lascia", "direzione", 1)]
+        # L'Invio spara anche da qui, e il fuoco resta dov'era.
+        assert not _tasto(finestra, wx.WXK_RETURN).GetSkipped() and partita.chiamate[-1] == "spara" and partita.fase == "volo"
+        assert controllo.HasFocus()
+        # In una mira nuova, portato il fuoco di nuovo qui, l'Esc la annulla.
+        partita.fase = "mira"
+        finestra._al_battito()
+        assert not _tasto(finestra, tasto).GetSkipped() and controllo.HasFocus()
+        assert not _tasto(finestra, wx.WXK_ESCAPE).GetSkipped() and partita.chiamate[-1] == "annulla_mira" and partita.fase == "ascolto"
+
+
+def test_f6_riporta_il_fuoco_sulla_mira(finestra, sentiti):
+    """D29, dalle prove del 22 novembre 2026: F6 è un tasto del fuoco, fra F5 e F7. Durante la mira riporta il fuoco sul controllo
+    Mira col suono vai_alla_mira, dalla vista come dalla barra, e da lì i tasti dei valori muovono di nuovo la mira; fuori dalla mira
+    non c'è niente da puntare: suona il non ora, e il fuoco resta dov'è. Con un dialogo aperto F6 va avanti, come F5 e F7."""
+    assert modulo_finestra.TASTI_DEL_FUOCO == (wx.WXK_F5, wx.WXK_F6, wx.WXK_F7)
+    partita = finestra.partita
+    vista, barra, mira = finestra.vista, finestra.barra, finestra.controllo_mira
+    for fase in ("pronta", "ascolto", "volo"):
+        partita.fase = fase
+        vista.SetFocus()
+        prima = len(sentiti)
+        assert not _tasto(finestra, wx.WXK_F6).GetSkipped() and sentiti[prima:] == ["non_ora"] and vista.HasFocus(), fase
+    partita.fase = "mira"
+    finestra._al_battito()
+    assert mira.HasFocus()
+    for tasto, controllo in ((wx.WXK_F7, barra), (wx.WXK_F5, vista)):
+        assert not _tasto(finestra, tasto).GetSkipped() and controllo.HasFocus()
+        prima = len(sentiti)
+        assert not _tasto(finestra, wx.WXK_F6).GetSkipped() and sentiti[prima:] == ["vai_alla_mira"] and mira.HasFocus()
+        chiamate = len(partita.chiamate)
+        assert not _tasto(finestra, wx.WXK_LEFT).GetSkipped() and partita.chiamate[chiamate:] == [("muovi", "direzione", -1)]
+    # Sulla Mira F6 la lascia lì, col suo suono.
+    prima = len(sentiti)
+    assert not _tasto(finestra, wx.WXK_F6).GetSkipped() and sentiti[prima:] == ["vai_alla_mira"] and mira.HasFocus()
+    finestra._modali = 1
+    assert all(_tasto(finestra, codice).GetSkipped() for codice in modulo_finestra.TASTI_DEL_FUOCO)
+    finestra._modali = 0
+
+
+def test_i_tasti_rimasti_giu_senza_rilascio_si_lasciano_al_battito(finestra, monkeypatch):
+    """D29: il rilascio arriva soltanto al controllo col fuoco, e può perdersi; a ogni battito i tasti che la partita crede giù e che
+    la tastiera, chiesta con wx.GetKeyState, dice su valgono come lasciati. Quelli ancora giù restano, e fuori dalla mira la tastiera
+    non si chiede."""
+    partita = finestra.partita
+    partita.fase = "mira"
+    partita.giu = [("alzo", 1), ("potenza", -1), ("direzione", 1)]
+    davvero_giu = {wx.WXK_UP, wx.WXK_RIGHT}
+    chiesti = []
+
+    def stato(codice):
+        chiesti.append(codice)
+        return codice in davvero_giu
+
+    monkeypatch.setattr(wx, "GetKeyState", stato)
+    finestra._al_battito()
+    assert sorted(chiesti) == sorted([wx.WXK_UP, wx.WXK_HOME, wx.WXK_RIGHT])
+    assert partita.chiamate == [("lascia", "potenza", -1)] and partita.giu == [("alzo", 1), ("direzione", 1)]
+    # Il battito dopo, la freccia su è salita anche lei.
+    davvero_giu.discard(wx.WXK_UP)
+    finestra._al_battito()
+    assert partita.chiamate[-1] == ("lascia", "alzo", 1) and partita.giu == [("direzione", 1)]
+    chiesti.clear()
+    partita.fase = "volo"
+    finestra._al_battito()
+    assert chiesti == [] and partita.chiamate.count(("lascia", "direzione", 1)) == 0
+
+
+def test_il_fuoco_va_sul_controllo_mira_e_torna_alla_vista(finestra, sentiti):
+    """D29: quando la mira comincia il fuoco va sul controllo Mira, che non è un testo; quando finisce, con l'Invio, con Esc o al
+    battito, torna alla vista, se era ancora sulla Mira. F5 e F7 lo portano dove si vuole, e lì resta anche a mira finita."""
+    partita = finestra.partita
+    vista, mira = finestra.vista, finestra.controllo_mira
+    vista.SetFocus()
+    partita.fase = "ascolto"
+    partita.fase_allo_spazio = "mira"
+    _tasto(finestra, wx.WXK_SPACE)
+    assert mira.HasFocus()
+    partita.fase_allo_sparo = "volo"
+    _tasto(finestra, wx.WXK_RETURN)
+    assert vista.HasFocus()
+    # Con Esc: la partita finta torna all'ascolto.
+    _tasto(finestra, wx.WXK_SPACE)
+    assert mira.HasFocus()
+    _tasto(finestra, wx.WXK_ESCAPE)
+    assert partita.fase == "ascolto" and vista.HasFocus()
+    # La mira che comincia o finisce al battito, come quella che scade.
+    partita.fase = "mira"
+    finestra._al_battito()
+    assert mira.HasFocus()
+    partita.fase = "volo"
+    finestra._al_battito()
+    assert vista.HasFocus()
+    # F7 nella mira porta il fuoco nella barra, e a mira finita resta lì.
+    partita.fase = "mira"
+    finestra._al_battito()
+    _tasto(finestra, wx.WXK_F7)
+    assert finestra.barra.HasFocus()
+    partita.fase = "ascolto"
+    finestra._al_battito()
+    assert finestra.barra.HasFocus()
 
 
 def test_f5_e_f7_portano_il_fuoco_col_loro_suono(finestra, sentiti):
@@ -1302,9 +1562,10 @@ def test_gli_ascolti_dal_menu_aiuto_fermano_la_partita_e_alla_chiusura_tacciono(
 
 
 def test_gli_ascolti_letti_dalla_sintesi_e_seguiti_fino_in_fondo(finestra, voce_finta, monkeypatch):
-    letti = []
+    letti, passi = [], []
 
     def fino_in_fondo(dialogo):
+        passi.extend(dialogo.passi)
         dialogo.seguente()
         letti.append(voce_finta[-1])
         dialogo.indice = len(dialogo.passi) - 1
@@ -1313,8 +1574,10 @@ def test_gli_ascolti_letti_dalla_sintesi_e_seguiti_fino_in_fondo(finestra, voce_
 
     monkeypatch.setattr(dialoghi.Ascolti, "ShowModal", fino_in_fondo)
     finestra._esegui(finestra.ascolti)
-    # Il passo nuovo va alla sintesi, perché la lettura dei resoconti è accesa.
-    assert letti and letti[0].startswith("Passo 2 di 13. Il centro del cubo e la tratta orizzontale.")
+    # Il passo nuovo va alla sintesi, perché la lettura dei resoconti è accesa. Dalla 2.0.0 i passi sono quattordici, col tempo della
+    # mira, e il secondo gira nel mezzo della cupola (D28).
+    assert len(passi) == 14 and passi[1].nome == "orizzontale"
+    assert letti and letti[0].startswith("Passo 2 di 14. Il mezzo della cupola, da un lato all'altro.")
     conti = finestra.statistiche.dati["conti"]
     assert conti["ascolti_aperti"] == 1 and conti["ascolti_finiti"] == 1 and conti["passi_ascoltati"] == 0
 
@@ -1725,8 +1988,26 @@ def test_la_guida_nasce_dalla_tabella_dei_menu(finestra, sentiti):
     aiuto = righe.index("Il menu Aiuto, con 8 comandi:")
     assert righe.index("Ascolti: dal menu, senza tasto rapido.") > aiuto > righe.index("Il menu Impostazioni, con 5 comandi:")
     assert any(riga.startswith("Spazio: ") for riga in righe) and any(riga.startswith("F5: ") for riga in righe)
-    # Esc nella mira (D25) sta fra i tasti fuori dai menu.
-    assert any(riga.startswith("Esc: durante la mira annulla il tiro") for riga in righe)
+    # Dalla 2.0.0 i tasti della mira manuale (D29) stanno fra i tasti fuori dai menu, dopo lo spazio, che non ferma più le scivolate,
+    # e prima di Esc (D25), che annulla il tiro; poi F5, F6, che riporta il fuoco sulla Mira, e F7. I tasti dei valori muovono la
+    # mira soltanto col fuoco sulla Mira, e la guida lo dice.
+    # La prima riga è il resto di quella del titolo, vuoto.
+    fuori = righe[1:righe.index(next(riga for riga in righe if riga.startswith("Il menu ")))]
+    assert fuori == [
+        "I tasti fuori dai menu:",
+        "Spazio: comincia la partita e, mentre ascolti i bersagli, avvia la mira; nei livelli della palestra, dopo ogni tiro, fa ripartire la "
+        "partita, che aspetta ferma.",
+        "Frecce sinistra e destra: nella mira, col fuoco sulla Mira, muovono la direzione, finché le tieni giù.",
+        "Frecce su e giù: nella mira, col fuoco sulla Mira, alzano e abbassano l'alzo, finché le tieni giù.",
+        "Home e Fine: nella mira, col fuoco sulla Mira, abbassano e alzano la potenza, finché le tieni giù.",
+        "Invio: nella mira fa partire il colpo coi tre valori di quel momento.",
+        "Esc: durante la mira annulla il tiro: il colpo non parte, e il proiettile resta nella riserva; nelle finestre interne le chiude.",
+        "F5: porta il fuoco nella vista della partita.",
+        "F6: durante la mira riporta il fuoco sulla Mira, dove le frecce, Home e Fine muovono i valori.",
+        "F7: porta il fuoco nella barra di stato.",
+    ]
+    guida = "\n".join(righe)
+    assert "scivolat" not in guida and "tornano a cantare" not in guida
     assert _riga_del_cursore(finestra.vista) == ("Guida ai comandi di Ciechino.", 0)
     assert sentiti == ["guida"]
 

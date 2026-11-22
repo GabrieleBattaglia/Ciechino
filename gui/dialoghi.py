@@ -390,7 +390,7 @@ class Aggiornamento(Lettura):
 
 
 def intestazione_del_passo(passo, numero, totale):
-    """La prima riga di un passo degli Ascolti (D23): «Passo 2 di 13. Il centro del cubo e la tratta orizzontale.»"""
+    """La prima riga di un passo degli Ascolti (D23): «Passo 2 di 14. Il mezzo della cupola, da un lato all'altro.»"""
     # Traduttori: numero e totale sono numeri, titolo è il titolo del passo, senza il punto.
     return _("Passo {numero} di {totale}. {titolo}.").format(numero=numero, totale=totale, titolo=passo.titolo)
 

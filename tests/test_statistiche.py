@@ -1,10 +1,13 @@
 """
 Le prove di statistiche.py: i conti, i primati, le ultime partite, il file con le sue copie e la pagina; dalla
-0.11.8 il massimo preso con lo spazio con la chiave sua, il proiettile perduto nella media come 0% e il primato
-della media della partita soltanto con almeno COLPI_INIZIALI tiri.
+0.11.8 il massimo preso con lo spazio con la chiave sua e il proiettile perduto nella media come 0%.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0. Il conftest dirotta la cartella del programma in una cartella
 temporanea; l'orologio delle statistiche è finto, così le date delle righe sono note.
+Dalla 2.0.0 la mira manuale di D29: mira(parametro, valore) conta i valori allo sparo in manuali, e in ai_capi
+quelli rimasti a un capo della scala; mira_sparata conta le mire finite col colpo, i loro secondi e i tasti
+premuti; i conti delle scivolate restano, detti «prima della 2.0.0»; il primato della precisione globale media
+vale dalle partite di almeno TIRI_PER_IL_PRIMATO_DELLA_MEDIA tiri, non più COLPI_INIZIALI, che D30 ha alzato.
 """
 
 import ast
@@ -99,20 +102,47 @@ def test_tiro_con_esito_sbagliato_non_solleva():
     assert s.dati["conti"]["centri"] == 1
 
 
-def test_mira_istogramma_e_media():
+def test_mira_manuale_istogramma_e_media():
+    """D29: ogni valore della mira manuale allo sparo si conta in manuali, con la sua fascia e la sua somma; quelli rimasti al
+    minimo o al massimo anche in ai_capi. Un valore fuori scala si tiene nei capi; uno che non è un numero non si conta."""
     s = nuove()
-    s.mira("direzione", 0.0, "minimo")
-    s.mira("direzione", 0.55, "scelto")
-    s.mira("direzione", 0.58, "scelto")
-    s.mira("direzione", 1.0, "massimo")
-    s.mira("direzione", None, "pausa")
-    s.mira("potenza", 1.7, "scelto")
+    s.mira("direzione", 0.0)
+    s.mira("direzione", 0.55)
+    s.mira("direzione", 0.58)
+    s.mira("direzione", 1.0)
+    for sbagliato in (None, "alto", float("nan"), True):
+        s.mira("direzione", sbagliato)
+    s.mira("potenza", 1.7)
+    s.mira("alzo", -0.2)
+    s.mira("alzo", 0.999)
     m = s.dati["mira"]["direzione"]
-    # Dalla 0.11.8 il massimo preso con lo spazio ha la chiave sua; massimo resta ai conti di prima della 0.10.0.
-    assert (m["minimo"], m["scelto"], m["massimo_con_lo_spazio"], m["massimo"]) == (1, 2, 1, 0)
+    assert (m["manuali"], m["ai_capi"]) == (4, 2)
+    # I conti delle scivolate non si accrescono più.
+    assert (m["minimo"], m["scelto"], m["massimo_con_lo_spazio"], m["massimo"]) == (0, 0, 0, 0)
     assert m["classi"] == [1, 0, 0, 0, 0, 2, 0, 0, 0, 1]
     assert abs(m["somma"] - 2.13) < 1e-9
-    assert s.dati["mira"]["potenza"]["classi"][-1] == 1
+    potenza, alzo = s.dati["mira"]["potenza"], s.dati["mira"]["alzo"]
+    assert (potenza["manuali"], potenza["ai_capi"], potenza["classi"][-1], potenza["somma"]) == (1, 1, 1, 1.0)
+    # Il quasi massimo non è un capo: ai capi resta soltanto quello tenuto a zero.
+    assert (alzo["manuali"], alzo["ai_capi"], alzo["classi"][0], alzo["classi"][-1]) == (2, 1, 1, 1)
+
+
+def test_le_mire_sparate_coi_secondi_e_i_tasti():
+    """D29: mira_sparata conta ogni mira finita col colpo in mire_sparate, somma i suoi secondi per il tempo medio e i tasti premuti
+    in tasti_della_mira; secondi e tasti che non sono numeri positivi non entrano nelle somme. Le mire scadute le conta la partita."""
+    s = nuove()
+    s.mira_sparata(12.5, 4)
+    s.mira_sparata(30.0, 3, scaduta=True)
+    s.mira_sparata(None, 2.6)
+    s.mira_sparata(-1.0, -2)
+    conti, somme = s.dati["conti"], s.dati["somme"]
+    assert (conti["mire_sparate"], conti["tasti_della_mira"], conti["mire_scadute"]) == (4, 10, 0)
+    assert somme["secondi_di_mira"] == 42.5
+    # Un file di prima della 2.0.0, senza la somma dei secondi, si legge da zero, e la somma si rilegge uguale.
+    grezzi = json.loads(json.dumps(s.dati))
+    assert statistiche.Statistiche(dati=grezzi).dati["somme"]["secondi_di_mira"] == 42.5
+    del grezzi["somme"]["secondi_di_mira"]
+    assert statistiche.Statistiche(dati=grezzi).dati["somme"]["secondi_di_mira"] == 0.0
 
 
 def test_bersagli_apparsi():
@@ -295,9 +325,10 @@ def test_righe_piene():
     s.conta("caratteristica_nuova", 4)
     s.bersaglio_apparso("seno", False, False)
     s.bersaglio_apparso("sega_inversa", True, True)
-    s.mira("direzione", 0.55, "scelto")
-    s.mira("alzo", 0.0, "minimo")
-    s.mira("potenza", 1.0, "massimo")
+    s.mira("direzione", 0.55)
+    s.mira("alzo", 0.0)
+    s.mira("potenza", 1.0)
+    s.mira_sparata(8.2, 5)
     s.tiro((0.55, 0.0, 1.0), esito(precisione=0.64, punti=12340, distanza_dal_vicino=0.05, serie=1))
     s.tiro((0.2, 0.2, 0.2), esito(colpito=False, distanza_dal_vicino=3.2))
     s.suono("sparo")
@@ -317,10 +348,13 @@ def test_righe_piene():
     assert "Partite iniziate e non concluse, perché sono in corso o il programma si è chiuso: 1." in righe
     assert "Durata media di una partita: 3 minuti e 12 secondi." in righe
     assert "Direzione, valori presi: 1." in righe
-    assert "Direzione, scelti con lo spazio nella scivolata: 1, 100%." in righe
-    assert "Alzo, fermati al minimo nei bip: 1, 100%." in righe
-    # Da D25 il massimo si prende soltanto con lo spazio, appena finita la scivolata.
-    assert "Potenza, presi al massimo con lo spazio appena finita la scivolata: 1, 100%." in righe
+    # Dalla 2.0.0 i valori sono quelli della mira manuale (D29), e quelli rimasti a un capo della scala hanno la loro riga.
+    assert "Direzione, scelti con la mira manuale: 1, 100%." in righe
+    assert "Alzo, scelti con la mira manuale: 1, 100%." in righe and "Alzo, lasciati a un capo della scala: 1, 100% dei manuali." in righe
+    assert "Potenza, lasciati a un capo della scala: 1, 100% dei manuali." in righe
+    assert not any(r.startswith("Direzione, lasciati") for r in righe) and "scivolat" not in testo and "nei bip" not in testo
+    assert "Mire finite col colpo: 1." in righe and "Tempo medio di una mira: 8 secondi." in righe
+    assert "Tasti premuti nella mira: 5, in media 5,0 a mira." in righe
     assert "Direzione, valore medio: 55% della scala." in righe
     assert "Direzione, valori per fasce della scala: da 50 a 60%: 1." in righe
     assert "Bersagli mobili: 1 apparso, 0 colpiti, 0%." in righe
@@ -384,24 +418,43 @@ def test_contatori_della_finestra_e_delle_pause_con_la_loro_etichetta():
     assert [r for r in righe if r.startswith("Sezione ")][-1] == "Sezione 8 di 8, i suoni."
 
 
-def test_la_mira_di_d25_con_le_sue_etichette():
-    """D25: le mire annullate con Esc, le barre ripartite senza lo spazio e i proiettili perduti stanno nei tiri, dopo le mire avviate."""
+def test_la_mira_manuale_e_quella_di_d25_con_le_loro_etichette():
+    """D29 e D25: nei tiri, dopo le mire avviate, le mire finite col colpo, quelle scadute, il tempo medio di una mira e i tasti
+    premuti, poi le mire annullate con Esc; in fondo le barre ripartite senza lo spazio e i proiettili perduti, i conti delle
+    scivolate che la 2.0.0 non accresce più, detti «prima della 2.0.0»."""
     s = nuove()
     s.conta("mire_avviate", 9)
+    s.mira_sparata(12.5, 4)
+    s.mira_sparata(30.0, 3, scaduta=True)
+    s.mira_sparata(None, 2.6)
+    s.mira_sparata(-1.0, -2)
+    s.conta("mire_scadute")
     s.conta("mire_annullate", 2)
     s.conta("barre_ripartite", 7)
     s.conta("proiettili_perduti", 1)
     righe = s.righe()
     mire = righe.index("Mire avviate: 9.")
-    assert righe[mire + 1:mire + 4] == ["Mire annullate con Esc: 2.", "Barre della mira ripartite da capo senza lo spazio: 7.",
-                                        "Proiettili perduti, con una barra mai fermata dallo spazio: 1."]
+    # Il tempo medio è la somma dei secondi, 42,5, sulle quattro mire; i tasti sono dieci, 2,5 a mira.
+    assert righe[mire + 1:mire + 8] == ["Mire finite col colpo: 4.", "Mire scadute, col colpo partito da solo allo scadere del tempo: 1.",
+                                        "Tempo medio di una mira: 11 secondi.", "Tasti premuti nella mira: 10, in media 2,5 a mira.",
+                                        "Mire annullate con Esc: 2.", "Barre della mira ripartite da capo senza lo spazio, prima della 2.0.0: 7.",
+                                        "Proiettili perduti, con una barra mai fermata dallo spazio, prima della 2.0.0: 1."]
     assert not any("altri conti" in r for r in righe)
+    # Senza mire sparate il tempo medio e i tasti tacciono, e i conti vecchi a zero non si dicono.
+    vuote = nuove()
+    vuote.conta("mire_avviate", 1)
+    righe = vuote.righe()
+    assert righe[righe.index("Mire avviate: 1.") + 1].startswith("Sezione ")
+    assert not any(r.startswith(("Tempo medio di una mira", "Tasti premuti", "Barre della mira", "Proiettili perduti")) for r in righe)
 
 
 def test_la_precisione_globale(cartella_di_prova):
     """D26: la precisione globale di ogni tiro dà la media dei tiri e il primato della migliore; quella media di ogni partita va fra
-    le ultime partite, dà la media per partita e il suo primato, dalla 0.11.8 soltanto con almeno COLPI_INIZIALI tiri. Un tiro o
-    una partita senza, come le partite di prima di D26, non contano nelle medie, e i dati di prima si leggono."""
+    le ultime partite, dà la media per partita e il suo primato, dalla 0.11.8 soltanto con almeno TIRI_PER_IL_PRIMATO_DELLA_MEDIA
+    tiri, che fino alla 1.0.0 erano COLPI_INIZIALI: D30 ha alzato la riserva iniziale, e il primato vale ancora dalle partite di
+    almeno 10 tiri. Un tiro o una partita senza, come le partite di prima di D26, non contano nelle medie, e i dati di prima si
+    leggono."""
+    minimo = costanti.TIRI_PER_IL_PRIMATO_DELLA_MEDIA
     orologio = Orologio()
     s = statistiche.Statistiche(ora=orologio)
     assert s.tiro((0.5, 0.5, 0.5), esito(precisione_globale=0.95)) == []
@@ -413,10 +466,11 @@ def test_la_precisione_globale(cartella_di_prova):
     assert s.dati["primati"]["precisione_globale"]["valore"] == 0.975
     assert s.partita_finita({"punteggio": 300, "livello": 1, "tiri": 14, "centri": 2, "durata_s": 60.0, "motivo": "abbandonata",
                              "precisione_globale": 0.90833333}) == []
-    assert s.partita_finita({"punteggio": 100, "livello": 1, "tiri": costanti.COLPI_INIZIALI, "centri": 1, "durata_s": 10.0, "motivo": "riserva_vuota",
+    # Una partita di TIRI_PER_IL_PRIMATO_DELLA_MEDIA tiri prende il primato; con i numeri di D30 ne ha meno dei COLPI_INIZIALI.
+    assert s.partita_finita({"punteggio": 100, "livello": 1, "tiri": minimo, "centri": 1, "durata_s": 10.0, "motivo": "riserva_vuota",
                              "precisione_globale": 0.95}) == ["precisione_globale_media"]
-    # Dalla 0.11.8 una partita più corta di COLPI_INIZIALI tiri entra nelle medie e nelle ultime partite, ma non prende il primato.
-    assert s.partita_finita({"punteggio": 50, "livello": 1, "tiri": costanti.COLPI_INIZIALI - 1, "centri": 0, "durata_s": 30.0, "motivo": "abbandonata",
+    # Dalla 0.11.8 una partita più corta entra nelle medie e nelle ultime partite, ma non prende il primato.
+    assert s.partita_finita({"punteggio": 50, "livello": 1, "tiri": minimo - 1, "centri": 0, "durata_s": 30.0, "motivo": "abbandonata",
                              "precisione_globale": 0.99}) == []
     s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": None})
     s.partita_finita({"punteggio": 0, "livello": 1, "tiri": 1, "centri": 0, "durata_s": 5.0, "motivo": "riserva_vuota", "precisione_globale": 1.7})
@@ -428,9 +482,9 @@ def test_la_precisione_globale(cartella_di_prova):
     assert "Precisione globale media per partita: 94,9%." in righe
     assert "La precisione globale migliore in un tiro: 97,5%, giovedì 19 novembre 2026." in righe
     assert "La precisione globale media migliore in una partita: 95,0%, giovedì 19 novembre 2026." in righe
-    assert ("Giovedì 19 novembre 2026 alle 18:03: 100 punti, livello 1, 1 centro su 10 tiri, precisione globale media 95,0%, 10 secondi, finita a riserva "
-            "vuota.") in righe
-    assert ("Giovedì 19 novembre 2026 alle 18:03: 50 punti, livello 1, 0 centri su 9 tiri, precisione globale media 99,0%, 30 secondi, "
+    assert (f"Giovedì 19 novembre 2026 alle 18:03: 100 punti, livello 1, 1 centro su {minimo} tiri, precisione globale media 95,0%, 10 secondi, "
+            "finita a riserva vuota.") in righe
+    assert (f"Giovedì 19 novembre 2026 alle 18:03: 50 punti, livello 1, 0 centri su {minimo - 1} tiri, precisione globale media 99,0%, 30 secondi, "
             "abbandonata.") in righe
     assert "Giovedì 19 novembre 2026 alle 18:03: 0 punti, livello 1, 0 centri su 1 tiro, 5 secondi, finita a riserva vuota." in righe
     # I file di prima di D26, senza le somme nuove e senza la precisione delle ultime partite, si leggono da zero.
@@ -446,7 +500,8 @@ def test_la_precisione_globale(cartella_di_prova):
 
 def test_il_proiettile_perduto_nella_media_come_zero():
     """Dalla 0.11.8, per scelta di Gabriele del 20 novembre 2026, il proiettile perduto di D25 entra nella media della precisione
-    globale dei tiri come 0%, ma non fa il primato: nemmeno quando è il primo tiro della storia, che lo farebbe nascere a zero."""
+    globale dei tiri come 0%, ma non fa il primato: nemmeno quando è il primo tiro della storia, che lo farebbe nascere a zero.
+    Dalla 2.0.0 la partita non ha più proiettili perduti (D29), ma Statistiche.tiro tiene ancora la regola, e la prova resta con lei."""
     s = nuove()
     perduto = esito(colpito=False, forma=None, distanza_dal_vicino=None, serie=0, precisione_globale=0.0, perduto=True)
     assert s.tiro([], perduto) == []
@@ -460,28 +515,35 @@ def test_il_proiettile_perduto_nella_media_come_zero():
     assert "Precisione globale media dei tiri: 30,0%." in s.righe()
 
 
-def test_il_massimo_con_lo_spazio_e_quelli_di_prima_della_0_10_0():
-    """Dalla 0.11.8 il massimo preso con lo spazio, appena finita la scivolata, ha la chiave sua, massimo_con_lo_spazio, con
-    l'etichetta che lo dice; la chiave massimo tiene i conti di prima della 0.10.0, quando la scivolata arrivata in fondo senza
-    lo spazio valeva il massimo (D3), e l'etichetta dice proprio questo. Un file vecchio si legge senza perdere niente."""
+def test_i_conti_delle_scivolate_prima_della_2_0_0():
+    """Un file della 1.0.0 ha i valori presi con le scivolate: scelti con lo spazio, fermati al minimo nei bip, presi al massimo
+    con lo spazio appena finita la scivolata, e quelli di prima della 0.10.0, quando la scivolata arrivata in fondo senza lo spazio
+    valeva il massimo (D3). Dalla 2.0.0 si leggono senza perdere niente, accanto ai valori della mira manuale (D29), e le etichette
+    dicono che sono di prima della 2.0.0; i valori presi li contano tutti, e quelli lasciati a un capo si contano sui manuali."""
     vecchio = statistiche.nuovi_dati("2026-11-19T18:03:00")
-    del vecchio["mira"]["alzo"]["massimo_con_lo_spazio"]
-    vecchio["mira"]["alzo"].update({"minimo": 1, "scelto": 4, "massimo": 3})
+    for parametro in costanti.PARAMETRI:
+        for chiave in ("manuali", "ai_capi"):
+            del vecchio["mira"][parametro][chiave]
+    vecchio["mira"]["alzo"].update({"scelto": 8, "minimo": 2, "massimo_con_lo_spazio": 2, "massimo": 4})
     s = statistiche.Statistiche(dati=json.loads(json.dumps(vecchio)), ora=Orologio())
     alzo = s.dati["mira"]["alzo"]
-    assert (alzo["minimo"], alzo["scelto"], alzo["massimo"], alzo["massimo_con_lo_spazio"]) == (1, 4, 3, 0)
-    s.mira("alzo", 1.0, "massimo")
-    s.mira("alzo", 1.0, "massimo")
-    assert (alzo["massimo"], alzo["massimo_con_lo_spazio"]) == (3, 2)
+    assert (alzo["manuali"], alzo["ai_capi"], alzo["scelto"], alzo["minimo"], alzo["massimo_con_lo_spazio"], alzo["massimo"]) == (0, 0, 8, 2, 2, 4)
+    for valore in (1.0, 0.5, 0.25, 0.65):
+        s.mira("alzo", valore)
+    assert (alzo["manuali"], alzo["ai_capi"], alzo["scelto"], alzo["minimo"], alzo["massimo_con_lo_spazio"], alzo["massimo"]) == (4, 1, 8, 2, 2, 4)
     righe = s.righe()
-    assert "Alzo, valori presi: 10." in righe
-    presi = [r for r in righe if r.startswith("Alzo, ") and "%." in r and "valore medio" not in r and "fasce" not in r]
-    assert presi == ["Alzo, scelti con lo spazio nella scivolata: 4, 40%.", "Alzo, fermati al minimo nei bip: 1, 10%.",
-                     "Alzo, presi al massimo con lo spazio appena finita la scivolata: 2, 20%.",
-                     "Alzo, scivolate arrivate in fondo senza lo spazio, prese al massimo prima della 0.10.0: 3, 30%."]
-    # Il file riscritto e riletto tiene le due chiavi.
-    riletto = statistiche.Statistiche(dati=json.loads(json.dumps(s.dati)), ora=Orologio())
-    assert (riletto.dati["mira"]["alzo"]["massimo"], riletto.dati["mira"]["alzo"]["massimo_con_lo_spazio"]) == (3, 2)
+    presi = [r for r in righe if r.startswith("Alzo, ")]
+    assert presi == ["Alzo, valori presi: 20.", "Alzo, scelti con la mira manuale: 4, 20%.",
+                     "Alzo, scelti con lo spazio nella scivolata, prima della 2.0.0: 8, 40%.", "Alzo, fermati al minimo nei bip, prima della 2.0.0: 2, 10%.",
+                     "Alzo, presi al massimo con lo spazio appena finita la scivolata, prima della 2.0.0: 2, 10%.",
+                     "Alzo, scivolate arrivate in fondo senza lo spazio, prese al massimo prima della 0.10.0: 4, 20%.",
+                     "Alzo, lasciati a un capo della scala: 1, 25% dei manuali.", "Alzo, valore medio: 60% della scala.",
+                     "Alzo, valori per fasce della scala: da 20 a 30%: 1; da 50 a 60%: 1; da 60 a 70%: 1; da 90 a 100%: 1."]
+    # La direzione e la potenza, che non hanno valori, tacciono.
+    assert not any(r.startswith(("Direzione, ", "Potenza, ")) for r in righe)
+    # Il file riscritto e riletto tiene tutte le chiavi.
+    riletto = statistiche.Statistiche(dati=json.loads(json.dumps(s.dati)), ora=Orologio()).dati["mira"]["alzo"]
+    assert (riletto["manuali"], riletto["ai_capi"], riletto["scelto"], riletto["minimo"], riletto["massimo_con_lo_spazio"], riletto["massimo"]) == (4, 1, 8, 2, 2, 4)
 
 
 def test_ogni_chiave_dei_conti_ha_la_sua_riga():
@@ -515,6 +577,8 @@ def test_ogni_chiave_contata_dalla_partita_e_dalla_finestra_ha_un_etichetta():
     assert {"partite_iniziate", "ingressi_in_classifica", "proiettile_cambiato", "scheda_cambiata", "scheda_non_aperta"} <= contate
     # Gli Ascolti (D23): la finestra conta le aperture, quelle dell'avvio e quelli finiti, la regia i passi.
     assert {"ascolti_aperti", "ascolti_d_avvio", "ascolti_finiti", "passi_ascoltati"} <= contate
+    # La mira manuale (D29): la partita conta le mire scadute; le sparate e i loro tasti li conta mira_sparata.
+    assert "mire_scadute" in contate and {"mire_sparate", "mire_scadute", "tasti_della_mira"} <= set(statistiche.CHIAVI_DEI_CONTI)
     assert contate - set(statistiche.CHIAVI_DEI_CONTI) == set()
 
 

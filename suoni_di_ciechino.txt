@@ -7,15 +7,14 @@ La riserva è vuota e la partita finisce: ciechino_partita_finita.
 A partita finita il punteggio entra nella classifica dei migliori: suona dopo la fine, e quando tace si apre la finestra del nome: ciechino_in_classifica.
 A partita finita il punteggio non entra nella classifica dei migliori: suona dopo la fine: ciechino_fuori_classifica.
 La mira, 3 suoni.
-Lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del gioco si ferma e i bersagli si sentono più piano: ciechino_mira_avviata.
-La mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio: ciechino_valore_preso.
-Esc durante la mira la annulla: il colpo non parte, il proiettile resta nella riserva e i bersagli tornano a cantare: ciechino_mira_annullata.
-Il tiro e i suoi esiti, 5 suoni.
-Dopo il terzo valore della mira parte il colpo dal cannone: ciechino_sparo.
+Lo spazio, mentre si ascoltano i bersagli, avvia la mira: i tre valori partono dal centro, e i bersagli continuano a cantare e a muoversi: ciechino_mira_avviata.
+Nella mira un valore arriva al capo della sua scala, al minimo o al massimo, col suo tasto ancora giù, e si ferma: ciechino_fine_scala.
+Esc durante la mira la annulla: il colpo non parte, e il proiettile resta nella riserva: ciechino_mira_annullata.
+Il tiro e i suoi esiti, 4 suoni.
+Invio, nella mira, fa partire il colpo dal cannone, o lo fa partire da solo lo scadere del tempo della mira: ciechino_sparo.
 Il proiettile colpisce un bersaglio, e il suono viene dal punto dell'impatto: ciechino_colpito.
 Il proiettile colpisce un bersaglio bonus, e il suono viene dal punto dell'impatto: ciechino_colpito_bonus.
 Il proiettile arriva a terra senza aver colpito niente, e il suono viene dal punto dove cade: ciechino_a_terra.
-Una barra della mira è passata 5 volte senza lo spazio: il colpo non parte, e il proiettile è perduto come un tiro a vuoto: ciechino_proiettile_perduto.
 I livelli e i bersagli bonus, 3 suoni.
 I centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi: ciechino_livello_su.
 Compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce: ciechino_bonus_appare.
@@ -23,7 +22,7 @@ Il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito: ci
 La pausa e lo spazio a vuoto, 3 suoni.
 La partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira, nei livelli della palestra; la pausa automatica non suona: ciechino_pausa.
 La partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita; la ripresa automatica non suona: ciechino_ripresa.
-Lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso o fuori dai livelli della palestra: ciechino_non_ora.
+Lo spazio premuto quando non può fare niente, nella mira, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso o fuori dai livelli della palestra: ciechino_non_ora.
 La finestra, l'avvio, l'uscita e gli errori, 9 suoni.
 Il programma si apre: ciechino_avvio.
 L'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra: ciechino_uscita.
@@ -67,6 +66,7 @@ La proposta dell'aggiornamento resta senza risposta e si chiude da sola: ciechin
 L'aggiornamento è scaricato: Ciechino si chiude per installarlo e si riapre da solo: ciechino_aggiornamento_pronto.
 La versione nuova c'è, ma il suo pacchetto non è ancora pronto: ciechino_aggiornamento_non_pronto.
 L'aggiornamento non si è scaricato, o non si è installato: ciechino_aggiornamento_non_riuscito.
-La finestra, il fuoco, 2 suoni.
+La finestra, il fuoco, 3 suoni.
 F5, il fuoco va nella vista della partita: ciechino_vai_alla_vista.
 F7, il fuoco va nella barra di stato: ciechino_vai_alla_barra.
+F6, durante la mira, il fuoco torna sul controllo Mira: ciechino_vai_alla_mira.

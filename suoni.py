@@ -5,7 +5,7 @@ Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0, sul modello dei suoni di MESS.
 Le regole di Gabriele: ogni evento ha il suo preset, e nessun preset serve due eventi; nessuno è
 un'onda quadra, salvo donazione per l'invito al caffè, come in tutto il parco; gli eventi che
-suonano spesso, cioè la mira avviata, il valore preso, F5 e F7, sono brevi e morbidi; lo sparo, il
+suonano spesso, cioè la mira avviata, il capo della scala nella mira, F5 e F7, sono brevi e morbidi; lo sparo, il
 bersaglio colpito, il bonus colpito e il colpo a terra sono fatti soprattutto di rumore, come vuole
 idee.txt; gli esiti diversi si riconoscono a orecchio.
 I preset sono tutti nuovi, col prefisso ciechino_, salvo donazione, e portano la firma ciechino nel
@@ -30,7 +30,7 @@ strumenti/elenco_suoni.py, resta leggero.
 
 import sys
 
-from costanti import FS, NOME, PASSAGGI_DELLA_BARRA
+from costanti import FS, NOME
 from lingua import _
 
 # Gli eventi, gruppo per gruppo: ogni gruppo ha il suo titolo e i suoi eventi con il preset della
@@ -46,10 +46,11 @@ GRUPPI = [
         "fuori_classifica": "ciechino_fuori_classifica",
     }),
     (_("La mira"), {
-        # I due suoni più frequenti del gioco, brevi e morbidi: il respiro che avvia la mira, senza
-        # altezza, e lo scatto che scende, mentre i bip delle scivolate salgono.
+        # Il respiro che avvia la mira, senza altezza, breve e morbido perché suona a ogni tiro; da D29 il
+        # doppio colpo sordo del valore che arriva al capo della sua scala e si ferma. Il valore preso della
+        # 0.1.0, che suonava a ogni scivolata fermata, è uscito con la mira manuale.
         "mira_avviata": "ciechino_mira_avviata",
-        "valore_preso": "ciechino_valore_preso",
+        "fine_scala": "ciechino_fine_scala",
         # Esc nella mira (D25): il respiro della mira lasciato andare, e il proiettile resta nella riserva.
         "mira_annullata": "ciechino_mira_annullata",
     }),
@@ -60,9 +61,6 @@ GRUPPI = [
         "colpito": "ciechino_colpito",
         "colpito_bonus": "ciechino_colpito_bonus",
         "a_terra": "ciechino_a_terra",
-        # Il proiettile perduto (D25), quando una barra passa tutte le sue volte senza lo spazio: la miccia che si
-        # spegne, di rumore come gli esiti del tiro, ma senza il colpo.
-        "proiettile_perduto": "ciechino_proiettile_perduto",
     }),
     (_("I livelli e i bersagli bonus"), {
         "livello_su": "ciechino_livello_su",
@@ -132,9 +130,11 @@ GRUPPI = [
         "aggiornamento_non_riuscito": "ciechino_aggiornamento_non_riuscito",
     }),
     (_("La finestra, il fuoco"), {
-        # F5 sale verso la vista, F7 scende verso la barra: l'uno lo specchio dell'altro.
+        # F5 sale verso la vista, F7 scende verso la barra: l'uno lo specchio dell'altro; F6 torna sulla Mira.
         "vai_alla_vista": "ciechino_vai_alla_vista",
         "vai_alla_barra": "ciechino_vai_alla_barra",
+        # F6, da D29, riporta il fuoco sulla Mira: il tocco doppio fra la discesa di F5 e la salita di F7.
+        "vai_alla_mira": "ciechino_vai_alla_mira",
     }),
 ]
 EVENTI = {evento: preset for _titolo, gruppo in GRUPPI for evento, preset in gruppo.items()}
@@ -148,16 +148,14 @@ AZIONI = {
     "partita_finita": _("la riserva è vuota e la partita finisce"),
     "in_classifica": _("a partita finita il punteggio entra nella classifica dei migliori: suona dopo la fine, e quando tace si apre la finestra del nome"),
     "fuori_classifica": _("a partita finita il punteggio non entra nella classifica dei migliori: suona dopo la fine"),
-    "mira_avviata": _("lo spazio, mentre si ascoltano i bersagli, avvia la mira: il tempo del gioco si ferma e i bersagli si sentono più piano"),
-    "valore_preso": _("la mira prende un valore, la direzione, l'alzo o la potenza, con lo spazio"),
-    "mira_annullata": _("Esc durante la mira la annulla: il colpo non parte, il proiettile resta nella riserva e i bersagli tornano a cantare"),
-    "sparo": _("dopo il terzo valore della mira parte il colpo dal cannone"),
+    "mira_avviata": _("lo spazio, mentre si ascoltano i bersagli, avvia la mira: i tre valori partono dal centro, e i bersagli continuano a "
+                      "cantare e a muoversi"),
+    "fine_scala": _("nella mira un valore arriva al capo della sua scala, al minimo o al massimo, col suo tasto ancora giù, e si ferma"),
+    "mira_annullata": _("Esc durante la mira la annulla: il colpo non parte, e il proiettile resta nella riserva"),
+    "sparo": _("Invio, nella mira, fa partire il colpo dal cannone, o lo fa partire da solo lo scadere del tempo della mira"),
     "colpito": _("il proiettile colpisce un bersaglio, e il suono viene dal punto dell'impatto"),
     "colpito_bonus": _("il proiettile colpisce un bersaglio bonus, e il suono viene dal punto dell'impatto"),
     "a_terra": _("il proiettile arriva a terra senza aver colpito niente, e il suono viene dal punto dove cade"),
-    # Traduttori: n è un numero, quante volte suona al più una barra della mira (D25).
-    "proiettile_perduto": _("una barra della mira è passata {n} volte senza lo spazio: il colpo non parte, e il proiettile è perduto come un tiro a "
-                            "vuoto").format(n=PASSAGGI_DELLA_BARRA),
     "livello_su": _("i centri del livello sono fatti: si sale di livello, con altri colpi nella riserva e bersagli nuovi"),
     "bonus_appare": _("compare un bersaglio bonus, che attraversa lo spazio dei bersagli e poi esce"),
     "bonus_uscito": _("il bersaglio bonus esce dallo spazio dei bersagli senza essere stato colpito"),
@@ -167,8 +165,8 @@ AZIONI = {
     "pausa": _("la partita va in pausa, con Ctrl+P o con Pausa del menu Partita, anche durante la mira, nei livelli della palestra; la pausa "
                "automatica non suona"),
     "ripresa": _("la partita riprende dalla pausa, con Ctrl+P o con Pausa del menu Partita; la ripresa automatica non suona"),
-    "non_ora": _("lo spazio premuto quando non può fare niente, col proiettile in volo o in pausa, oppure Ctrl+P senza una partita in corso o "
-                 "fuori dai livelli della palestra"),
+    "non_ora": _("lo spazio premuto quando non può fare niente, nella mira, col proiettile in volo o in pausa, oppure Ctrl+P senza una "
+                 "partita in corso o fuori dai livelli della palestra"),
     "avvio": _("il programma si apre"),
     "uscita": _("l'uscita dal programma, con Ctrl+Q, con Esci del menu Partita o chiudendo la finestra"),
     "riavvio": _("Ciechino si chiude per riaprirsi subito, dopo il sì alla domanda che segue la scelta di una lingua nuova"),
@@ -213,6 +211,7 @@ AZIONI = {
     "aggiornamento_non_riuscito": _("l'aggiornamento non si è scaricato, o non si è installato"),
     "vai_alla_vista": _("F5, il fuoco va nella vista della partita"),
     "vai_alla_barra": _("F7, il fuoco va nella barra di stato"),
+    "vai_alla_mira": _("F6, durante la mira, il fuoco torna sul controllo Mira"),
 }
 
 # I buffer dei preset già sintetizzati, per nome: la sintesi di un rumore o di un'onda sovracampionata

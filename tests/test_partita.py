@@ -8,15 +8,23 @@ dell'impatto ha finito di suonare, e la palestra delle attese: la partita ferma 
 tiro dei primi livelli, lo spazio che la scioglie con la sua grazia, la durata senza l'attesa, la
 pausa automatica durante l'attesa, Ctrl+P soltanto nella palestra e il confine col livello dopo.
 I tiri dei primi livelli finiscono nell'attesa: gli aiuti che mirano la fanno sciogliere prima.
-Dal secondo collaudo il resoconto un secondo dopo l'effetto (D24), le barre che ricominciano, il proiettile
-perduto e Esc nella mira (D25), e la precisione globale nelle statistiche (D26).
+Dal secondo collaudo il resoconto un secondo dopo l'effetto (D24), Esc nella mira (D25), e la
+precisione globale nelle statistiche (D26).
+Dalla 2.0.0 la cupola (D28), la mira manuale (D29) e la riserva più larga (D30): via le scivolate, i
+passaggi delle barre, il proiettile perduto, i bersagli attenuati e il tempo fermo nella mira; al loro
+posto i tre valori che si muovono finché i loro tasti sono giù, con le tacche e il suono del capo,
+l'Invio coi valori dell'istante udibile, il tempo della mira fuori dalla palestra coi suoi tick e la
+scadenza che fa partire il colpo da solo, la pausa che conserva i secondi rimasti, Esc, i bersagli che
+si muovono durante la mira, e i colpi di D30.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0.
+Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 le prove mirano tenendo giù i tasti dei valori, non più
+con lo spazio sulle scivolate.
 Nessuna prova apre la scheda audio né sintetizza un preset vero: il motore gira sul flusso finto di
 aiuti_audio, che chiama il callback soltanto quando la prova lo chiede, e _rendi_preset dà a ogni
-preset lo stesso buffer breve. Per premere spazio a un campione preciso la prova fa preparare al
+preset lo stesso buffer breve. Per premere un tasto a un campione preciso la prova fa preparare al
 motore il blocco che lo contiene, poi sposta l'orologio finto finché il campione udibile è proprio
-quello: così la mira si prova al campione, senza il caso del tempo vero.
+quello: così la mira si prova al campione, senza il caso del tempo vero. Gli aiuti che mirano tengono
+giù i tasti dei valori il tempo giusto, come farebbe chi gioca, e poi premono Invio.
 """
 
 import math
@@ -34,44 +42,50 @@ import testi
 from bersagli import Bersaglio, durata_del_bonus, genera, genera_bonus, portanti_senza, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
     AIUTO_MANCATO_FINO_AL_LIVELLO,
-    ATTENUAZIONE_IN_MIRA_DB,
+    ANTICIPO_DELLO_SPARO,
     BERSAGLIO_PORTANTI,
     BLOCCO_DEL_BRAILLE,
     CENTRI_PER_LIVELLO,
     COLPI_BONUS,
     COLPI_INIZIALI,
     COLPI_PER_LIVELLO,
-    COMPENSAZIONE_DEL_TASTO,
+    DURATA_DELLA_SCALA,
     ESPONENTE_DEL_RAGGIO,
     FS,
     GRAZIA_DELL_ATTESA,
     LIVELLO_DEI_BONUS,
     LIVELLO_DEI_MOBILI,
-    MARGINE_DOPO_LA_SCIVOLATA,
     MOLTIPLICATORE_BONUS,
     PALESTRA_FINO_AL_LIVELLO,
     PARAMETRI,
-    PASSAGGI_DELLA_BARRA,
-    PAUSA_FRA_BARRE,
+    PARTENZA_DELLA_MIRA,
     PREMIO_PRECISIONE,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     RAGGIO_PROIETTILE,
+    RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     RITARDO_DEL_RESOCONTO,
+    SCIVOLATA_FORMA,
     SFUMATURA_STOP,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
+    TACCHE,
+    TEMPO_DELLA_MIRA_INIZIALE,
+    TEMPO_DELLA_MIRA_MINIMO,
+    TIRI_PER_IL_PRIMATO_DELLA_MEDIA,
     VELOCITA_DEL_TEMPO,
+    VELOCITA_DELLA_MIRA,
     VELOCITA_DI_RIFERIMENTO,
 )
-from fisica import Traiettoria, distanza_dall_angolo_piu_lontano, parametri_del_tiro, soluzione
+from fisica import MEZZO_DELLA_CUPOLA, Traiettoria, distanza_dal_punto_piu_lontano, parametri_del_tiro, soluzione
 from motore_audio import VoceTono
-from partita import Messaggio, Partita, punti_del_centro
-from sintesi import db_in_lineare
+from partita import Messaggio, Partita, punti_del_centro, tempo_della_mira
+from sintesi import parametri_dell_asse, tacca_dell_asse, tick_del_tempo
 from statistiche import Statistiche
 from suoni import Suoni
+from volo import calcola_volo
 
 SEME = 73
 # Il buffer finto di ogni preset: breve e costante, così un effetto si riconosce nell'uscita e non
@@ -81,6 +95,15 @@ AMPIEZZA_FINTA = 0.1
 # Quanti blocchi al massimo si aspetta un evento, prima di dire che non arriva: 30 secondi di suono.
 BLOCCHI_MASSIMI = 30 * FS // 512
 SFUMATURA = round(SFUMATURA_STOP * FS)
+# Quanto dura ogni mira degli aiuti, dal primo tasto all'Invio: un valore che va dal centro a un capo
+# della scala ci mette mezza DURATA_DELLA_SCALA, e un decimo di secondo resta di margine.
+ATTESA_DELLO_SPARO = DURATA_DELLA_SCALA / 2 + 0.1
+# Un valore che deve arrivare a un capo della scala si lascia un poco dopo esserci arrivato: così è
+# proprio il capo, e non un capello prima.
+OLTRE_IL_CAPO = 0.01
+# Il primo livello con la mira a tempo più breve, TEMPO_DELLA_MIRA_MINIMO secondi (D29): le prove della
+# scadenza ci aspettano meno. I bersagli restano quelli del primo livello, che la prova non cambia.
+LIVELLO_DELLA_MIRA_BREVE = PALESTRA_FINO_AL_LIVELLO + 1 + round((TEMPO_DELLA_MIRA_INIZIALE - TEMPO_DELLA_MIRA_MINIMO) / RIDUZIONE_DEL_TEMPO_DELLA_MIRA)
 
 
 class Orologio:
@@ -129,27 +152,106 @@ def bonus_sicuro(monkeypatch):
 
 def porta_udibile_a(banco, campione):
     """Fa preparare al motore il blocco che contiene il campione, poi sposta l'orologio finto perché
-    il campione udibile sia proprio quello."""
+    il campione udibile sia proprio quello. L'orologio che torna indietro, quando i blocchi sono già
+    preparati oltre, come per i tasti della mira, può lasciare il campione udibile un capello sotto
+    quello chiesto, per gli arrotondamenti: allora l'orologio avanza del più piccolo passo che c'è,
+    finché il campione chiesto non si sente."""
     banco.flusso.avanza_fino(math.ceil(campione))
     inizio, dac = banco.motore._riferimento
     banco.flusso.time = dac + (campione - inizio) / banco.flusso.fs
-    assert banco.motore.campione_udibile() == pytest.approx(campione, abs=1e-6)
+    for _passo in range(64):
+        if banco.motore.campione_udibile() >= campione:
+            break
+        banco.flusso.time = math.nextafter(banco.flusso.time, math.inf)
+    assert banco.motore.campione_udibile() == pytest.approx(campione, abs=1e-6) and banco.motore.campione_udibile() >= campione
 
 
-def campione_del_valore(partita, valore):
-    """Il campione udibile a cui lo spazio sceglie quel valore nella barra in corso."""
-    barra = partita.scivolate[PARAMETRI[partita.barra]]
-    return partita.inizio_barra + barra.inizio_scivolata + valore * barra.campioni_scivolata + COMPENSAZIONE_DEL_TASTO * barra.fs
+def spia_del_motore(monkeypatch, motore):
+    """Le voci che il motore suona da un buffer, gli effetti, le tacche, i suoni del capo e i tick, come
+    terne (buffer, campione d'inizio, voce), nell'ordine in cui arrivano."""
+    suonate = []
+    originale = motore.suona
+
+    def spia(buffer, inizio=None, guadagno=1.0):
+        voce = originale(buffer, inizio=inizio, guadagno=guadagno)
+        suonate.append((buffer, voce.inizio, voce))
+        return voce
+
+    monkeypatch.setattr(motore, "suona", spia)
+    return suonate
 
 
-def mira_e_spara(banco, partita, valori):
-    """Con la mira avviata, preme spazio ai campioni che scelgono i tre valori."""
-    for indice, valore in enumerate(valori):
-        assert partita.fase == "mira" and partita.barra == indice
-        porta_udibile_a(banco, campione_del_valore(partita, valore))
-        assert partita.battito() == []
-        assert partita.spazio() == []
-    assert partita.fase == "volo"
+def porta_i_valori(banco, partita, valori):
+    """Nella mira porta i tre valori dove servono, come chi gioca coi tasti (D29): preme insieme, al
+    campione udibile di adesso, il tasto di ogni valore che deve muoversi, nel suo verso, e lascia
+    ognuno quando il suo valore è arrivato, alla VELOCITA_DELLA_MIRA, spostando il campione udibile con
+    porta_udibile_a; il valore che va a un capo si lascia OLTRE_IL_CAPO dopo. Fra un tasto e l'altro
+    non c'è battito. Restituisce il campione udibile dell'ultimo rilascio."""
+    assert partita.fase == "mira" and partita.mira is not None
+    inizio = banco.motore.campione_udibile()
+    rilasci = []
+    for parametro, valore in zip(PARAMETRI, valori, strict=True):
+        scarto = float(valore) - partita.mira.assi[parametro].valore(inizio / FS)
+        if abs(scarto) < 1e-12:
+            continue
+        verso = 1 if scarto > 0 else -1
+        assert partita.muovi(parametro, verso) == []
+        secondi = abs(scarto) / VELOCITA_DELLA_MIRA + (OLTRE_IL_CAPO if valore in (0.0, 1.0) else 0.0)
+        rilasci.append((inizio + secondi * FS, parametro, verso))
+    fine = inizio
+    for campione, parametro, verso in sorted(rilasci):
+        porta_udibile_a(banco, campione)
+        assert partita.lascia(parametro, verso) == []
+        fine = campione
+    assert partita.tasti_giu() == []
+    assert partita.mira.valori(fine / FS) == pytest.approx([float(valore) for valore in valori], abs=1e-9)
+    return fine
+
+
+def mira_e_spara(banco, partita, valori, invio=None):
+    """Con la mira avviata, porta i tre valori dove servono con porta_i_valori e preme Invio al campione
+    udibile invio, o, se è None, ATTESA_DELLO_SPARO dopo il primo tasto: così ogni mira degli aiuti che
+    parte dal centro dura lo stesso tempo, e il colpo parte coi valori voluti. Una mira che non parte dal
+    centro, come quella ripresa dopo una pausa, può chiedere di più: allora Invio segue l'ultimo tasto."""
+    inizio = banco.motore.campione_udibile()
+    fine = porta_i_valori(banco, partita, valori)
+    if invio is None:
+        invio = max(inizio + ATTESA_DELLO_SPARO * FS, fine)
+    assert fine <= invio
+    porta_udibile_a(banco, invio)
+    assert partita.spara() == []
+    assert partita.fase == "volo" and partita.valori == pytest.approx([float(valore) for valore in valori], abs=1e-9)
+
+
+def prepara_lo_sparo(banco, secondi=ATTESA_DELLO_SPARO):
+    """Per mirare un bersaglio in moto bisogna sapere da quale tempo di gioco partirà il colpo: dal
+    prossimo campione sicuro dell'Invio più ANTICIPO_DELLO_SPARO (D29), e il prossimo campione dipende
+    dai blocchi che il motore ha già preparato. L'aiuto fa preparare subito i blocchi fino all'Invio,
+    tanti secondi dopo il campione udibile, poi rimette l'orologio finto dov'era: i tasti e l'Invio che
+    seguono non preparano altri blocchi, e il campione dello sparo si sa prima di muovere i valori.
+    Restituisce il campione udibile dell'Invio e il tempo di gioco della partenza del colpo."""
+    adesso = banco.motore.campione_udibile()
+    invio = adesso + secondi * FS
+    banco.flusso.avanza_fino(math.ceil(invio))
+    porta_udibile_a(banco, adesso)
+    sparo = banco.motore.prossimo_campione() + round(ANTICIPO_DELLO_SPARO * FS)
+    return invio, banco.motore.tempo_di_gioco(sparo)
+
+
+def mira_sul_bersaglio(bersaglio, partenza):
+    """I valori che colpiscono il bersaglio, fermo o in moto, col colpo che parte al tempo di gioco
+    partenza: il punto dove sarà quando il proiettile ci arriva, ricalcolato finché il tempo di volo non
+    si assesta. Per un bersaglio fermo è la soluzione della fisica sul suo centro."""
+    tempo = 0.0
+    valori = None
+    for _giro in range(30):
+        punto = bersaglio.posizione(partenza + tempo)
+        valori = soluzione(punto)
+        assert valori is not None
+        traiettoria = Traiettoria(*parametri_del_tiro(*valori))
+        orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+        tempo = math.hypot(punto[0], punto[2]) / orizzontale
+    return valori
 
 
 def fino_alla_risoluzione(banco, partita):
@@ -198,22 +300,25 @@ def pronta_a_mirare(banco, partita):
 
 
 def colpisci(banco, partita, bersaglio=None):
-    """Avvia la mira e spara al centro di un bersaglio fermo, con la soluzione della fisica."""
+    """Avvia la mira e spara al centro di un bersaglio, il primo normale se è None, fermo o in moto:
+    dove sarà all'arrivo del proiettile, col tempo di gioco della partenza che dà prepara_lo_sparo.
+    Restituisce i valori."""
     pronta_a_mirare(banco, partita)
     assert partita.fase == "ascolto"
     partita.spazio()
-    partenza = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
     if bersaglio is None:
         bersaglio = next(b for b in partita.bersagli if not b.bonus)
-    valori = soluzione(bersaglio.posizione(partenza))
-    assert valori is not None
-    mira_e_spara(banco, partita, valori)
+    invio, partenza = prepara_lo_sparo(banco)
+    valori = mira_sul_bersaglio(bersaglio, partenza)
+    mira_e_spara(banco, partita, valori, invio=invio)
+    assert partita.ultimo_volo.partenza == pytest.approx(partenza)
     return valori
 
 
 def tiro_a_vuoto(banco, partita):
-    """Un tiro tutto a sinistra, rasoterra e piano, che cade a pochi metri dal cannone, e la sua
-    risoluzione."""
+    """Un tiro tutto a sinistra, all'alzo più basso e con la potenza minima, che entra appena nella
+    cupola sul suo lato sinistro e ricade a una trentina di metri, lontano dai bersagli delle prove, e
+    la sua risoluzione."""
     pronta_a_mirare(banco, partita)
     partita.spazio()
     mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
@@ -231,19 +336,12 @@ def senti_anche_le_statistiche(banco, statistiche):
     banco.suoni.conta = conta
 
 
-def mira_sul_bonus(bonus, partenza):
-    """I valori che colpiscono il bonus in moto: il punto dove sarà alla fine del volo, ricalcolato
-    finché il tempo di volo non si assesta."""
-    tempo = 0.0
-    valori = None
-    for _giro in range(30):
-        punto = bonus.posizione(partenza + tempo)
-        valori = soluzione(punto)
-        assert valori is not None
-        traiettoria = Traiettoria(*parametri_del_tiro(*valori))
-        orizzontale = math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
-        tempo = math.hypot(punto[0], punto[2]) / orizzontale
-    return valori
+def finiti_gli_avvisi(banco, partita):
+    """Il tempo della mira a tempo parte dopo gli avvisi in fila, come quello della partita nuova (D29, dalle prove del 22
+    novembre 2026): le prove che ne contano i secondi dallo spazio aspettano prima che finiscano, stacco compreso."""
+    if partita._fine_degli_avvisi > banco.motore.campione_udibile():
+        porta_udibile_a(banco, partita._fine_degli_avvisi)
+    assert partita._fine_degli_avvisi <= banco.motore.prossimo_campione()
 
 
 # Le prove.
@@ -273,6 +371,16 @@ def test_punti_del_centro():
             assert punti_del_centro(speciale, precisione, livello=livello) == MOLTIPLICATORE_BONUS * punti_del_centro(normale, precisione)
 
 
+def test_la_riserva_piu_larga_di_d30(banco):
+    """D30: 20 colpi all'inizio, 15 a ogni livello chiuso, 8 per un centro sul bonus, al posto di 10, 10 e 5 di D2 e D13; il
+    primato della precisione globale media vale ancora dalle partite di almeno 10 tiri."""
+    assert (COLPI_INIZIALI, COLPI_PER_LIVELLO, COLPI_BONUS, TIRI_PER_IL_PRIMATO_DELLA_MEDIA) == (20, 15, 8, 10)
+    partita = banco.partita()
+    messaggi = partita.nuova()
+    assert partita.riserva == 20 and messaggi[0].dati == {"livello": 1, "riserva": 20}
+    assert "nella riserva 20 colpi" in messaggi[0].testo
+
+
 def test_inizio_della_partita_e_voci_dei_bersagli(banco):
     partita = banco.partita()
     assert partita.fase == "pronta" and not partita.in_corso()
@@ -281,7 +389,7 @@ def test_inizio_della_partita_e_voci_dei_bersagli(banco):
     assert partita.fase == "ascolto" and partita.in_corso()
     assert (partita.livello, partita.riserva, partita.punti, partita.tiri, partita.centri, partita.centri_del_livello, partita.serie) == (1, COLPI_INIZIALI, 0, 0, 0, 0, 0)
     assert len(partita.bersagli) == quanti_bersagli(1)
-    assert partita.bonus is None
+    assert partita.bonus is None and partita.mira is None
     for bersaglio in partita.bersagli:
         voce = partita._voci[bersaglio]
         assert isinstance(voce, VoceTono)
@@ -341,7 +449,8 @@ def test_mira_completa_sul_centro_del_bersaglio(banco):
     assert resoconto.testo.split("\n")[0] == sommario.riga and resoconto.testo.split("\n")[1].startswith("Tiro 1, livello 1: colpito un bersaglio, ")
     assert resoconto.tipo == "resoconto" and resoconto.annuncio == f"Colpito, {attesi} punti. {sommario.annuncio}"
     assert resoconto.dati["colpito"] and resoconto.dati["punti"] == attesi and resoconto.dati["totale"] == attesi
-    assert banco.contati == ["nuova_partita", "mira_avviata", "valore_preso", "valore_preso", "valore_preso", "sparo", "colpito"]
+    # D29: la mira manuale non ha più il suono del valore preso; i valori del centro stanno lontani dai capi.
+    assert banco.contati == ["nuova_partita", "mira_avviata", "sparo", "colpito"]
 
 
 def test_impatto_al_campione_esatto(banco, monkeypatch):
@@ -385,42 +494,612 @@ def test_impatto_al_campione_esatto(banco, monkeypatch):
     np.testing.assert_allclose(effetti[0], banco.suoni.pronto("colpito", posizione=volo.punto_finale))
 
 
-def test_spazio_nella_pausa_non_conta(banco):
+# La mira manuale (D29).
+
+def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartella_di_prova):
+    """D29: lo spazio nell'ascolto avvia la mira, una sola per i tre valori, tutti al centro della loro scala, fermi e muti.
+    Ogni valore si muove finché il suo tasto è giù, alla VELOCITA_DELLA_MIRA, da un capo all'altro in DURATA_DELLA_SCALA
+    secondi, col suono della sua scivolata di D19, e si ferma dove si sentiva quando il tasto sale; con due tasti di valori
+    diversi giù i due valori si muovono insieme; il tasto opposto, premuto col primo ancora giù, lo fa tornare indietro, e
+    lasciato riporta al verso del primo. La ripetizione del tasto tenuto giù non cambia niente, e fuori dalla mira i tasti
+    non fanno niente."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    senti_anche_le_statistiche(banco, statistiche)
+    assert partita.muovi("direzione", 1) == [] and partita.lascia("direzione", 1) == [] and partita.tasti_giu() == []
+    partita.nuova()
+    banco.flusso.avanza(10)
+    assert partita.muovi("direzione", 1) == [] and partita.mira is None and partita.tasti_giu() == [] and partita.secondi_della_mira() is None
+    assert partita.spazio() == []
+    assert partita.fase == "mira" and isinstance(partita.mira, modulo_mira.Mira) and banco.contati[-1] == "mira_avviata"
+    assert statistiche.dati["conti"]["mire_avviate"] == 1 and partita.valori == []
+    inizio = banco.motore.campione_udibile()
+    assert partita.mira.valori(inizio / FS) == [PARTENZA_DELLA_MIRA] * 3 == [0.5] * 3
+    assert partita._voci_degli_assi == {} and partita.tasti_giu() == []
+    # La direzione verso destra e l'alzo verso il basso, insieme, ognuno con la sua voce.
+    k = banco.motore.prossimo_campione()
+    assert partita.muovi("direzione", 1) == [] and partita.muovi("alzo", -1) == []
+    assert partita.tasti_giu() == [("direzione", 1), ("alzo", -1)]
+    voce = partita._voci_degli_assi["direzione"]
+    assert isinstance(voce, VoceTono) and voce.forma == SCIVOLATA_FORMA["direzione"] and voce.inizio == k
+    assert partita._voci_degli_assi["alzo"].forma == SCIVOLATA_FORMA["alzo"] and "potenza" not in partita._voci_degli_assi
+    # La voce suona il valore di ogni istante del tempo dell'audio: a 0,3 e a 0,9 secondi dal tasto, il sesto e l'ottavo decimo.
+    frequenze, pan, guadagni = voce.parametri(None, inizio / FS + np.array((0.3, 0.9)))
+    attese = parametri_dell_asse("direzione", np.array((0.6, 0.8)))
+    for avuti, voluti in zip((frequenze, pan, guadagni), attese, strict=True):
+        np.testing.assert_allclose(avuti, voluti, atol=1e-9)
+    # La ripetizione del tasto tenuto giù non cambia niente, e non è una pressione.
+    assert partita.muovi("direzione", 1) == [] and partita._voci_degli_assi["direzione"] is voce and partita.mira.pressioni == 2
+    porta_udibile_a(banco, inizio + 0.6 * FS)
+    assert partita.battito() == []
+    assert partita.mira.valori(inizio / FS + 0.6) == pytest.approx([0.7, 0.3, 0.5])
+    # Lasciata, la direzione si ferma dove si sentiva, e la sua voce tace; l'alzo va avanti.
+    assert partita.lascia("direzione", 1) == [] and "direzione" not in partita._voci_degli_assi
+    porta_udibile_a(banco, inizio + 0.9 * FS)
+    assert partita.mira.valori(inizio / FS + 0.9) == pytest.approx([0.7, 0.2, 0.5])
+    # La freccia su, con la giù ancora giù, fa salire l'alzo; lasciata, l'alzo torna a scendere; lasciata anche la giù, si ferma.
+    alzo = partita._voci_degli_assi["alzo"]
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [("alzo", -1), ("alzo", 1)] and partita._voci_degli_assi["alzo"] is not alzo
+    porta_udibile_a(banco, inizio + 1.2 * FS)
+    assert partita.mira.valori(inizio / FS + 1.2) == pytest.approx([0.7, 0.3, 0.5])
+    assert partita.lascia("alzo", 1) == [] and partita.tasti_giu() == [("alzo", -1)]
+    porta_udibile_a(banco, inizio + 1.5 * FS)
+    assert partita.lascia("alzo", -1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.mira.valori(inizio / FS + 9.0) == pytest.approx([0.7, 0.2, 0.5])
+    # Il tasto che non era giù non cambia niente; un parametro o un verso sconosciuti non sono tasti della mira.
+    assert partita.lascia("potenza", 1) == [] and partita.mira.pressioni == 3
+    with pytest.raises(ValueError):
+        partita.muovi("velocita", 1)
+    with pytest.raises(ValueError):
+        partita.muovi("direzione", 0)
+    # Le voci lasciate finiscono.
+    banco.flusso.avanza(4)
+    assert voce.finita and alzo.finita and partita.fase == "mira" and partita.valori == []
+
+
+def test_le_tacche_e_il_suono_del_capo(banco, monkeypatch):
+    """D29: il valore che si muove suona una tacca a ogni decimo della scala che attraversa, in tutte e due le direzioni, la
+    tacca di quel decimo, e al capo si ferma col suono fine_scala, dove tace anche la sua voce; il suono del capo si conta
+    quando si sente, al battito, una volta sola, e non si conta, né suona, se il tasto sale prima. Al capo il valore resta,
+    e il tasto premuto ancora verso lo stesso capo fa sentire subito fine_scala."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
     partita = banco.partita()
     partita.nuova()
     partita.spazio()
-    assert partita.fase == "mira" and partita.barra == 0
-    porta_udibile_a(banco, partita.inizio_barra - 100)
-    assert partita.battito() == [] and partita.sottofase == "pausa"
-    prima = list(banco.contati)
-    assert partita.spazio() == []
-    assert partita.spazio() == []
-    assert partita.valori == [] and partita.barra == 0 and banco.contati == prima
+    inizio = banco.motore.campione_udibile()
+    prima = len(suonate)
+    partita.muovi("direzione", 1)
+    voce = partita._voci_degli_assi["direzione"]
+    nuove = suonate[prima:]
+    # Dal centro verso destra: le tacche del sesto, del settimo, dell'ottavo e del nono decimo, poi il capo.
+    assert len(nuove) == TACCHE - 5
+    for (buffer, campione, _voce), decimo in zip(nuove[:-1], range(6, TACCHE), strict=True):
+        assert buffer is partita._tacche["direzione"][decimo]
+        assert abs(campione - round((inizio / FS + (decimo / TACCHE - 0.5) / VELOCITA_DELLA_MIRA) * FS)) <= 1
+    np.testing.assert_allclose(partita._tacche["direzione"][7], tacca_dell_asse("direzione", 7))
+    _buffer, capo, voce_del_capo = nuove[-1]
+    assert abs(capo - round((inizio / FS + 0.5 / VELOCITA_DELLA_MIRA) * FS)) <= 1
+    # Il suono del capo si conta quando si sente; la voce del valore tace lì.
+    porta_udibile_a(banco, capo - 1)
+    assert partita.battito() == [] and "fine_scala" not in banco.contati
+    porta_udibile_a(banco, capo)
+    assert partita.battito() == [] and banco.contati.count("fine_scala") == 1
+    porta_udibile_a(banco, capo + 0.5 * FS)
+    assert partita.battito() == [] and banco.contati.count("fine_scala") == 1
+    assert voce.finita and voce.finita_al == capo + SFUMATURA and voce_del_capo.finita_al == capo + LUNGHEZZA_FINTA
+    assert partita.mira.valori(capo / FS + 5.0)[0] == 1.0 and partita.tasti_giu() == [("direzione", 1)]
+    assert partita.lascia("direzione", 1) == []
+    # Il tasto premuto di nuovo verso il capo dove il valore sta già: fine_scala subito, senza tacche; lasciato prima che si
+    # senta, non suona e non si conta.
+    prima = len(suonate)
+    k = banco.motore.prossimo_campione()
+    partita.muovi("direzione", 1)
+    assert [campione for _b, campione, _v in suonate[prima:]] == [k]
+    di_nuovo = suonate[-1][2]
+    assert partita.lascia("direzione", 1) == []
+    banco.flusso.avanza_fino(k + banco.motore.blocco)
+    assert partita.battito() == [] and di_nuovo.finita and di_nuovo.finita_al == k and banco.contati.count("fine_scala") == 1
+    # Verso sinistra le tacche tornano indietro, dal nono decimo al primo; il tasto lasciato dopo un secondo e due decimi, a
+    # sei decimi, ferma le tacche che il valore non ha attraversato e il suono del capo, che finiscono senza suonare.
+    porta_udibile_a(banco, banco.motore.campione_udibile() + 0.1 * FS)
+    partenza = banco.motore.campione_udibile()
+    prima = len(suonate)
+    partita.muovi("direzione", -1)
+    nuove = suonate[prima:]
+    assert [next(decimo for decimo in range(1, TACCHE) if buffer is partita._tacche["direzione"][decimo]) for buffer, _c, _v in nuove[:-1]] == list(
+        range(TACCHE - 1, 0, -1))
+    porta_udibile_a(banco, partenza + 1.2 * FS)
+    assert partita.lascia("direzione", -1) == []
+    assert partita.mira.valori(partenza / FS + 5.0)[0] == pytest.approx(0.6)
+    banco.flusso.avanza_fino(nuove[-1][1] + banco.motore.blocco)
+    assert partita.battito() == [] and banco.contati.count("fine_scala") == 1
+    for _buffer, campione, tacca in nuove:
+        assert tacca.finita
+        if campione > partenza + 1.2 * FS + 2 * banco.motore.blocco + banco.flusso.latency * FS:
+            assert tacca.finita_al == campione
 
 
-def test_spazio_nei_bip_vale_il_minimo(banco):
+def test_lo_spazio_nella_mira_suona_non_ora(banco):
+    """D29: nella mira spara l'Invio, e lo spazio, come col proiettile in volo, fa sentire soltanto il non ora: la mira resta
+    com'era, coi suoi valori e i suoi tasti."""
     partita = banco.partita()
     partita.nuova()
     partita.spazio()
-    barra = partita.scivolate["direzione"]
-    porta_udibile_a(banco, partita.inizio_barra + barra.inizio_scivolata / 2)
-    assert partita.battito() == [] and partita.sottofase == "conto"
-    assert partita.spazio() == []
-    assert partita.valori == [0.0] and partita.barra == 1 and partita.sottofase == "pausa"
-    assert banco.contati[-1] == "valore_preso"
+    partita.muovi("potenza", 1)
+    mira = partita.mira
+    prima = len(banco.contati)
+    assert partita.spazio() == [] and banco.contati[prima:] == ["non_ora"]
+    assert partita.fase == "mira" and partita.mira is mira and partita.tasti_giu() == [("potenza", 1)]
+
+
+def test_l_invio_spara_coi_valori_dell_istante_udibile(banco, cartella_di_prova, monkeypatch):
+    """D29: Invio fa partire il colpo coi tre valori dell'istante in cui si è sentito, anche coi tasti ancora giù, che da lì non
+    contano più, e la mira finisce. Il tempo di gioco scorre nella mira, e il colpo parte da un campione scelto prima del conto
+    del volo, ANTICIPO_DELLO_SPARO dopo il prossimo campione sicuro: il volo parte dal tempo di gioco di quel campione, e lo
+    sparo e la voce del proiettile da lì. Le statistiche contano ogni valore fra quelli della mira manuale, e la mira sparata
+    coi suoi secondi e i tasti premuti. Fuori dalla mira Invio non fa niente."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    banco.flusso.avanza(10)
+    assert partita.spara() == [] and partita.fase == "ascolto" and partita.tiri == 0
+    avviata = banco.motore.prossimo_campione()
+    partita.spazio()
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("direzione", 1)
+    partita.muovi("alzo", -1)
+    porta_udibile_a(banco, inizio + 0.6 * FS)
+    voci = list(partita._voci_degli_assi.values())
+    sparo = banco.motore.prossimo_campione() + round(ANTICIPO_DELLO_SPARO * FS)
+    assert partita.spara() == []
+    valori = [0.5 + 0.6 * VELOCITA_DELLA_MIRA, 0.5 - 0.6 * VELOCITA_DELLA_MIRA, 0.5]
+    assert partita.fase == "volo" and partita.valori == pytest.approx(valori, abs=1e-9) and partita.tiri == 1
+    assert partita.mira is None and partita.tasti_giu() == [] and partita.secondi_della_mira() is None and partita._voci_degli_assi == {}
+    volo = partita.ultimo_volo
+    assert volo.partenza == pytest.approx(banco.motore.tempo_di_gioco(sparo)) and volo.partenza > banco.motore.tempo_di_gioco(inizio + 0.6 * FS)
+    assert partita._voce_proiettile.inizio == sparo and any(campione == sparo for _b, campione, _v in suonate)
+    # Invio di nuovo, col proiettile in volo, non fa niente.
+    assert partita.spara() == [] and partita.tiri == 1
+    banco.flusso.avanza(4)
+    assert all(voce.finita for voce in voci)
+    mira = statistiche.dati["mira"]
+    assert [mira[parametro]["manuali"] for parametro in PARAMETRI] == [1, 1, 1] and [mira[parametro]["ai_capi"] for parametro in PARAMETRI] == [0, 0, 0]
+    assert [mira[parametro]["somma"] for parametro in PARAMETRI] == pytest.approx(valori, abs=1e-6)
+    conti = statistiche.dati["conti"]
+    assert (conti["mire_sparate"], conti["tasti_della_mira"], conti["mire_scadute"]) == (1, 2, 0)
+    assert statistiche.dati["somme"]["secondi_di_mira"] == pytest.approx((inizio + 0.6 * FS - avviata) / FS, abs=1e-3)
+    assert fino_alla_risoluzione(banco, partita)[0].tipo == "resoconto"
+
+
+def test_il_tempo_scorre_e_i_bersagli_suonano_pieni_nella_mira(banco):
+    """D29, al posto di D4, che non vale più: durante la mira il tempo di gioco scorre e i bersagli restano a volume pieno,
+    perché chi gioca deve capire l'esatta distanza del bersaglio; il colpo parte dal tempo di gioco dello sparo, non da
+    quello dello spazio."""
+    partita = banco.partita()
+    partita.nuova()
+    banco.flusso.avanza(20)
+    voce = partita._voci[partita.bersagli[0]]
+    partita.spazio()
+    banco.flusso.avanza(4)
+    allo_spazio = banco.motore.tempo_di_gioco()
+    banco.flusso.avanza(40)
+    assert banco.motore.tempo_scorre and banco.motore.tempo_di_gioco() == pytest.approx(allo_spazio + 40 * banco.motore.blocco / FS * VELOCITA_DEL_TEMPO)
+    assert voce.guadagno == 1.0
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+    assert partita.ultimo_volo.partenza > allo_spazio + 40 * banco.motore.blocco / FS + DURATA_DELLA_SCALA / 2
+    banco.flusso.avanza(4)
+    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre
+
+
+def test_i_mobili_si_muovono_durante_la_mira(banco, monkeypatch):
+    """D29: i mobili continuano a muoversi durante la mira, e la mira va su dove il bersaglio sarà all'arrivo del proiettile:
+    il colpo mirato così lo prende, mentre quello mirato dove il bersaglio stava allo spazio, come col tempo fermo di D4, lo
+    manca."""
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    partita = banco.partita()
+    partita.nuova()
+    partita.livello = LIVELLO_DEI_MOBILI
+    partita._nuovo_bersaglio()
+    mobile = partita.bersagli[-1]
+    assert mobile.mobile and not modulo_partita.nella_palestra(LIVELLO_DEI_MOBILI)
+    allo_spazio = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
+    dove_era = mobile.posizione(allo_spazio)
+    colpisci(banco, partita, mobile)
+    volo = partita.ultimo_volo
+    assert volo.colpito is mobile and volo.partenza > allo_spazio + DURATA_DELLA_SCALA / 2
+    assert np.linalg.norm(mobile.posizione(volo.fine) - dove_era) > mobile.raggio
+    fermo = calcola_volo(Traiettoria(*parametri_del_tiro(*soluzione(dove_era))), [mobile], volo.partenza)
+    assert fermo.colpito is None
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert messaggi[0].dati["colpito"] and partita.fase == "ascolto"
+
+
+def test_il_bonus_esce_durante_la_mira(banco, bonus_sicuro, monkeypatch):
+    """D29: anche il bonus si muove durante la mira, e può uscire: l'uscita si dice al battito della mira, e la mira va avanti."""
+    partita = banco.partita()
+    partita.nuova()
+    bonus = _bonus_quasi_uscito(banco, partita, 0.5)
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    partita.spazio()
+    assert partita.fase == "mira"
+    usciti = []
+    for _blocco in range(BLOCCHI_MASSIMI):
+        banco.flusso.avanza(1)
+        usciti.extend(partita.battito())
+        if usciti:
+            break
+    assert [m.annuncio for m in usciti] == ["Bonus uscito."] and banco.motore.tempo_di_gioco() >= bonus.tempo_di_uscita
+    assert partita.fase == "mira" and partita.bonus is None and bonus not in partita.bersagli
+    assert partita.righe_della_barra()[2] == "Bersagli in volo: 1"
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
+    assert fino_alla_risoluzione(banco, partita)[0].tipo == "resoconto"
+
+
+def test_tempo_della_mira():
+    """D29: nella palestra la mira non ha tempo; dopo, 30 secondi al primo livello fuori, il quarto, uno in meno a ogni livello,
+    10 secondi dal livello 24 in poi."""
+    assert PALESTRA_FINO_AL_LIVELLO == 3
+    assert [tempo_della_mira(livello) for livello in range(1, PALESTRA_FINO_AL_LIVELLO + 1)] == [None] * PALESTRA_FINO_AL_LIVELLO
+    assert [tempo_della_mira(livello) for livello in (4, 5, 6, 23, 24, 25, 60)] == [30.0, 29.0, 28.0, 11.0, 10.0, 10.0, 10.0]
+    assert LIVELLO_DELLA_MIRA_BREVE == 24 and tempo_della_mira(LIVELLO_DELLA_MIRA_BREVE) == TEMPO_DELLA_MIRA_MINIMO
+    assert "tempo_della_mira" in modulo_partita.__all__
+
+
+def test_la_mira_a_tempo_e_i_suoi_tick(banco, monkeypatch):
+    """D29: fuori dalla palestra la mira è a tempo, per tutti e tre i valori insieme, dallo spazio, finiti gli avvisi: un tick
+    al secondo, sempre più acuto, scandisce il tempo che scorre, dal primo secondo all'ultimo prima della scadenza;
+    secondi_della_mira dice quanti ne restano, e la barra di stato li dice coi valori. Nella palestra niente tempo e niente
+    tick. La mira avviata mentre gli avvisi suonano ancora la prova test_il_tempo_della_mira_parte_dopo_gli_avvisi."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    partita = banco.partita()
+    partita.nuova()
+    prima = len(suonate)
+    partita.spazio()
+    assert len(suonate) == prima + 1 and partita.secondi_della_mira() is None and partita._scadenza is None
+    assert partita.righe_della_barra()[-2] == "Direzione davanti, alzo 50,0 gradi, potenza 50%, senza tempo"
+    partita.annulla_mira()
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    totale = round(TEMPO_DELLA_MIRA_MINIMO)
+    finiti_gli_avvisi(banco, partita)
+    prima = len(suonate)
+    k = banco.motore.prossimo_campione()
+    partita.spazio()
+    tick = suonate[prima + 1:]
+    assert len(tick) == totale - 1
+    for secondo, (buffer, campione, _voce) in enumerate(tick, start=1):
+        assert campione == k + round(secondo * FS)
+        np.testing.assert_allclose(buffer, tick_del_tempo(secondo, totale))
+    # Sempre più acuti: il primo e l'ultimo non sono lo stesso bip.
+    assert not np.allclose(tick[0][0], tick[-1][0])
+    assert partita.secondi_della_mira() == pytest.approx(totale) and partita._scadenza == k + round(totale * FS)
+    assert partita.righe_della_barra()[-2] == f"Direzione davanti, alzo 50,0 gradi, potenza 50%, {totale} secondi"
+    porta_udibile_a(banco, k + 3.5 * FS)
+    assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale - 3.5)
+    assert partita.righe_della_barra()[-2] == f"Direzione davanti, alzo 50,0 gradi, potenza 50%, {math.ceil(totale - 3.5)} secondi"
+    # I tick si sentono: quelli già passati hanno suonato tutto il loro bip.
+    banco.flusso.avanza(2)
+    assert tick[0][2].finita and tick[0][2].finita_al == tick[0][1] + len(tick[0][0])
+    assert not tick[-1][2].finita
+
+
+def test_allo_scadere_il_colpo_parte_da_solo(banco, cartella_di_prova):
+    """D29: allo scadere della mira a tempo il colpo parte da solo coi valori dell'istante della scadenza, anche col tasto ancora
+    giù e il battito che se ne accorge dopo; la mira si conta fra quelle sparate e fra le scadute, coi suoi secondi interi."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    finiti_gli_avvisi(banco, partita)
+    avviata = banco.motore.prossimo_campione()
+    partita.spazio()
+    scadenza = partita._scadenza
+    assert scadenza == avviata + round(TEMPO_DELLA_MIRA_MINIMO * FS)
+    # La direzione si muove verso destra da mezzo secondo prima della scadenza, e il tasto resta giù.
+    porta_udibile_a(banco, scadenza - 0.5 * FS)
+    assert partita.battito() == []
+    partita.muovi("direzione", 1)
+    porta_udibile_a(banco, scadenza - 1)
+    assert partita.battito() == [] and partita.fase == "mira" and partita.secondi_della_mira() == pytest.approx(1 / FS)
+    porta_udibile_a(banco, scadenza + 0.2 * FS)
+    assert partita.battito() == []
+    assert partita.fase == "volo" and partita.valori == pytest.approx([0.5 + 0.5 * VELOCITA_DELLA_MIRA, 0.5, 0.5], abs=1e-9)
+    assert partita.mira is None and partita._scadenza is None and partita.tasti_giu() == []
+    conti = statistiche.dati["conti"]
+    assert (conti["mire_sparate"], conti["mire_scadute"], conti["tasti_della_mira"]) == (1, 1, 1)
+    assert statistiche.dati["somme"]["secondi_di_mira"] == pytest.approx(TEMPO_DELLA_MIRA_MINIMO, abs=1e-3)
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert messaggi[0].tipo == "resoconto" and partita.fase == "ascolto" and partita.tiri == 1
+
+
+def test_l_invio_e_i_tasti_dopo_la_scadenza_non_spostano_il_colpo(banco, cartella_di_prova):
+    """D29: la mira a tempo finisce alla scadenza, e il colpo parte coi valori di quell'istante. L'Invio sentito dopo la
+    scadenza, prima che il battito se ne accorga, trova la mira già scaduta: il colpo parte coi valori della scadenza, e la
+    mira conta fra le scadute, come lo spazio che arrivava dopo la scadenza di una barra la faceva scadere (D25). Così il tasto
+    che sale dopo la scadenza, e quello che scende: il valore del colpo resta quello della scadenza."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    alla_scadenza = [0.5 + 0.5 * VELOCITA_DELLA_MIRA, 0.5, 0.5]
+    # L'Invio due centesimi dopo la scadenza.
+    partita.spazio()
+    scadenza = partita._scadenza
+    porta_udibile_a(banco, scadenza - 0.5 * FS)
+    partita.muovi("direzione", 1)
+    porta_udibile_a(banco, scadenza + 0.02 * FS)
+    assert partita.spara() == [] and partita.fase == "volo"
+    assert partita.valori == pytest.approx(alla_scadenza, abs=1e-9)
+    assert statistiche.dati["conti"]["mire_scadute"] == 1
+    fino_alla_risoluzione(banco, partita)
+    # Il tasto che sale due centesimi dopo la scadenza, e il battito dopo di lui.
+    partita.spazio()
+    scadenza = partita._scadenza
+    porta_udibile_a(banco, scadenza - 0.5 * FS)
+    partita.muovi("direzione", 1)
+    porta_udibile_a(banco, scadenza + 0.02 * FS)
+    partita.lascia("direzione", 1)
+    assert partita.battito() == [] and partita.fase == "volo"
+    assert partita.valori == pytest.approx(alla_scadenza, abs=1e-9)
+    assert statistiche.dati["conti"]["mire_scadute"] == 2
+    fino_alla_risoluzione(banco, partita)
+    # Il tasto di un altro valore che scende due centesimi dopo la scadenza, prima del battito: non muove l'alzo, e il colpo
+    # parte coi valori della scadenza, fra le scadute.
+    partita.spazio()
+    scadenza = partita._scadenza
+    porta_udibile_a(banco, scadenza - 0.5 * FS)
+    partita.muovi("direzione", 1)
+    porta_udibile_a(banco, scadenza + 0.02 * FS)
+    assert partita.muovi("alzo", 1) == [] and partita.fase == "volo"
+    assert partita.valori == pytest.approx(alla_scadenza, abs=1e-9)
+    assert statistiche.dati["conti"]["mire_scadute"] == 3 and statistiche.dati["conti"]["mire_sparate"] == 3
+
+
+def test_la_pausa_nella_mira_a_tempo_conserva_i_secondi(banco, monkeypatch):
+    """D29 e D14: la pausa, qui quella della finestra, che c'è in tutti i livelli, ferma la mira a tempo coi secondi che le
+    restano: i tick tacciono, il valore che si muoveva si ferma dove si sentiva, il suo tasto vale come lasciato, e la mira non
+    scade, per quanto duri la pausa; in pausa i tasti dei valori non fanno niente, e l'Invio e lo spazio fanno sentire il non
+    ora. Alla ripresa il conto riparte dai secondi rimasti, coi tick dei secondi che mancano, e la scadenza arriva dopo di
+    loro, coi valori di prima della pausa."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    partita = banco.partita()
+    partita.nuova()
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    totale = round(TEMPO_DELLA_MIRA_MINIMO)
+    voce = partita._voci[partita.bersagli[0]]
+    finiti_gli_avvisi(banco, partita)
+    k = banco.motore.prossimo_campione()
+    partita.spazio()
+    assert partita._mira_dal == k
+    porta_udibile_a(banco, k + 3.25 * FS)
+    partita.muovi("direzione", -1)
+    asse = partita._voci_degli_assi["direzione"]
+    porta_udibile_a(banco, k + 3.4 * FS)
+    assert partita.pausa_automatica(True) == [] and partita.in_pausa and partita.fase == "mira"
+    rimasti = totale - 3.4
+    fermi = [0.5 - 0.15 * VELOCITA_DELLA_MIRA, 0.5, 0.5]
+    assert partita.secondi_della_mira() == pytest.approx(rimasti) and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.mira.valori(k / FS + 60.0) == pytest.approx(fermi)
+    assert partita._tick_in_fila == [] and partita._scadenza is None
+    assert partita.righe_della_barra()[-2:] == [resoconti.riga_dei_valori_della_mira(*parametri_del_tiro(*fermi)[:2], fermi[2], rimasti),
+                                                "In pausa: Ctrl+P per riprendere"]
+    # In pausa: i tasti non fanno niente, Invio e spazio il non ora.
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    prima = len(banco.contati)
+    assert partita.spara() == [] and partita.spazio() == [] and banco.contati[prima:] == ["non_ora", "non_ora"] and partita.fase == "mira"
+    # Una pausa lunga il doppio della mira: niente scadenza, e passata la rampa del guadagno tutto tace, tick compresi.
+    uscita = []
+    for _secondo in range(2 * totale):
+        uscita.append(banco.flusso.avanza_secondi(1.0))
+        assert partita.battito() == []
+    uscita = np.concatenate(uscita)
+    assert not uscita[round(0.2 * FS):].any()
+    assert partita.fase == "mira" and partita.secondi_della_mira() == pytest.approx(rimasti) and asse.finita and voce.guadagno == 0.0
+    # La ripresa: i tick dei secondi che mancano, dal campione della ripresa, e la scadenza dopo i secondi rimasti.
+    prima = len(suonate)
+    ripresa = banco.motore.prossimo_campione()
+    assert partita.pausa_automatica(False) == [] and not partita.in_pausa
+    tick = suonate[prima:]
+    secondi = [secondo for secondo in range(1, totale) if secondo > totale - rimasti]
+    assert len(tick) == len(secondi) == totale - 4
+    for secondo, (buffer, campione, _voce) in zip(secondi, tick, strict=True):
+        assert abs(campione - (ripresa + round((secondo - (totale - rimasti)) * FS))) <= 1
+        np.testing.assert_allclose(buffer, tick_del_tempo(secondo, totale))
+    assert abs(partita._scadenza - (ripresa + round(rimasti * FS))) <= 1
+    banco.flusso.avanza(10)
+    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre and partita.tasti_giu() == []
+    porta_udibile_a(banco, partita._scadenza - 1)
+    assert partita.battito() == [] and partita.fase == "mira"
+    porta_udibile_a(banco, partita._scadenza)
+    assert partita.battito() == [] and partita.fase == "volo"
+    assert partita.valori == pytest.approx(fermi, abs=1e-9)
+
+
+@pytest.mark.parametrize("a_tempo", [False, True])
+def test_i_secondi_della_mira_nelle_statistiche_non_contano_le_pause(banco, cartella_di_prova, a_tempo):
+    """D29 e D14: le statistiche sommano i secondi di ogni mira finita col colpo, per il tempo medio di una mira, e come la durata
+    della partita non contano il tempo in cui la partita è stata ferma. Una mira della palestra, un secondo prima e uno dopo
+    un minuto di pausa chiesta con Ctrl+P, conta due secondi; una mira a tempo scaduta, con mezzo minuto della pausa della
+    finestra nel mezzo, conta i suoi dieci secondi. La mira comincia finiti gli avvisi della partita nuova, perché il suo tempo
+    partirebbe soltanto dopo di loro: i secondi della mira che li aspetta la prova test_il_tempo_della_mira_parte_dopo_gli_avvisi."""
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    partita.nuova()
+    if a_tempo:
+        partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    finiti_gli_avvisi(banco, partita)
+    avviata = banco.motore.prossimo_campione()
+    partita.spazio()
+    porta_udibile_a(banco, avviata + 1.0 * FS)
+    if a_tempo:
+        partita.pausa_automatica(True)
+        banco.flusso.avanza_secondi(30.0)
+        partita.pausa_automatica(False)
+        porta_udibile_a(banco, partita._scadenza)
+        assert partita.battito() == [] and partita.fase == "volo"
+        attesi = TEMPO_DELLA_MIRA_MINIMO
+    else:
+        partita.pausa()
+        banco.flusso.avanza_secondi(60.0)
+        ripresa = banco.motore.prossimo_campione()
+        partita.pausa()
+        porta_udibile_a(banco, ripresa + 1.0 * FS)
+        assert partita.spara() == [] and partita.fase == "volo"
+        attesi = 2.0
+    assert statistiche.dati["conti"]["mire_sparate"] == 1
+    assert statistiche.dati["somme"]["secondi_di_mira"] == pytest.approx(attesi, abs=0.1)
+
+
+def test_il_tempo_della_mira_parte_dopo_l_avviso_della_partita_nuova(banco, cartella_di_prova, monkeypatch):
+    """D29, dalle prove del 22 novembre 2026: il tempo della mira a tempo, la scadenza e i tick, parte dallo spazio o, se gli
+    avvisi in fila suonano ancora, dalla loro fine, stacco compreso: la mira avviata subito dopo nuova() aspetta la fine
+    dell'avviso della partita nuova. Fino a lì i secondi della mira restano tutti, e la barra li dice tutti, ma i valori si
+    muovono già; allo scadere il colpo parte da solo, e le statistiche contano i secondi della mira dallo spazio, l'attesa
+    dell'avviso compresa, perché è tempo di mira anche quello."""
+    avviso = np.full((round(1.2 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
+    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: avviso if nome == suoni.EVENTI["nuova_partita"] else corto)
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
+    partita = banco.partita(statistiche=statistiche)
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
+    partita.nuova()
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
+    totale = round(TEMPO_DELLA_MIRA_MINIMO)
+    nuova_partita = next(voce for buffer, _campione, voce in suonate if buffer is avviso)
+    fine = nuova_partita.inizio + len(avviso) + stacco
+    avviata = banco.motore.prossimo_campione()
+    assert partita._fine_degli_avvisi == fine and fine > avviata + FS
+    prima = len(suonate)
+    partita.spazio()
+    tick = suonate[prima + 1:]
+    assert partita.fase == "mira" and partita._mira_dal == fine and partita._scadenza == fine + round(totale * FS)
+    assert [campione for _buffer, campione, _voce in tick] == [fine + round(secondo * FS) for secondo in range(1, totale)]
+    # Mentre l'avviso suona i secondi restano tutti, e la direzione si muove già.
+    assert partita.secondi_della_mira() == pytest.approx(totale)
+    assert partita.righe_della_barra()[-2] == f"Direzione davanti, alzo 50,0 gradi, potenza 50%, {totale} secondi"
+    porta_udibile_a(banco, fine - 0.5 * FS)
+    assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale)
+    assert partita.muovi("direzione", 1) == []
+    porta_udibile_a(banco, fine)
+    assert partita.lascia("direzione", 1) == [] and partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale)
+    porta_udibile_a(banco, fine + 2.5 * FS)
+    assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale - 2.5)
+    # Allo scadere il colpo parte da solo, coi valori di quel momento.
+    porta_udibile_a(banco, partita._scadenza)
+    assert partita.battito() == [] and partita.fase == "volo"
+    assert partita.valori == pytest.approx([0.5 + 0.5 * VELOCITA_DELLA_MIRA, 0.5, 0.5], abs=1e-9)
+    assert statistiche.dati["conti"]["mire_scadute"] == 1
+    assert statistiche.dati["somme"]["secondi_di_mira"] == pytest.approx((fine + totale * FS - avviata) / FS, abs=1e-3)
+    assert fino_alla_risoluzione(banco, partita)[0].tipo == "resoconto"
+
+
+def test_il_tempo_della_mira_non_copre_la_fanfara_del_livello(banco, monkeypatch):
+    """D29, dalle prove del 22 novembre 2026: fuori dalla palestra il centro che chiude il livello mette in fila, dopo l'effetto
+    dell'impatto, la fanfara del livello nuovo; lo spazio dato mentre suona avvia la mira, ma il suo tempo, coi tick, parte alla
+    fine della fanfara, stacco compreso, e fino a lì i secondi restano tutti."""
+    fanfara = np.full((round(1.5 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
+    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: fanfara if nome == suoni.EVENTI["livello_su"] else corto)
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
+    partita = banco.partita()
+    partita.nuova()
+    partita.livello = PALESTRA_FINO_AL_LIVELLO + 1
+    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
+    colpisci(banco, partita)
+    messaggi = fino_alla_risoluzione(banco, partita)
+    assert [m.tipo for m in messaggi][:2] == ["resoconto", "livello"] and partita.livello == PALESTRA_FINO_AL_LIVELLO + 2
+    assert partita.fase == "ascolto"
+    voce = next(voce for buffer, _campione, voce in suonate if buffer is fanfara)
+    fine = voce.inizio + len(fanfara) + stacco
+    k = banco.motore.prossimo_campione()
+    assert partita._fine_degli_avvisi == fine and k + FS < fine
+    totale = tempo_della_mira(partita.livello)
+    prima = len(suonate)
+    partita.spazio()
+    tick = suonate[prima + 1:]
+    assert partita.fase == "mira" and partita._mira_dal == fine and partita._scadenza == fine + round(totale * FS)
+    assert len(tick) == math.ceil(totale) - 1 and tick[0][1] == fine + FS
+    porta_udibile_a(banco, fine - 1)
+    assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale)
+    porta_udibile_a(banco, fine + 1.5 * FS)
+    assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale - 1.5)
+
+
+def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
+    """D29, dalle prove del 22 novembre 2026: quando il moto di un valore cambia, tacciono soltanto le tacche e il suono del capo
+    messi in fila e non ancora partiti; quelli che si sentono già finiscono. Il tasto lasciato poco dopo che il valore è arrivato
+    al capo, o un tocco brevissimo verso il capo dove il valore sta già, non troncano fine_scala; il tasto lasciato prima che il
+    suono parta lo ferma, e non suona. Il tasto opposto premuto mentre una tacca suona la lascia finire, e le tacche e il capo
+    davanti, che il valore non attraversa più, tacciono senza suonare."""
+    capo_lungo = np.full((round(0.3 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
+    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
+    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: capo_lungo if nome == suoni.EVENTI["fine_scala"] else corto)
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    partita = banco.partita()
+    partita.nuova()
+    partita.spazio()
+    # La potenza va al massimo, e il tasto sale un centesimo dopo il capo, mentre fine_scala suona: tutto finisce di suonare.
+    prima = len(suonate)
+    assert partita.muovi("potenza", 1) == []
+    buffer, capo, voce_del_capo = suonate[-1]
+    tacche = suonate[prima:-1]
+    assert buffer is capo_lungo and len(tacche) == TACCHE - 6
+    porta_udibile_a(banco, capo + OLTRE_IL_CAPO * FS)
+    contati = banco.contati.count("fine_scala")
+    assert partita.lascia("potenza", 1) == [] and partita.mira.valori(capo / FS + 1.0)[2] == 1.0
+    # Il suono del capo già partito si conta al rilascio, perché il battito non lo trova più in fila.
+    assert banco.contati.count("fine_scala") == contati + 1
+    banco.flusso.avanza_fino(capo + len(capo_lungo) + banco.motore.blocco)
+    assert voce_del_capo.finita and voce_del_capo.finita_al == capo + len(capo_lungo)
+    assert all(voce.finita and voce.finita_al == campione + len(tacca) for tacca, campione, voce in tacche)
+    # Il tocco brevissimo verso il capo dove la potenza sta già: fine_scala parte subito, e il tasto che sale cinque centesimi
+    # dopo non lo tronca.
+    k = banco.motore.prossimo_campione()
+    assert partita.muovi("potenza", 1) == []
+    buffer, inizio, di_nuovo = suonate[-1]
+    assert buffer is capo_lungo and inizio == k
+    porta_udibile_a(banco, k + 0.05 * FS)
+    assert partita.lascia("potenza", 1) == []
+    banco.flusso.avanza_fino(k + len(capo_lungo) + banco.motore.blocco)
+    assert di_nuovo.finita and di_nuovo.finita_al == k + len(capo_lungo)
+    # Lasciato prima che parta, invece, fine_scala non suona.
+    k = banco.motore.prossimo_campione()
+    assert partita.muovi("potenza", 1) == []
+    ancora = suonate[-1][2]
+    assert suonate[-1][0] is capo_lungo and partita.lascia("potenza", 1) == []
+    banco.flusso.avanza_fino(k + banco.motore.blocco)
+    assert ancora.finita and ancora.finita_al == k
+    # Il suono del capo che non è partito non si conta.
+    assert banco.contati.count("fine_scala") == contati + 2
+    # Dal massimo verso il minimo, e a metà della prima tacca il tasto opposto: la tacca finisce, le altre e il capo tacciono.
+    prima = len(suonate)
+    assert partita.muovi("potenza", -1) == []
+    davanti = suonate[prima:]
+    assert davanti[-1][0] is capo_lungo and len(davanti) == TACCHE
+    tacca, campione, prima_tacca = davanti[0]
+    assert tacca is partita._tacche["potenza"][TACCHE - 1]
+    porta_udibile_a(banco, campione + len(tacca) // 2)
+    assert partita.muovi("potenza", 1) == [] and partita.lascia("potenza", -1) == [] and partita.lascia("potenza", 1) == []
+    banco.flusso.avanza_fino(davanti[-1][1] + banco.motore.blocco)
+    assert prima_tacca.finita and prima_tacca.finita_al == campione + len(tacca)
+    assert all(voce.finita and voce.finita_al == inizio for _buffer, inizio, voce in davanti[1:])
+    assert partita.tasti_giu() == [] and partita.fase == "mira"
 
 
 def test_la_precisione_globale_nelle_statistiche(banco, cartella_di_prova):
     """D26: ogni tiro con un bersaglio vicino ha la sua precisione globale, dal terzo collaudo 1 meno la distanza più piccola dal
-    centro del bersaglio divisa per la distanza fra quel centro e il più lontano degli angoli del cubo: il centro sta sopra 1 meno
-    raggio più RAGGIO_PROIETTILE diviso quella distanza. La partita la dà alle statistiche, tiro per tiro, e alla fine la sua media,
-    che va fra le ultime partite."""
+    centro del bersaglio divisa per la distanza fra quel centro e il punto della cupola più lontano da lui (D28): il centro sta
+    sopra 1 meno raggio più RAGGIO_PROIETTILE diviso quella distanza. La partita la dà alle statistiche, tiro per tiro, e alla
+    fine la sua media, che va fra le ultime partite."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     partita.nuova()
     bersaglio = partita.bersagli[0]
-    # Il bersaglio del primo livello è fermo: l'angolo più lontano si misura da dove sta.
-    lontananza = distanza_dall_angolo_piu_lontano(bersaglio.partenza)
+    # Il bersaglio del primo livello è fermo: il punto più lontano si misura da dove sta.
+    lontananza = distanza_dal_punto_piu_lontano(bersaglio.partenza)
     colpisci(banco, partita)
     centro = partita.ultimo_volo
     messaggi = fino_alla_risoluzione(banco, partita)
@@ -429,6 +1108,8 @@ def test_la_precisione_globale_nelle_statistiche(banco, cartella_di_prova):
     assert messaggi[0].dati["precisione_globale"] == centro.precisione_globale
     tiro_a_vuoto(banco, partita)
     vuoto = partita.ultimo_volo
+    # Il tiro a vuoto ha per vicino il bersaglio nato al posto del colpito, e la sua lontananza.
+    lontananza = distanza_dal_punto_piu_lontano(vuoto.vicino.partenza)
     assert vuoto.precisione_globale == pytest.approx(max(0.0, 1.0 - (vuoto.distanza_dal_vicino + vuoto.vicino.raggio) / lontananza))
     assert vuoto.precisione_globale < centro.precisione_globale
     somme = statistiche.dati["somme"]
@@ -437,203 +1118,72 @@ def test_la_precisione_globale_nelle_statistiche(banco, cartella_di_prova):
     partita.abbandona()
     media = (centro.precisione_globale + vuoto.precisione_globale) / 2
     assert statistiche.dati["ultime"][-1]["precisione_globale"] == round(media, 4)
-    # Una partita di due tiri entra nella media per partita, ma non prende il primato, che vuole almeno COLPI_INIZIALI tiri.
+    # Una partita di due tiri entra nella media per partita, ma non prende il primato, che vuole almeno TIRI_PER_IL_PRIMATO_DELLA_MEDIA tiri.
     assert somme["partite_col_globale"] == 1 and somme["globale_delle_partite"] == pytest.approx(media, abs=1e-4)
     assert "precisione_globale_media" not in statistiche.dati["primati"]
 
 
 def test_la_media_della_partita_prende_il_primato_dai_dieci_tiri(banco, cartella_di_prova):
-    """D26, dalla 0.11.8: il primato precisione_globale_media lo prende soltanto una partita con almeno COLPI_INIZIALI tiri."""
+    """D26, dalla 0.11.8, e D30: il primato precisione_globale_media lo prende soltanto una partita con almeno
+    TIRI_PER_IL_PRIMATO_DELLA_MEDIA tiri, 10, che con la riserva di D30 non sono più i colpi iniziali: una partita di nove
+    tiri non lo prende, una di dieci sì, anche abbandonata."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
-    partita.nuova()
-    globali = []
-    for _tiro in range(COLPI_INIZIALI):
-        tiro_a_vuoto(banco, partita)
-        globali.append(partita.ultimo_volo.precisione_globale)
-    assert partita.fase == "finita" and partita.tiri == COLPI_INIZIALI
-    assert statistiche.dati["primati"]["precisione_globale_media"]["valore"] == round(sum(globali) / COLPI_INIZIALI, 4)
+    assert TIRI_PER_IL_PRIMATO_DELLA_MEDIA < COLPI_INIZIALI
+    for tiri in (TIRI_PER_IL_PRIMATO_DELLA_MEDIA - 1, TIRI_PER_IL_PRIMATO_DELLA_MEDIA):
+        partita.nuova()
+        globali = []
+        for _tiro in range(tiri):
+            tiro_a_vuoto(banco, partita)
+            globali.append(partita.ultimo_volo.precisione_globale)
+        partita.abbandona()
+        assert statistiche.dati["ultime"][-1]["tiri"] == tiri
+        if tiri < TIRI_PER_IL_PRIMATO_DELLA_MEDIA:
+            assert "precisione_globale_media" not in statistiche.dati["primati"]
+    assert statistiche.dati["primati"]["precisione_globale_media"]["valore"] == round(sum(globali) / TIRI_PER_IL_PRIMATO_DELLA_MEDIA, 4)
 
 
-def test_lo_spazio_appena_finita_la_scivolata_vale_il_massimo(banco):
-    """D25: lo spazio premuto dopo la fine della scivolata, ma dentro MARGINE_DOPO_LA_SCIVOLATA, prende ancora il massimo."""
-    partita = banco.partita()
-    partita.nuova()
-    partita.spazio()
-    barra = partita.scivolate["direzione"]
-    fine = partita.inizio_barra + barra.fine_scivolata
-    porta_udibile_a(banco, fine + MARGINE_DOPO_LA_SCIVOLATA * FS - 1)
-    assert partita.battito() == [] and partita.valori == [] and partita.sottofase == "scivolata" and partita.passaggio == 1
-    assert partita.spazio() == []
-    assert partita.valori == [1.0] and partita.barra == 1 and partita.passaggio == 1 and banco.contati[-1] == "valore_preso"
-
-
-def test_lo_spazio_compensato_non_fa_scadere_la_barra(banco, monkeypatch):
-    """Lo spazio vale nell'istante in cui il dito è sceso, tolta la compensazione del tasto, sia per il valore sia per la scadenza
-    della barra (dalla 0.11.8): con COMPENSAZIONE_DEL_TASTO a 0,03 secondi, lo spazio sentito un centesimo oltre il margine, ma
-    premuto dentro, prende il massimo e non fa ripartire la barra, come faceva quando scaduta riceveva il campione udibile; quello
-    premuto oltre il margine anche tolta la compensazione la fa ripartire."""
-    monkeypatch.setattr(modulo_mira, "COMPENSAZIONE_DEL_TASTO", 0.03)
-    partita = banco.partita()
-    partita.nuova()
-    partita.spazio()
-    barra = partita.scivolate["direzione"]
-    porta_udibile_a(banco, partita.inizio_barra + barra.fine_scivolata + (MARGINE_DOPO_LA_SCIVOLATA + 0.01) * FS)
-    assert partita.spazio() == []
-    assert partita.valori == [1.0] and partita.barra == 1 and partita.passaggio == 1 and banco.contati[-1] == "valore_preso"
-    barra = partita.scivolate["alzo"]
-    porta_udibile_a(banco, partita.inizio_barra + barra.fine_scivolata + (MARGINE_DOPO_LA_SCIVOLATA + 0.03) * FS + 1)
-    assert partita.spazio() == []
-    assert partita.valori == [1.0] and partita.barra == 1 and partita.passaggio == 2
-
-
-def test_la_barra_senza_spazio_ricomincia_da_capo(banco, cartella_di_prova):
-    """D25: passato il margine la barra non prende il massimo, come faceva D3, ma ricomincia da capo, col secondo di silenzio,
-    i bip e la scivolata, e il passaggio sale; lo spazio nella pausa nuova non conta. Una pausa fa ripartire la barra senza
-    contare un passaggio. Le statistiche contano le barre ripartite, e la barra di stato dice il passaggio nel secondo blocco
-    del display braille. Lo spazio che arriva oltre il margine, prima del battito, fa scadere la barra come il battito."""
-    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
-    partita = banco.partita(statistiche=statistiche)
-    partita.nuova()
-    partita.spazio()
-    barra = partita.scivolate["direzione"]
-    prima = partita._voce_barra
-    porta_udibile_a(banco, partita.inizio_barra + barra.fine_scivolata + MARGINE_DOPO_LA_SCIVOLATA * FS)
-    k = banco.motore.prossimo_campione()
-    assert partita.battito() == []
-    assert partita.fase == "mira" and partita.barra == 0 and partita.passaggio == 2 and partita.valori == []
-    assert partita.inizio_barra == k + round(PAUSA_FRA_BARRE * FS) and partita._voce_barra is not prima and partita.sottofase == "pausa"
-    assert "valore_preso" not in banco.contati and statistiche.dati["conti"]["barre_ripartite"] == 1
-    riga = partita.righe_della_barra()[-1]
-    assert riga[:BLOCCO_DEL_BRAILLE].rstrip() == "Mira: direzione, pausa; Esc annulla" and riga[BLOCCO_DEL_BRAILLE:] == f"passaggio 2 di {PASSAGGI_DELLA_BARRA}"
-    # Lo spazio nella pausa del passaggio nuovo non conta.
-    porta_udibile_a(banco, partita.inizio_barra - 1)
-    assert partita.spazio() == [] and partita.valori == [] and partita.passaggio == 2
-    # Una pausa nel mezzo fa ripartire la barra, ma non è un passaggio.
-    partita.pausa()
-    partita.pausa()
-    assert partita.passaggio == 2 and statistiche.dati["conti"]["barre_ripartite"] == 1
-    # Lo spazio oltre il margine, prima che il battito se ne accorga, non prende il massimo: la barra ricomincia.
-    porta_udibile_a(banco, partita.inizio_barra + barra.fine_scivolata + MARGINE_DOPO_LA_SCIVOLATA * FS + 1)
-    assert partita.spazio() == []
-    assert partita.valori == [] and partita.passaggio == 3 and statistiche.dati["conti"]["barre_ripartite"] == 2
-    # Lo spazio nella scivolata sceglie come sempre, e la barra seguente comincia dal primo passaggio, senza il secondo blocco.
-    porta_udibile_a(banco, campione_del_valore(partita, 0.4))
-    assert partita.spazio() == []
-    assert partita.valori == [pytest.approx(0.4)] and partita.barra == 1 and partita.passaggio == 1
-    assert partita.righe_della_barra()[-1] == "Mira: alzo, pausa; Esc annulla"
-
-
-@pytest.mark.parametrize("palestra", [True, False])
-def test_il_proiettile_perduto_dopo_l_ultimo_passaggio(banco, cartella_di_prova, monkeypatch, palestra):
-    """D25: ogni barra suona al più PASSAGGI_DELLA_BARRA volte. Se anche l'ultimo passaggio finisce senza spazio, il colpo non
-    parte e il proiettile è perduto, come un tiro a vuoto: il suo suono, un colpo in meno, il tiro contato nella partita e
-    nelle statistiche, la serie chiusa, i bersagli di nuovo a guadagno pieno, e il resoconto, che dice perché, alla fine
-    del suono. Nella palestra poi l'attesa, fuori l'ascolto col tempo che riprende. Niente volo, e il resoconto non ha la
-    precisione globale, che nelle medie conta come 0%."""
-    if not palestra:
-        monkeypatch.setattr(modulo_partita, "PALESTRA_FINO_AL_LIVELLO", 0)
-    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
-    statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
-    partita = banco.partita(statistiche=statistiche)
-    senti_anche_le_statistiche(banco, statistiche)
-    partita.nuova()
-    partita.serie = 3
-    voce = partita._voci[partita.bersagli[0]]
-    partita.spazio()
-    porta_udibile_a(banco, campione_del_valore(partita, 0.3))
-    assert partita.spazio() == [] and partita.barra == 1
-    for passaggio in range(1, PASSAGGI_DELLA_BARRA + 1):
-        assert partita.fase == "mira" and partita.barra == 1 and partita.passaggio == passaggio
-        porta_udibile_a(banco, partita.inizio_barra + partita.scivolate["alzo"].fine_scivolata + MARGINE_DOPO_LA_SCIVOLATA * FS)
-        assert partita.battito() == []
-    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
-    fine_del_suono = partita._fine_degli_avvisi - stacco
-    assert partita.fase == ("attesa" if palestra else "ascolto") and partita.ultimo_volo is None and partita.passaggio is None and partita.barra is None
-    assert (partita.tiri, partita.riserva, partita.serie, partita.centri) == (1, COLPI_INIZIALI - 1, 0, 0)
-    assert "sparo" not in banco.contati and banco.contati[-1] == "proiettile_perduto" and banco.motore.tempo_scorre is not palestra
-    banco.flusso.avanza(10)
-    assert voce.guadagno == 1.0
-    # Il resoconto arriva alla fine del suono, più RITARDO_DEL_RESOCONTO, qui zero.
-    porta_udibile_a(banco, fine_del_suono - 1)
-    assert partita.battito() == []
-    porta_udibile_a(banco, fine_del_suono)
-    messaggi = partita.battito()
-    assert [m.tipo for m in messaggi] == (["resoconto", "info"] if palestra else ["resoconto"])
-    resoconto = messaggi[0]
-    assert resoconto.testo.split("\n") == [f"Tiro 1, livello 1: proiettile perduto; nella riserva restano {COLPI_INIZIALI - 1} colpi.",
-                                           f"La barra dell'alzo è passata {PASSAGGI_DELLA_BARRA} volte senza lo Spazio: il colpo non è partito, e il proiettile "
-                                           "conta come un tiro a vuoto."]
-    assert resoconto.annuncio == f"Proiettile perduto, riserva {COLPI_INIZIALI - 1}."
-    assert resoconto.dati["perduto"] and resoconto.dati["parametro"] == "alzo" and resoconto.dati["passaggi"] == PASSAGGI_DELLA_BARRA
-    assert resoconto.dati["precisione_globale"] is None and not resoconto.dati["colpito"]
-    conti = statistiche.dati["conti"]
-    assert (conti["tiri"], conti["tiri_a_vuoto"], conti["proiettili_perduti"], conti["barre_ripartite"], conti.get("centri", 0)) == (
-        1, 1, 1, PASSAGGI_DELLA_BARRA - 1, 0)
-    # Dalla 0.11.8 il proiettile perduto entra nella media della precisione globale dei tiri come 0%, ma non fa il primato.
-    somme = statistiche.dati["somme"]
-    assert (somme["tiri_col_globale"], somme["precisione_globale"]) == (1, 0.0) and "precisione_globale" not in statistiche.dati["primati"]
-    assert statistiche.dati["suoni"]["proiettile_perduto"] == 1
-    assert (partita._tiri_globali, partita._somma_globale) == (1, 0.0)
-    if palestra:
-        assert messaggi[-1].testo == "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
-        fuori_dall_attesa(banco, partita)
-    # La mira seguente ricomincia dal primo passaggio della prima barra, coi bersagli di prima.
-    assert partita.spazio() == [] and partita.fase == "mira" and partita.barra == 0 and partita.passaggio == 1 and partita.valori == []
-    # E nella media della partita il proiettile perduto vale 0%: la partita del solo perduto ha media zero.
-    partita.abbandona()
-    assert statistiche.dati["ultime"][-1]["precisione_globale"] == 0.0 and somme["partite_col_globale"] == 1
-
-
-def test_il_proiettile_perduto_con_l_ultimo_colpo_finisce_la_partita(banco):
-    """D25: il proiettile perduto con l'ultimo colpo della riserva chiude la partita come un tiro a vuoto, senza attesa."""
-    partita = banco.partita()
-    partita.nuova()
-    partita.riserva = 1
-    partita.spazio()
-    for _passaggio in range(PASSAGGI_DELLA_BARRA):
-        porta_udibile_a(banco, partita.inizio_barra + partita.scivolate["direzione"].fine_scivolata + MARGINE_DOPO_LA_SCIVOLATA * FS)
-        partita.battito()
-    assert partita.fase == "finita" and partita.riserva == 0 and partita.tiri == 1
-    messaggi = fino_alla_risoluzione(banco, partita)
-    assert [m.tipo for m in messaggi] == ["resoconto", "fine"]
-    assert messaggi[0].testo.split("\n")[0] == "Tiro 1, livello 1: proiettile perduto; la riserva è vuota."
-    assert messaggi[0].annuncio == "Proiettile perduto, riserva vuota." and messaggi[1].dati["tiri"] == 1
-    assert banco.contati.count("proiettile_perduto") == 1 and banco.contati.count("partita_finita") == 1
-
-
-def test_esc_annulla_la_mira_e_conserva_il_proiettile(banco, cartella_di_prova):
-    """D25: Esc nella mira la annulla: la barra tace, i valori presi si perdono, la riserva non cambia, i bersagli tornano a
-    guadagno pieno e il tempo riprende, col suo suono e il suo messaggio, e si conta. Nella mira in pausa la pausa resta.
-    Fuori dalla mira non fa niente."""
+def test_esc_annulla_la_mira_e_conserva_il_proiettile(banco, cartella_di_prova, bonus_sicuro, monkeypatch):
+    """D25 e D29: Esc nella mira la annulla: i valori tacciono e si perdono, il tempo della mira si ferma coi suoi tick, la
+    riserva non cambia, e si torna all'ascolto col tempo di gioco che scorre come nella mira e i bersagli pieni; suona
+    mira_annullata, il messaggio lo dice, e si conta. Non è una fase d'ascolto nuova: non nasce un bonus. Lo spazio seguente
+    avvia una mira nuova, dal centro. Nella mira in pausa la pausa resta. Fuori dalla mira Esc non fa niente."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     senti_anche_le_statistiche(banco, statistiche)
     assert partita.annulla_mira() == [] and partita.fase == "pronta"
     partita.nuova()
+    # Il livello della mira breve viene dopo quello dei bonus: un bonus nascerebbe a ogni fase d'ascolto nuova.
+    partita.livello = LIVELLO_DELLA_MIRA_BREVE
     banco.flusso.avanza(10)
     voce = partita._voci[partita.bersagli[0]]
     assert partita.annulla_mira() == [] and partita.fase == "ascolto"
     partita.spazio()
-    porta_udibile_a(banco, campione_del_valore(partita, 0.3))
-    partita.spazio()
-    barra = partita._voce_barra
-    fermo = banco.motore.tempo_di_gioco()
+    tick = [voce_del_tick for _b, _c, voce_del_tick in suonate[-(round(TEMPO_DELLA_MIRA_MINIMO) - 1):]]
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("direzione", 1)
+    porta_udibile_a(banco, inizio + 0.3 * FS)
+    asse = partita._voci_degli_assi["direzione"]
+    tempo = banco.motore.tempo_di_gioco()
     sentiti = len(banco.contati)
     messaggi = partita.annulla_mira()
     assert [(m.tipo, m.annuncio) for m in messaggi] == [("info", "Mira annullata.")]
-    assert messaggi[0].testo == (f"Mira annullata con Esc: il proiettile resta nella riserva, che ha {COLPI_INIZIALI} colpi, e i bersagli tornano a cantare. "
-                                 "Spazio per mirare di nuovo.")
-    assert partita.fase == "ascolto" and partita.valori == [] and partita.barra is None and partita.passaggio is None and partita.inizio_barra is None
+    assert messaggi[0].testo == f"Mira annullata con Esc: il proiettile resta nella riserva, che ha {COLPI_INIZIALI} colpi. Spazio per mirare di nuovo."
+    assert partita.fase == "ascolto" and partita.valori == [] and partita.mira is None and partita.tasti_giu() == []
+    assert partita.secondi_della_mira() is None and partita._scadenza is None and partita._tick_in_fila == []
     assert (partita.riserva, partita.tiri) == (COLPI_INIZIALI, 0) and partita.bonus is None
     assert banco.contati[sentiti:] == ["mira_annullata"] and statistiche.dati["conti"]["mire_annullate"] == 1
-    # La barra dell'alzo era nel suo secondo di silenzio: finisce senza aver suonato, quando il motore arriva al suo inizio.
-    banco.flusso.avanza_fino(barra.inizio + banco.motore.blocco)
-    assert barra.finita and voce.guadagno == 1.0 and banco.motore.tempo_scorre and banco.motore.tempo_di_gioco() > fermo
-    assert partita.righe_della_barra()[-1] == "Ascolto: Spazio per mirare"
-    # Lo spazio avvia una mira nuova, dalla prima barra; nella mira in pausa Esc la annulla, e la pausa resta.
+    # Il valore e i tick tacciono: il primo tick, che doveva suonare un secondo dopo lo spazio, finisce senza suonare.
+    banco.flusso.avanza_fino(tick[0].inizio + banco.motore.blocco)
+    assert asse.finita and tick[0].finita and tick[0].finita_al == tick[0].inizio
+    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre and banco.motore.tempo_di_gioco() > tempo
+    assert partita.battito() == [] and partita.bonus is None and partita.righe_della_barra()[-1] == "Ascolto: Spazio per mirare"
+    # Lo spazio avvia una mira nuova, dal centro: qui nella palestra, dove Ctrl+P mette la pausa; Esc nella mira in pausa la
+    # annulla, e la pausa resta.
+    partita.livello = 1
     partita.spazio()
-    assert partita.fase == "mira" and partita.barra == 0 and partita.passaggio == 1 and partita.valori == []
+    assert partita.fase == "mira" and partita.mira.valori(banco.motore.campione_udibile() / FS) == [0.5] * 3
     partita.pausa()
     messaggi = partita.annulla_mira()
     assert partita.fase == "ascolto" and partita.in_pausa and "la partita resta in pausa" in messaggi[0].testo
@@ -643,25 +1193,6 @@ def test_esc_annulla_la_mira_e_conserva_il_proiettile(banco, cartella_di_prova):
     banco.flusso.avanza(10)
     assert not partita.in_pausa and voce.guadagno == 1.0 and banco.motore.tempo_scorre
     assert statistiche.dati["conti"]["mire_annullate"] == 2 and statistiche.dati["conti"]["tiri"] == 0
-
-
-def test_tempo_fermo_e_bersagli_attenuati_nella_mira(banco):
-    partita = banco.partita()
-    partita.nuova()
-    banco.flusso.avanza(20)
-    assert banco.motore.tempo_di_gioco() > 0
-    voce = partita._voci[partita.bersagli[0]]
-    partita.spazio()
-    banco.flusso.avanza(4)
-    fermo = banco.motore.tempo_di_gioco()
-    banco.flusso.avanza(40)
-    assert banco.motore.tempo_di_gioco() == fermo and not banco.motore.tempo_scorre
-    assert voce.guadagno == pytest.approx(db_in_lineare(ATTENUAZIONE_IN_MIRA_DB))
-    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
-    assert partita.ultimo_volo.partenza == pytest.approx(fermo)
-    banco.flusso.avanza(4)
-    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre
-    assert banco.motore.tempo_di_gioco() > fermo
 
 
 def test_tiri_a_vuoto_fino_alla_fine(banco):
@@ -677,10 +1208,11 @@ def test_tiri_a_vuoto_fino_alla_fine(banco):
         assert partita.tiri == numero and partita.riserva == COLPI_INIZIALI - numero
         assert messaggi[0].tipo == "resoconto" and not messaggi[0].dati["colpito"]
         globali.append(messaggi[0].dati["precisione_globale"])
-        # D21: il tiro rasoterra e piano cade a pochi metri dal cannone, prima della distanza del
-        # bersaglio e sotto la sua altezza: il sommario lo dice, senza numeri, e la legenda dice perché (D24).
+        # D21: il tiro tutto a sinistra, basso e piano, entra appena nella cupola, a sinistra del bersaglio e sotto di lui, e
+        # scendendo resta sempre sotto il suo centro: il sommario lo dice coi numeri, e la legenda dice perché manca la profondità (D24).
         sommario = resoconti.sommario_del_tiro(partita.ultimo_volo, "numeri")
-        assert sommario.primo.startswith("L:manca V:manca P:manca I:manca G:") and "L, V e I mancano" in sommario.secondo and "P manca" in sommario.secondo
+        assert sommario.primo.startswith("L:-") and " V:-" in sommario.primo and " P:manca " in sommario.primo
+        assert "P manca: scendendo, il tiro resta sempre sotto il centro del bersaglio." in sommario.secondo
         assert messaggi[0].testo.split("\n")[0] == sommario.riga
         # D22: al livello 1, della palestra, ogni tiro a vuoto finisce con l'attesa dello spazio, che riporta all'ascolto.
         if partita.riserva > 1:
@@ -776,13 +1308,11 @@ def test_il_bonus_colpito_da_i_colpi_e_annulla_l_uscita(banco, bonus_sicuro, mon
     bonus = partita.bonus
     evento = partita._evento_bonus
     assert bonus is not None
-    # A metà della traversata il bonus sta in mezzo al cubo, dove ogni punto si raggiunge.
+    # A metà della traversata il bonus sta in mezzo al settore, dove ogni punto si raggiunge; la mira lo segue mentre si muove (D29).
     banco.flusso.avanza_secondi(durata_del_bonus(LIVELLO_DEI_BONUS) / 2)
     monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
     riserva = partita.riserva
-    partita.spazio()
-    partenza = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
-    mira_e_spara(banco, partita, mira_sul_bonus(bonus, partenza))
+    colpisci(banco, partita, bonus)
     volo = partita.ultimo_volo
     assert volo.colpito is bonus
     assert evento.annullato
@@ -797,7 +1327,7 @@ def test_il_bonus_colpito_da_i_colpi_e_annulla_l_uscita(banco, bonus_sicuro, mon
     assert len(partita.bersagli) == quanti_bersagli(LIVELLO_DEI_BONUS)
     # Il tiro avviene al livello dei bonus, che è ancora della palestra coi numeri (D21).
     assert messaggi[0].annuncio == f"Colpito il bonus, {testi.intero(attesi)} punti. {resoconti.sommario_del_tiro(volo, resoconti.grado_della_palestra(LIVELLO_DEI_BONUS)).annuncio}"
-    assert messaggi[0].dati["bonus"]
+    assert messaggi[0].dati["bonus"] and messaggi[0].dati["riserva"] == riserva + COLPI_BONUS
     assert "colpito_bonus" in banco.contati and "bonus_uscito" not in banco.contati
     # Dopo un centro sul bonus non nasce un bersaglio nuovo (D5): lo spazio della palestra riporta all'ascolto (D22).
     assert partita.fase == "attesa" and partita.nasceranno == 0
@@ -816,10 +1346,10 @@ def tiro_lungo(banco, partita):
     (D21). Restituisce i messaggi della sua risoluzione."""
     pronta_a_mirare(banco, partita)
     partita.spazio()
-    partenza = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
     bersaglio = next(b for b in partita.bersagli if not b.bonus)
-    direzione, alzo, potenza = soluzione(bersaglio.posizione(partenza))
-    mira_e_spara(banco, partita, (direzione + 0.02, alzo, min(1.0, potenza + 0.15)))
+    invio, partenza = prepara_lo_sparo(banco)
+    direzione, alzo, potenza = mira_sul_bersaglio(bersaglio, partenza)
+    mira_e_spara(banco, partita, (direzione + 0.02, alzo, min(1.0, potenza + 0.15)), invio=invio)
     volo = partita.ultimo_volo
     assert volo.colpito is None and volo.vicino is bersaglio
     assert volo.misure.arrivo is not None and volo.misure.ricaduta is not None
@@ -889,9 +1419,7 @@ def test_il_sommario_del_bonus_segue_il_livello_del_tiro(banco, bonus_sicuro, mo
     livello_del_tiro = next((n for n in range(LIVELLO_DEI_BONUS + 1, LIVELLO_DEI_BONUS + 30) if resoconti.grado_della_palestra(n) != nato), LIVELLO_DEI_BONUS + 1)
     grado = resoconti.grado_della_palestra(livello_del_tiro)
     partita.livello = livello_del_tiro
-    partita.spazio()
-    partenza = banco.motore.tempo_di_gioco(banco.motore.prossimo_campione())
-    mira_e_spara(banco, partita, mira_sul_bonus(bonus, partenza))
+    colpisci(banco, partita, bonus)
     volo = partita.ultimo_volo
     assert volo.colpito is bonus and volo.misure is not None
     messaggi = fino_alla_risoluzione(banco, partita)
@@ -943,9 +1471,10 @@ def test_pausa_e_ripresa_nell_ascolto(banco):
 
 
 def test_pausa_nella_mira(banco, cartella_di_prova):
-    """Ctrl+P nella mira (D14): la scivolata in corso si ferma, i bersagli tacciono e la barra non
-    scade; alla ripresa la barra in corso ricomincia da capo, col suo secondo di silenzio, i bersagli
-    tornano attenuati e i valori già presi restano."""
+    """Ctrl+P nella mira della palestra (D14, D29): i valori si fermano dove si sentivano, i loro tasti valgono come lasciati, i
+    loro suoni e i bersagli tacciono, e il tempo di gioco si ferma; in pausa i tasti dei valori non fanno niente, e l'Invio e
+    lo spazio fanno sentire il non ora. Alla ripresa i valori sono dove erano, fermi finché un tasto non li muove di nuovo, i
+    bersagli tornano pieni e il tempo riprende; la durata vera della partita non conta la pausa."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     orologio = Orologio(0.0)
     partita = banco.partita(statistiche=statistiche, orologio=orologio)
@@ -954,44 +1483,44 @@ def test_pausa_nella_mira(banco, cartella_di_prova):
     banco.flusso.avanza(10)
     voce = partita._voci[partita.bersagli[0]]
     partita.spazio()
-    porta_udibile_a(banco, campione_del_valore(partita, 0.3))
-    assert partita.spazio() == [] and partita.valori == [pytest.approx(0.3)] and partita.barra == 1
-    porta_udibile_a(banco, campione_del_valore(partita, 0.2))
-    assert partita.battito() == [] and partita.sottofase == "scivolata"
-    barra = partita._voce_barra
-    fermo = banco.motore.tempo_di_gioco()
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("direzione", -1)
+    partita.muovi("potenza", 1)
+    porta_udibile_a(banco, inizio + 0.45 * FS)
+    assi = list(partita._voci_degli_assi.values())
     orologio.valore = 5.0
     messaggi = partita.pausa()
     assert partita.in_pausa and partita.fase == "mira" and banco.contati[-1] == "pausa"
-    assert [m.annuncio for m in messaggi] == ["Pausa."] and "ricomincia da capo" in messaggi[0].testo
+    assert [m.annuncio for m in messaggi] == ["Pausa."] and "i valori restano dove sono" in messaggi[0].testo
+    assert partita.tasti_giu() == [] and partita._voci_degli_assi == {} and partita.secondi_della_mira() is None
+    fermi = [0.5 - 0.45 * VELOCITA_DELLA_MIRA, 0.5, 0.5 + 0.45 * VELOCITA_DELLA_MIRA]
+    assert partita.mira.valori(inizio / FS + 60.0) == pytest.approx(fermi)
     assert partita.righe_della_barra()[-1] == "In pausa: Ctrl+P per riprendere"
-    banco.flusso.avanza(3)
-    assert barra.finita and voce.guadagno == 0.0
-    # La barra ferma non scade, e lo spazio non sceglie niente: fa sentire il non ora.
+    # Il tempo si ferma al prossimo campione sicuro della pausa: da lì in poi il tempo di gioco che si sente non cambia.
+    banco.flusso.avanza(5)
+    assert all(asse.finita for asse in assi) and voce.guadagno == 0.0
+    fermo = banco.motore.tempo_di_gioco()
     for _blocco in range(10 * FS // banco.motore.blocco):
         banco.flusso.avanza(1)
         assert partita.battito() == []
-    assert partita.fase == "mira" and partita.valori == [pytest.approx(0.3)] and partita.barra == 1
-    assert banco.motore.tempo_di_gioco() == fermo
-    assert partita.spazio() == [] and banco.contati[-1] == "non_ora" and partita.valori == [pytest.approx(0.3)]
+    assert partita.fase == "mira" and banco.motore.tempo_di_gioco() == fermo
+    # In pausa i tasti dei valori non fanno niente; l'Invio e lo spazio fanno sentire il non ora.
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    prima = len(banco.contati)
+    assert partita.spara() == [] and partita.spazio() == [] and banco.contati[prima:] == ["non_ora", "non_ora"]
+    assert partita.fase == "mira" and partita.tiri == 0
     orologio.valore = 65.0
-    k = banco.motore.prossimo_campione()
     messaggi = partita.pausa()
     assert not partita.in_pausa and [m.annuncio for m in messaggi] == ["Si riprende."] and banco.contati[-1] == "ripresa"
-    # La barra dell'alzo ricomincia da capo: il secondo di silenzio, i bip e la scivolata.
-    assert partita.barra == 1 and partita.sottofase == "pausa" and partita.inizio_barra == k + round(PAUSA_FRA_BARRE * FS)
-    assert partita._voce_barra is not barra and partita._voce_barra.inizio == partita.inizio_barra
     banco.flusso.avanza(10)
-    assert voce.guadagno == pytest.approx(db_in_lineare(ATTENUAZIONE_IN_MIRA_DB)) and not banco.motore.tempo_scorre
-    for valore in (0.0, 0.0):
-        porta_udibile_a(banco, campione_del_valore(partita, valore))
-        partita.spazio()
-    assert partita.fase == "volo" and partita.valori[0] == pytest.approx(0.3) and partita.valori[1:] == [0.0, 0.0]
-    assert partita.ultimo_volo.partenza == pytest.approx(fermo)
+    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre and banco.motore.tempo_di_gioco() > fermo
+    assert partita.mira.valori(banco.motore.campione_udibile() / FS) == pytest.approx(fermi) and partita.tasti_giu() == []
+    # Ripresa la mira, i tasti muovono di nuovo i valori, da dove erano.
+    mira_e_spara(banco, partita, (0.2, 0.5, 0.7))
     # La durata vera della partita non conta il minuto di pausa; la pausa si conta fra quelle chieste.
     orologio.valore = 100.0
     assert partita.riepilogo()["durata_s"] == 40.0
-    assert statistiche.dati["conti"]["pause"] == 1 and statistiche.dati["conti"].get("pause_automatiche", 0) == 0
+    assert statistiche.dati["conti"]["pause"] == 1 and statistiche.dati["conti"]["pause_automatiche"] == 0
 
 
 def test_pausa_automatica(banco, cartella_di_prova):
@@ -1040,31 +1569,28 @@ def test_pausa_automatica(banco, cartella_di_prova):
     messaggi = partita.pausa()
     assert not partita.in_pausa and [m.annuncio for m in messaggi] == ["Si riprende."] and banco.contati[-1] == "ripresa"
     assert (statistiche.dati["conti"]["pause"], statistiche.dati["conti"]["pause_automatiche"]) == (2, 2)
-    # Nella mira: la scivolata si ferma, e al ritorno la barra in corso ricomincia da capo, senza suoni della pausa.
+    # Nella mira (D29): il valore che si muove si ferma dove si sentiva, il suo tasto vale come lasciato, e al ritorno resta
+    # dov'era, senza suoni della pausa.
     partita.spazio()
-    porta_udibile_a(banco, campione_del_valore(partita, 0.5))
-    partita.spazio()
-    barra = partita._voce_barra
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("alzo", 1)
+    porta_udibile_a(banco, inizio + 0.3 * FS)
+    asse = partita._voci_degli_assi["alzo"]
     sentiti = len(banco.contati)
     partita.pausa_automatica(True)
     banco.flusso.avanza(3)
-    assert partita.in_pausa and partita._voce_barra is None and voce.guadagno == 0.0
+    assert partita.in_pausa and partita.tasti_giu() == [] and asse.finita and voce.guadagno == 0.0
     for _blocco in range(10 * FS // banco.motore.blocco):
         banco.flusso.avanza(1)
         assert partita.battito() == []
-    # La barra dell'alzo era ancora nel suo secondo di silenzio: finisce senza aver suonato.
-    assert barra.finita and partita.fase == "mira"
-    k = banco.motore.prossimo_campione()
+    assert partita.fase == "mira"
     assert partita.pausa_automatica(False) == []
-    assert not partita.in_pausa and partita.barra == 1 and partita.inizio_barra == k + round(PAUSA_FRA_BARRE * FS)
-    assert banco.contati[sentiti:] == [] and partita.valori == [pytest.approx(0.5)]
+    assert not partita.in_pausa and banco.contati[sentiti:] == []
+    assert partita.mira.valori(banco.motore.campione_udibile() / FS) == pytest.approx([0.5, 0.5 + 0.3 * VELOCITA_DELLA_MIRA, 0.5])
     banco.flusso.avanza(10)
-    assert voce.guadagno == pytest.approx(db_in_lineare(ATTENUAZIONE_IN_MIRA_DB))
+    assert voce.guadagno == 1.0 and banco.motore.tempo_scorre
     # Durante il volo, e poi la durata vera, senza le pause.
-    for valore in (0.0, 0.0):
-        porta_udibile_a(banco, campione_del_valore(partita, valore))
-        partita.spazio()
-    assert partita.fase == "volo"
+    mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
     proiettile = partita._voce_proiettile
     partita.pausa_automatica(True)
     banco.flusso.avanza(3)
@@ -1126,11 +1652,17 @@ def test_abbandona(banco, cartella_di_prova):
     assert statistiche.dati["ultime"][-1]["tiri"] == statistiche.dati["conti"]["tiri"] == 0
     assert "colpito" not in statistiche.dati["suoni"]
     assert partita.righe_della_barra() == ["Nessuna partita: Spazio per cominciare"]
-    # Una partita nuova chiesta durante un'altra la abbandona prima.
+    # Una partita nuova chiesta durante un'altra la abbandona prima; anche durante la mira, che tace.
     partita.nuova()
+    partita.spazio()
+    partita.muovi("direzione", 1)
+    asse = partita._voci_degli_assi["direzione"]
     messaggi = partita.nuova()
     assert [m.annuncio for m in messaggi] == ["Partita abbandonata.", "Partita nuova: Spazio per mirare."]
-    assert statistiche.dati["conti"]["partite_abbandonate"] == 2
+    assert partita.fase == "ascolto" and partita.mira is None and partita.tasti_giu() == []
+    banco.flusso.avanza(4)
+    assert asse.finita
+    assert statistiche.dati["conti"]["partite_abbandonate"] == 2 and statistiche.dati["conti"]["mire_sparate"] == 1
 
 
 def test_abbandono_dopo_un_impatto_gia_partito(banco, cartella_di_prova):
@@ -1190,49 +1722,6 @@ def test_gli_avvisi_aspettano_l_effetto_dell_impatto(banco, monkeypatch):
     assert voci[-1][1].inizio == esito.inizio + LUNGHEZZA_FINTA + stacco
 
 
-def test_la_prima_barra_aspetta_gli_avvisi(banco, monkeypatch):
-    """Con gli effetti lunghi di D16 l'avviso del livello nuovo, in fila dopo l'impatto, suona oltre il
-    secondo di silenzio della prima barra: la mira avviata subito dopo la resa allunga la pausa fino
-    alla fine degli avvisi, stacco compreso, così la fanfara non copre i bip; lo spazio nella pausa
-    allungata non conta, e la barra seguente torna al secondo solito. Fuori dalla palestra di D22,
-    dove lo spazio subito dopo la resa avvia la mira."""
-    monkeypatch.setattr(modulo_partita, "PALESTRA_FINO_AL_LIVELLO", 0)
-    corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
-    lungo = np.full((round(1.5 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
-    monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: lungo if nome == suoni.EVENTI["livello_su"] else corto)
-    voci = []
-    originale = banco.suoni.suona
-
-    def spia(evento, *argomenti, **opzioni):
-        voce = originale(evento, *argomenti, **opzioni)
-        voci.append((evento, voce))
-        return voce
-
-    monkeypatch.setattr(banco.suoni, "suona", spia)
-    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
-    pausa = round(PAUSA_FRA_BARRE * FS)
-    partita = banco.partita()
-    partita.nuova()
-    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
-    colpisci(banco, partita)
-    messaggi = fino_alla_risoluzione(banco, partita)
-    assert [m.tipo for m in messaggi][:2] == ["resoconto", "livello"]
-    fanfara = next(v for nome, v in voci if nome == "livello_su")
-    fine = fanfara.inizio + len(lungo) + stacco
-    # Lo spazio subito dopo la resa: senza l'attesa i bip comincerebbero sotto la fanfara.
-    k = banco.motore.prossimo_campione()
-    assert k + pausa < fine
-    assert partita.spazio() == [] and partita.fase == "mira" and partita.barra == 0
-    assert partita.inizio_barra == fine
-    porta_udibile_a(banco, fine - 0.2 * FS)
-    assert partita.battito() == [] and partita.sottofase == "pausa"
-    assert partita.spazio() == [] and partita.valori == [] and partita.barra == 0
-    # Preso il primo valore, gli avvisi sono finiti: la seconda barra ha la sua pausa di sempre.
-    porta_udibile_a(banco, campione_del_valore(partita, 0.5))
-    assert partita.spazio() == [] and partita.barra == 1
-    assert partita.inizio_barra - banco.motore.prossimo_campione() == pausa
-
-
 def _bonus_quasi_uscito(banco, partita, anticipo):
     """Un bonus in volo, e il tempo di gioco che corre fino a tanti secondi prima della sua uscita."""
     partita.livello = LIVELLO_DEI_BONUS
@@ -1248,11 +1737,12 @@ def _bonus_quasi_uscito(banco, partita, anticipo):
 
 def test_il_bonus_uscito_durante_il_volo_che_chiude_il_livello(banco, bonus_sicuro, cartella_di_prova, monkeypatch):
     """Il bonus esce col proiettile in volo, e il centro chiude il livello: l'uscita si dice e si conta
-    prima che il livello nuovo svuoti il cielo."""
+    prima che il livello nuovo svuoti il cielo. Durante la mira il tempo scorre (D29): il bonus esce poco
+    dopo lo sparo, che arriva ATTESA_DELLO_SPARO dopo lo spazio."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     partita.nuova()
-    bonus = _bonus_quasi_uscito(banco, partita, 0.3)
+    bonus = _bonus_quasi_uscito(banco, partita, ATTESA_DELLO_SPARO + 0.3)
     monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
     partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
     colpisci(banco, partita)
@@ -1272,7 +1762,7 @@ def test_il_bonus_uscito_durante_l_ultimo_volo(banco, bonus_sicuro, cartella_di_
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     partita.nuova()
-    bonus = _bonus_quasi_uscito(banco, partita, 0.2)
+    bonus = _bonus_quasi_uscito(banco, partita, ATTESA_DELLO_SPARO + 0.3)
     partita.riserva = 1
     partita.spazio()
     mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
@@ -1394,6 +1884,9 @@ def test_i_primati_che_a_parole_non_cambiano_non_si_dicono(banco, cartella_di_pr
 
 
 def test_righe_della_barra_in_ogni_fase(banco):
+    """La barra di stato in ogni fase, con le righe brevi per il display braille; nella mira (D29) una riga in più, sopra
+    quella della fase, coi tre valori, la direzione e l'alzo in gradi e la potenza in percentuale, e i secondi che restano
+    alla mira a tempo, o che la mira non ha tempo, nella palestra."""
     partita = banco.partita()
     viste = []
 
@@ -1403,31 +1896,47 @@ def test_righe_della_barra_in_ogni_fase(banco):
 
     assert righe() == ["Nessuna partita: Spazio per cominciare"]
     partita.nuova()
-    assert righe() == ["Livello 1, 0 punti", f"Riserva {COLPI_INIZIALI}, centri 0 su {CENTRI_PER_LIVELLO}", "Bersagli in volo: 1", "Ascolto: Spazio per mirare"]
+    testa = ["Livello 1, 0 punti", f"Riserva {COLPI_INIZIALI}, centri 0 su {CENTRI_PER_LIVELLO}", "Bersagli in volo: 1"]
+    assert righe() == [*testa, "Ascolto: Spazio per mirare"]
     partita.spazio()
-    partita.battito()
-    assert righe()[-1] == "Mira: direzione, pausa; Esc annulla"
-    porta_udibile_a(banco, partita.inizio_barra + 10)
-    partita.battito()
-    assert righe()[-1] == "Mira: direzione, bip; Esc annulla"
-    porta_udibile_a(banco, campione_del_valore(partita, 0.001))
-    partita.battito()
-    assert righe()[-1] == "Mira: direzione, scivolata; Esc annulla"
-    partita.spazio()
-    partita.battito()
-    assert righe()[-1] == "Mira: alzo, pausa; Esc annulla"
-    for valore in (0.0, 0.0):
-        porta_udibile_a(banco, campione_del_valore(partita, valore))
-        partita.spazio()
-    assert righe()[-1] == "Volo"
+    assert righe() == [*testa, "Direzione davanti, alzo 50,0 gradi, potenza 50%, senza tempo", "Mira: Invio spara, Esc annulla"]
+    porta_i_valori(banco, partita, (1.0, 1.0, 0.0))
+    assert righe()[-2:] == ["Direzione 40,0 gradi a destra, alzo 85,0 gradi, potenza 0%, senza tempo", "Mira: Invio spara, Esc annulla"]
+    porta_i_valori(banco, partita, (0.0, 0.0, 1.0))
+    assert righe()[-2] == "Direzione 40,0 gradi a sinistra, alzo 15,0 gradi, potenza 100%, senza tempo"
+    # I valori qualunque passano dalla fisica ai gradi, e da lì alla riga di resoconti.
+    porta_i_valori(banco, partita, (0.3, 0.2, 0.65))
+    valori = partita.mira.valori(banco.motore.campione_udibile() / FS)
+    azimut, alzo, _velocita = parametri_del_tiro(*valori)
+    assert righe()[-2] == resoconti.riga_dei_valori_della_mira(azimut, alzo, valori[2], None) and righe()[-2].startswith("Direzione 16,0 gradi")
+    # La barra legge i valori della mira una volta sola, così la riga dice la direzione, l'alzo e la potenza dello stesso istante.
+    letture = []
+    originale = partita.mira.valori
+    partita.mira.valori = lambda tempo: letture.append(tempo) or originale(tempo)
+    partita.righe_della_barra()
+    del partita.mira.valori
+    assert len(letture) == 1
+    partita.pausa()
+    assert righe()[-2:] == [resoconti.riga_dei_valori_della_mira(azimut, alzo, valori[2], None), "In pausa: Ctrl+P per riprendere"]
+    partita.pausa()
+    assert partita.spara() == []
+    assert righe() == [*testa, "Volo"]
     partita.pausa()
     assert righe()[-1] == "In pausa: Ctrl+P per riprendere"
     partita.pausa()
     partita.riserva = 1
     fino_alla_risoluzione(banco, partita)
     assert righe() == ["Livello 1, 0 punti", f"Riserva 0, centri 0 su {CENTRI_PER_LIVELLO}", "Partita finita: Spazio per ricominciare"]
-    # Righe brevi, per il display braille.
-    assert all(len(riga) <= 40 for riga in viste)
+    # Fuori dalla palestra la mira è a tempo, e la riga dice i secondi che restano, contati per eccesso.
+    partita.nuova()
+    partita.livello = PALESTRA_FINO_AL_LIVELLO + 1
+    partita.spazio()
+    secondi = round(TEMPO_DELLA_MIRA_INIZIALE)
+    assert righe()[-2:] == [f"Direzione davanti, alzo 50,0 gradi, potenza 50%, {secondi} secondi", "Mira: Invio spara, Esc annulla"]
+    porta_udibile_a(banco, partita._mira_dal + 4.5 * FS)
+    assert righe()[-2] == f"Direzione davanti, alzo 50,0 gradi, potenza 50%, {math.ceil(secondi - 4.5)} secondi"
+    # Righe brevi, per il display braille; quella dei valori della mira è più lunga, e non è divisa in blocchi.
+    assert all(len(riga) <= BLOCCO_DEL_BRAILLE for riga in viste if not riga.startswith("Direzione "))
 
 
 def test_statistiche_aggiornate(banco, cartella_di_prova):
@@ -1454,15 +1963,19 @@ def test_statistiche_aggiornate(banco, cartella_di_prova):
     conti = statistiche.dati["conti"]
     assert (conti["partite_iniziate"], conti["mire_avviate"], conti["tiri"], conti["centri"], conti["tiri_a_vuoto"], conti["partite_abbandonate"]) == (1, 2, 2, 1, 1, 1)
     assert conti["punti"] == partita.punti > 0
+    # D29: due mire finite col colpo, nessuna scaduta; tre tasti ciascuna, perché nessuno dei valori dei due tiri è al centro.
+    assert (conti["mire_sparate"], conti["mire_scadute"], conti["tasti_della_mira"], conti["mire_annullate"]) == (2, 0, 6, 0)
+    assert statistiche.dati["somme"]["secondi_di_mira"] == pytest.approx(2 * ATTESA_DELLO_SPARO, abs=0.2)
     # D22: l'attesa della palestra dopo il centro; quella dopo il tiro a vuoto non comincia, perché la partita si abbandona prima.
     assert conti["attese_della_palestra"] == 1 and conti["pause_rifiutate"] == 0
     suonati = statistiche.dati["suoni"]
-    assert (suonati["nuova_partita"], suonati["mira_avviata"], suonati["valore_preso"], suonati["sparo"], suonati["colpito"], suonati["a_terra"]) == (1, 2, 6, 2, 1, 1)
+    assert (suonati["nuova_partita"], suonati["mira_avviata"], suonati["sparo"], suonati["colpito"], suonati["a_terra"]) == (1, 2, 2, 1, 1)
+    assert "valore_preso" not in suonati
     for parametro in PARAMETRI:
         presi = statistiche.dati["mira"][parametro]
-        # Dalla 0.11.8 il massimo preso con lo spazio ha la chiave sua, e massimo resta ai conti di prima della 0.10.0.
-        assert presi["minimo"] + presi["scelto"] + presi["massimo_con_lo_spazio"] == 2 and presi["massimo"] == 0
-        assert presi["nei_centri"] == 1
+        # Dalla 2.0.0 i valori della mira manuale hanno la chiave loro, e quelle delle scivolate restano ai conti di prima.
+        assert presi["manuali"] == 2 and presi["ai_capi"] == 1 and presi["nei_centri"] == 1
+        assert (presi["scelto"], presi["minimo"], presi["massimo_con_lo_spazio"], presi["massimo"]) == (0, 0, 0, 0)
     assert statistiche.dati["moto"]["fermi"] == {"apparsi": 2, "colpiti": 1}
     assert statistiche.dati["ultime"][-1]["tiri"] == 2 and statistiche.dati["ultime"][-1]["centri"] == 1
     assert statistiche.dati["somme"]["centri_misurati"] == 1
@@ -1562,8 +2075,8 @@ def test_l_esempio_del_proiettile(banco):
     motore, flusso = banco.motore, banco.flusso
     durata = round(modulo_partita.DURATA_DELL_ESEMPIO * FS)
     volo = modulo_partita.volo_d_esempio()
-    # Il volo d'esempio è un tiro verso il centro del cubo, che dura più dell'esempio, e passa da lì.
-    centro = np.array((0.0, 25.0, 55.0))
+    # Il volo d'esempio è un tiro verso il mezzo della cupola (D28), che dura più dell'esempio, e passa da lì.
+    centro = np.array(MEZZO_DELLA_CUPOLA)
     assert volo.colpito is None and volo.durata > modulo_partita.DURATA_DELL_ESEMPIO
     tempi = np.linspace(0.0, volo.durata, 20001)
     assert np.min(np.linalg.norm(volo.traiettoria.posizione(tempi) - centro, axis=1)) < 0.01
@@ -1634,6 +2147,7 @@ def test_nella_palestra():
     assert modulo_partita.nella_palestra(1) and modulo_partita.nella_palestra(PALESTRA_FINO_AL_LIVELLO)
     assert not modulo_partita.nella_palestra(PALESTRA_FINO_AL_LIVELLO + 1)
     assert "attesa" in modulo_partita.FASI and "attesa" in modulo_partita.IN_CORSO
+    assert "mira" in modulo_partita.FASI and "mira" in modulo_partita.IN_CORSO
 
 
 @pytest.mark.parametrize("palestra", [True, False])
@@ -1667,37 +2181,42 @@ def test_il_resoconto_arriva_quando_l_effetto_ha_finito_di_suonare(banco, monkey
         assert partita.battito() == []
 
 
-def test_la_mira_avviata_durante_l_effetto_aspetta_il_resoconto(banco, monkeypatch):
-    """D22, fuori dalla palestra: lo spazio dato mentre il tonfo suona ancora avvia la mira, ma il
-    resoconto aspetta la fine del tonfo, e la prima barra comincia dopo il suo secondo di silenzio
-    contato da lì, così la voce del resoconto non copre i bip; lo spazio nel silenzio non conta. Con
-    RITARDO_DEL_RESOCONTO il silenzio si sposta con lui."""
+def test_la_mira_avviata_durante_l_effetto_riceve_il_resoconto(banco, monkeypatch):
+    """D22 e D29, fuori dalla palestra: lo spazio dato mentre il tonfo suona ancora avvia la mira, e il resoconto arriva nella
+    mira, quando il tonfo ha finito di suonare, più RITARDO_DEL_RESOCONTO. Il tempo della mira, dalle prove del 22 novembre 2026,
+    non parte subito: aspetta la fine del tonfo, con lo stacco degli avvisi, e il resoconto che aspetta la fine dell'effetto,
+    così i tick non coprono la sua voce, e fino a lì i secondi restano tutti; poi la mira va avanti, coi suoi secondi che
+    scorrono."""
     monkeypatch.setattr(modulo_partita, "PALESTRA_FINO_AL_LIVELLO", 0)
     lungo = tonfo_lungo(monkeypatch)
-    pausa = round(PAUSA_FRA_BARRE * FS)
+    stacco = round(modulo_partita.STACCO_FRA_GLI_AVVISI * FS)
     partita = banco.partita()
     partita.nuova()
+    totale = tempo_della_mira(1)
+    assert totale == TEMPO_DELLA_MIRA_INIZIALE
+    # Senza ritardo il tempo parte alla fine dello stacco dopo il tonfo; col ritardo più lungo dello stacco, al resoconto.
     for ritardo in (0.0, 0.25):
+        assert (ritardo * FS > stacco) == (ritardo > 0.0)
         monkeypatch.setattr(modulo_partita, "RITARDO_DEL_RESOCONTO", ritardo)
         partita.spazio()
         mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
         inizio = fino_all_impatto(banco, partita)
         arrivo = inizio + len(lungo) + round(ritardo * FS)
-        assert partita.fase == "ascolto" and partita.spazio() == [] and partita.fase == "mira"
-        assert partita.inizio_barra == arrivo + pausa > partita._fine_degli_avvisi
+        k = banco.motore.prossimo_campione()
+        prima = len(banco.contati)
+        assert partita.fase == "ascolto" and partita.spazio() == [] and partita.fase == "mira" and banco.contati[prima:] == ["mira_avviata"]
+        partenza = max(k, inizio + len(lungo) + stacco, arrivo)
+        assert partenza > k and partita._fine_degli_avvisi == inizio + len(lungo) + stacco
+        assert partita._mira_dal == partenza and partita._scadenza == partenza + round(totale * FS)
+        assert partita.secondi_della_mira() == pytest.approx(totale)
+        porta_udibile_a(banco, arrivo - 1)
+        assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale)
         porta_udibile_a(banco, arrivo)
-        assert [m.tipo for m in partita.battito()] == ["resoconto"] and partita.sottofase == "pausa"
-        porta_udibile_a(banco, arrivo + pausa - 1)
-        assert partita.battito() == [] and partita.sottofase == "pausa"
-        assert partita.spazio() == [] and partita.valori == [] and partita.barra == 0
-        # La barra seguente, coi messaggi già arrivati, ha la sua pausa di sempre.
-        porta_udibile_a(banco, campione_del_valore(partita, 0.5))
-        assert partita.spazio() == [] and partita.barra == 1
-        assert partita.inizio_barra - banco.motore.prossimo_campione() == pausa
-        for _barra in range(2):
-            porta_udibile_a(banco, campione_del_valore(partita, 0.0))
-            assert partita.battito() == [] and partita.spazio() == []
-        assert partita.fase == "volo"
+        assert [m.tipo for m in partita.battito()] == ["resoconto"] and partita.fase == "mira"
+        assert partita.secondi_della_mira() == pytest.approx(totale)
+        porta_udibile_a(banco, partenza + 0.5 * FS)
+        assert partita.battito() == [] and partita.secondi_della_mira() == pytest.approx(totale - 0.5)
+        mira_e_spara(banco, partita, (0.0, 0.0, 0.0))
         fino_alla_risoluzione(banco, partita)
         assert partita.fase == "ascolto"
 
@@ -1754,11 +2273,13 @@ def test_l_attesa_della_palestra_dopo_un_centro(banco, cartella_di_prova):
     assert partita.righe_della_barra()[-1] == "Palestra: Spazio per il bersaglio nuovo"
     assert statistiche.dati["conti"]["attese_della_palestra"] == 1
     fermo = banco.motore.tempo_di_gioco()
-    # La grazia: lo spazio dato appena la partita si è fermata non la fa ripartire.
+    # La grazia: lo spazio dato appena la partita si è fermata non la fa ripartire. Si conta dal campione udibile del fermo,
+    # quello della fine degli avvisi a meno degli arrotondamenti dell'orologio finto.
+    assert partita._attesa_dal == pytest.approx(fine, abs=1e-6)
     grazia = round(GRAZIA_DELL_ATTESA * FS)
-    porta_udibile_a(banco, fine + grazia - 1)
+    porta_udibile_a(banco, partita._attesa_dal + grazia - 1)
     assert partita.spazio() == [] and partita.fase == "attesa" and banco.contati == prima
-    porta_udibile_a(banco, fine + grazia)
+    porta_udibile_a(banco, partita._attesa_dal + grazia)
     assert banco.motore.tempo_di_gioco() == fermo and partita.bersagli == []
     orologio.valore = 40.0
     k = banco.motore.prossimo_campione()
@@ -1849,14 +2370,15 @@ def test_la_pausa_automatica_durante_l_attesa(banco, cartella_di_prova):
     # Fermi dal 5 al 15 per la pausa, dal 20 al 60 per l'attesa, pausa compresa: in gioco dieci secondi.
     assert partita.riepilogo()["durata_s"] == 10.0
     conti = statistiche.dati["conti"]
-    assert (conti["pause_automatiche"], conti["attese_della_palestra"], conti.get("pause", 0)) == (2, 1, 0)
+    assert (conti["pause_automatiche"], conti["attese_della_palestra"], conti["pause"]) == (2, 1, 0)
     assert "pausa" not in banco.contati and "ripresa" not in banco.contati
 
 
 def test_ctrl_p_soltanto_nella_palestra(banco, cartella_di_prova):
     """D22: Ctrl+P mette la pausa nei livelli della palestra; dopo suona non_ora, la vista dice perché,
-    e il rifiuto si conta, anche nella mira, che va avanti. La pausa automatica c'è in tutti i livelli,
-    e Ctrl+P, che allora arriva dal menu, la lascia com'è: la toglie la finestra."""
+    e il rifiuto si conta, anche nella mira, che va avanti, col valore che si muove e il suo tempo che
+    scorre (D29). La pausa automatica c'è in tutti i livelli, e Ctrl+P, che allora arriva dal menu, la
+    lascia com'è: la toglie la finestra."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     senti_anche_le_statistiche(banco, statistiche)
@@ -1870,12 +2392,17 @@ def test_ctrl_p_soltanto_nella_palestra(banco, cartella_di_prova):
     rifiuto = f"La pausa con Ctrl+P c'è soltanto nei livelli della palestra, fino al livello {PALESTRA_FINO_AL_LIVELLO}."
     assert [(m.tipo, m.testo, m.annuncio) for m in messaggi] == [("avviso", rifiuto, "Pausa solo in palestra.")]
     assert not partita.in_pausa and banco.contati[-1] == "non_ora" and banco.motore.tempo_scorre
-    # Nella mira il rifiuto non tocca la barra in corso.
+    # Nella mira il rifiuto non la tocca: il valore si muove ancora, e il tempo della mira scorre.
     partita.spazio()
-    barra = partita._voce_barra
-    assert partita.pausa()[0].testo == rifiuto and not partita.in_pausa and partita._voce_barra is barra and partita.fase == "mira"
-    banco.flusso.avanza(3)
-    assert not barra.finita
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("direzione", 1)
+    asse = partita._voci_degli_assi["direzione"]
+    assert partita.pausa()[0].testo == rifiuto and not partita.in_pausa and partita.fase == "mira"
+    assert partita.tasti_giu() == [("direzione", 1)] and partita._voci_degli_assi["direzione"] is asse
+    secondi = partita.secondi_della_mira()
+    porta_udibile_a(banco, inizio + 0.6 * FS)
+    assert partita.battito() == [] and partita.secondi_della_mira() < secondi and not asse.finita
+    assert partita.mira.valori(inizio / FS + 0.6)[0] == pytest.approx(0.5 + 0.6 * VELOCITA_DELLA_MIRA)
     # La pausa automatica: Ctrl+P dal menu la lascia, e se ne va col menu.
     assert partita.pausa_automatica(True) == [] and partita.in_pausa
     assert partita.pausa()[0].testo == rifiuto and partita.in_pausa and banco.contati[-1] == "non_ora"

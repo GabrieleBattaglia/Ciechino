@@ -183,8 +183,8 @@ def informazioni():
         _("{nome}, il tiro a segno a orecchio, versione {versione}, rilasciata {data}.").format(nome=version.__app_name__, versione=version.__version__,
                                                                                             data=data_lunga(version.__date__)),
         _("Autori: {autori}.").format(autori=version.__author__),
-        _("Ciechino è un gioco di tiro per chi non vede: i bersagli si sentono nello spazio, e il colpo si mira con tre scivolate sonore, "
-          "direzione, alzo e potenza, fermate con la barra spaziatrice."),
+        _("Ciechino è un gioco di tiro per chi non vede: i bersagli si sentono nello spazio, e il colpo si mira a orecchio con tre valori, "
+          "direzione, alzo e potenza, mossi coi tasti finché li tieni giù."),
         _("Ciechino è software libero, con licenza GNU GPL versione 3: puoi usarlo, studiarlo, modificarlo e ridistribuirlo alle sue condizioni."),
         # Traduttori: l'indirizzo resta in fondo alla riga, senza punto dopo, perché si copi intero.
         _("Il codice è su GitHub, all'indirizzo {indirizzo}").format(indirizzo=REPOSITORY),

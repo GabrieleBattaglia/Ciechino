@@ -51,7 +51,7 @@ class Misure:
     come la precisione, quindi l'arrivo e la ricaduta possono venire dopo la fine del volo.
     Il bersaglio sta dove la sua posizione lo mette in ogni istante. Per un bersaglio in moto le due
     distanze dal cannone cambiano col tempo, e l'arrivo è il primo istante in cui quella del
-    proiettile raggiunge quella del bersaglio; un bonus già uscito dal cubo prosegue dritto, come nel
+    proiettile raggiunge quella del bersaglio; un bonus già uscito dal settore prosegue dritto, come nel
     suo moto, e le misure dicono dove sarebbe stato.
     Un tiro che cade prima di arrivare alla distanza del bersaglio non ha l'arrivo: arrivo, laterale,
     verticale e inclinazione sono None. Un tiro che, scendendo, resta sempre sotto il centro del
@@ -62,7 +62,8 @@ class Misure:
     Un bersaglio proprio sopra il cannone ha l'arrivo nell'istante dello sparo, e la sua direzione,
     che non c'è, si prende davanti, come in fisica.scomponi; un bersaglio quasi sopra il cannone ha
     l'arrivo subito dopo lo sparo, e il laterale, lì, non supera la sua distanza orizzontale dal
-    cannone. Nel cubo dei bersagli, che comincia a CUBO_DISTANZA metri, non succede mai."""
+    cannone. Nella cupola dei bersagli, che comincia a CUPOLA_RAGGIO_INTERNO metri dal suo centro e
+    lascia fuori il cono attorno alla verticale, non succede mai."""
 
     arrivo: float | None
     laterale: float | None
@@ -136,7 +137,7 @@ class Volo:
     @property
     def centro_nel_passaggio(self):
         """Il centro del bersaglio colpito o del vicino nell'istante del passaggio più vicino, un array di 3,
-        anche fuori dal cubo, come per un bonus appena uscito da una parete; None senza bersaglio. Un Volo
+        anche fuori dalla cupola, come per un bonus appena uscito da un lato; None senza bersaglio. Un Volo
         costruito senza tempo_del_passaggio prende il bersaglio alla fine del volo, che per uno fermo è lo
         stesso punto."""
         bersaglio = self.colpito if self.colpito is not None else self.vicino
@@ -148,18 +149,16 @@ class Volo:
     @property
     def precisione_globale(self):
         """La precisione globale di D26, da 0 a 1, quanto il proiettile si è avvicinato al bersaglio
-        considerando l'intero cubo, con la misura che Gabriele ha scelto nel terzo collaudo, il 20
-        novembre 2026: 1 meno distanza_dal_centro divisa per la distanza fra centro_nel_passaggio e il più
-        lontano degli otto angoli del cubo, fisica.distanza_dall_angolo_piu_lontano, mai sotto zero,
-        perché un tiro sparato lontano può passare più lontano di quell'angolo. Quella distanza va da
-        mezza diagonale, circa 43,3 metri, per un bersaglio nel centro del cubo, alla diagonale intera,
-        circa 86,6, in un angolo; un centro sta quindi sempre sopra 1 meno raggio più RAGGIO_PROIETTILE
-        diviso mezza diagonale. None senza la distanza."""
+        considerando l'intero spazio dei bersagli, con la misura che Gabriele ha scelto nel terzo
+        collaudo, il 20 novembre 2026: 1 meno distanza_dal_centro divisa per la distanza fra
+        centro_nel_passaggio e il punto della cupola più lontano da lui, fisica.distanza_dal_punto_piu_lontano
+        (D28; fino alla 1.0.0 l'angolo più lontano del cubo), mai sotto zero, perché un tiro sparato
+        lontano può passare più lontano di quel punto. None senza la distanza."""
         distanza = self.distanza_dal_centro
         centro = self.centro_nel_passaggio
         if distanza is None or centro is None:
             return None
-        lontananza = fisica.distanza_dall_angolo_piu_lontano(centro)
+        lontananza = fisica.distanza_dal_punto_piu_lontano(centro)
         return min(1.0, max(0.0, 1.0 - distanza / lontananza))
 
 

@@ -51,10 +51,10 @@ INIZIO_DESCRIZIONE = "Ciechino, "
 EVENTO_DEL_CAFFE = "caffe"
 PRESET_DEL_CAFFE = "donazione"
 ONDA_QUADRA = 2
-# Gli eventi che suonano spesso, a ogni valore della mira o a ogni F5 e F7: la regola di Gabriele
+# Gli eventi che suonano spesso, a ogni mira, a ogni capo di una scala della mira o a ogni F5 e F7: la regola di Gabriele
 # li vuole brevi e morbidi, sotto questa durata in secondi. Non sta in costanti.py perché riguarda
 # il disegno dei preset, non il gioco.
-EVENTI_FREQUENTI = ("valore_preso", "mira_avviata", "vai_alla_vista", "vai_alla_barra")
+EVENTI_FREQUENTI = ("mira_avviata", "fine_scala", "vai_alla_vista", "vai_alla_barra", "vai_alla_mira")
 DURATA_MASSIMA_FREQUENTI = 0.08
 
 # I preset nuovi, nell'ordine dei gruppi di suoni.GRUPPI. Le note si scrivono col nome inglese, le
@@ -117,14 +117,15 @@ PRESET = {
                         "Suona a ogni tiro, quindi è breve e morbido, e non ha altezza, per non confondersi con i bip e le scivolate della "
                         "mira. Va bene per un'attenzione che si concentra, una mira o un fiato sospeso."),
     },
-    "ciechino_valore_preso": {
-        "score": [["a5", 0.016, 0.0, -0.12], ["e5", 0.044, 0.0, -0.08]],
+    # Dalla mira manuale (D29), il 22 novembre 2026: il valore che arriva al capo della sua scala e si ferma.
+    "ciechino_fine_scala": {
+        "score": [["d3", 0.025, 0.0, -0.05], ["p", 0.015, 0.0, -0.5], ["d3", 0.035, 0.0, -0.1]],
         "kind": 3,
-        "adsr": [5.0, 45.0, 30.0, 40.0],
-        "descrizione": ("Ciechino, la mira prende un valore, la direzione, l'alzo o la potenza: uno scatto di fermo, onda triangolare, un "
-                        "tocco brevissimo di la 5 che cade sul mi 5, al centro, in 60 ms. Suona tre volte a ogni tiro, quindi è breve e "
-                        "morbido, e scende, mentre i bip della mira salgono. Va bene per un valore fissato, una scelta presa o un fermo "
-                        "che scatta."),
+        "adsr": [2.0, 50.0, 20.0, 40.0],
+        "descrizione": ("Ciechino, nella mira un valore arriva al capo della sua scala, al minimo o al massimo, e si ferma: un doppio colpo "
+                        "sordo, onda triangolare, due tocchi di re 3, il secondo un po' più lungo e più piano, al centro, in 75 ms, come un "
+                        "cursore che batte sul fermo. È breve e morbido, perché può suonare a ogni mira, e grave, sotto le tacche e i "
+                        "suoni dei valori, anche sotto i 150 Hz dell'alzo al minimo. Va bene per un fine corsa, un limite raggiunto o una manopola al massimo."),
     },
     # Esc nella mira (D25), il 20 novembre 2026: il respiro di ciechino_mira_avviata lasciato andare.
     "ciechino_mira_annullata": {
@@ -186,15 +187,6 @@ PRESET = {
     },
     # Il proiettile perduto (D25), il 20 novembre 2026: una barra della mira è passata cinque volte senza lo spazio, e il colpo
     # non parte. Rumore bianco come lo sparo, perché è lo sparo che non c'è: la miccia che sfrigola e si spegne senza il colpo.
-    "ciechino_proiettile_perduto": {
-        "score": [["4000-10000.2500-8000", 0.3, 0.0, [0.0, 0.25]], ["p", 0.05, 0.0, -0.5], ["400-1600.150-500", 0.25, 0.0, [0.15, -0.35]]],
-        "kind": 5,
-        "adsr": [5.0, 10.0, 80.0, 30.0],
-        "descrizione": ("Ciechino, una barra della mira è passata cinque volte senza lo spazio, e il proiettile è perduto: lo sparo che non "
-                        "c'è, rumore bianco, una miccia che sfrigola acuta e cresce, con la banda che scende da 4000-10000 a 2500-8000 Hz, "
-                        "poi, dopo una breve pausa, un soffio sordo che si spegne, da 400-1600 a 150-500 Hz, senza il colpo, al centro, in "
-                        "600 ms. Va bene per un colpo che fa cilecca, una miccia spenta o un'occasione sprecata."),
-    },
     # I livelli e i bersagli bonus.
     "ciechino_livello_su": {
         "score": [["a4", 0.065, -0.6, -0.05], ["d5", 0.065, -0.3, -0.05], ["f#5", 0.065, 0.0, -0.05], ["a5", 0.065, 0.3, -0.05],
@@ -599,6 +591,16 @@ PRESET = {
         "descrizione": ("Ciechino, F7, il fuoco va nella barra di stato: una scivolata breve e morbida di seno che sale dal fa 5 al do 6, "
                         "al centro, in 50 ms; acuta, come F7 negli altri programmi del parco. Lo specchio è ciechino_vai_alla_vista. Va "
                         "bene per uno spostamento del fuoco verso una barra o un'area secondaria."),
+    },
+    # Dalla mira manuale (D29), il 22 novembre 2026: F6 riporta il fuoco sulla Mira.
+    "ciechino_vai_alla_mira": {
+        "score": [["g5", 0.02, 0.0, -0.2], ["p", 0.01, 0.0, -0.5], ["g5", 0.025, 0.0, -0.22]],
+        "kind": 1,
+        "adsr": [15.0, 10.0, 80.0, 40.0],
+        "descrizione": ("Ciechino, F6, durante la mira il fuoco torna sul controllo Mira: un tocco doppio di seno, due sol 5 brevi e "
+                        "morbidi, al centro, in 55 ms; fermo, fra la discesa di ciechino_vai_alla_vista e la salita di "
+                        "ciechino_vai_alla_barra, perché la Mira sta fra le due aree. Va bene per un fuoco che torna al controllo "
+                        "principale, o per un puntatore che si riaggancia."),
     },
 }
 

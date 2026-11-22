@@ -1,8 +1,12 @@
 """
-Le prove di bersagli.py: i livelli, le forme dell'LFO coi loro parametri a caso, il rimbalzo, il bonus,
-la generazione a caso, con le portanti e l'escursione, e i parametri sonori.
+Le prove di bersagli.py: i livelli, le forme dell'LFO coi loro parametri a caso, il moto coi rimbalzi, il
+bonus, la generazione a caso, con le portanti e l'escursione, e i parametri sonori.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0.
+Dalla 2.0.0 i bersagli stanno nella cupola di D28: la funzione rimbalzo del cubo e le sue prove escono, e
+le prove nuove guardano la Zona e il Percorso di ogni bersaglio, la partenza estratta con Zona.punto_a_caso,
+il bonus che attraversa il settore su una corda a quota e profondità costanti, il suo tempo di uscita dal
+lato verso cui va, e la traversata che si raggiunge tutta con la mira.
 """
 
 import itertools
@@ -18,10 +22,9 @@ from costanti import (
     BERSAGLIO_DB,
     BERSAGLIO_FORMA,
     BERSAGLIO_PORTANTI,
-    CUBO_LATO,
-    CUBO_X,
     DURATA_BONUS_INIZIALE,
     DURATA_BONUS_MINIMA,
+    ELEVAZIONE_MASSIMA,
     ESCURSIONE_A_CASO,
     FATTORE_ESCURSIONE,
     FORME_LFO,
@@ -37,6 +40,7 @@ from costanti import (
     RAGGIO_INIZIALE,
     RAGGIO_MINIMO,
     RAPPORTI_DELLA_DOPPIA,
+    SETTORE_AZIMUT,
     SPINTA_DEL_CASO,
     VALORI_DEL_CASUALE,
     VELOCITA_INIZIALE_BERSAGLI,
@@ -419,42 +423,16 @@ def test_parametri_completi_e_i_limiti():
     assert np.array_equal(bersaglio.lfo(tempi), bersagli.lfo("trillo", tempi, 3.0, parametri={"note": 3}))
 
 
-# Il rimbalzo e il moto.
-
-def test_rimbalzo_dentro_continuo_a_velocita_costante():
-    rng = np.random.default_rng(3)
-    minimi = np.array((-20.0, 4.0, 35.0))
-    massimi = np.array((20.0, 45.0, 75.0))
-    passo = 0.001
-    tempi = np.arange(0.0, 60.0, passo)
-    for _ in range(20):
-        partenza = rng.uniform(minimi, massimi)
-        velocita = rng.normal(size=3)
-        velocita *= rng.uniform(0.5, 12.0) / np.linalg.norm(velocita)
-        posizioni = bersagli.rimbalzo(partenza + velocita * tempi[:, None], minimi, massimi)
-        assert np.all(posizioni >= minimi - 1e-9)
-        assert np.all(posizioni <= massimi + 1e-9)
-        assert np.allclose(posizioni[0], partenza)
-        passi = np.linalg.norm(np.diff(posizioni, axis=0), axis=1)
-        attesa = np.linalg.norm(velocita) * passo
-        # Continua: nessun passo più lungo del moto libero. Velocità costante: tranne i passi a
-        # cavallo di un rimbalzo, tutti lunghi uguali; e su ogni asse il passo vale la componente.
-        assert passi.max() <= attesa * (1 + 1e-9)
-        assert np.mean(np.isclose(passi, attesa, rtol=1e-6)) > 0.99
-        per_asse = np.abs(np.diff(posizioni, axis=0))
-        assert np.all(per_asse <= np.abs(velocita) * passo * (1 + 1e-9) + 1e-12)
-
-
-def test_rimbalzo_asse_chiuso():
-    posizioni = bersagli.rimbalzo(np.array([[1.0, 2.0, 3.0], [7.0, 8.0, 9.0]]), (0.0, 5.0, 0.0), (10.0, 5.0, 10.0))
-    assert np.allclose(posizioni[:, 1], 5.0)
-
+# Il moto, coi rimbalzi sulle pareti della cupola (D28).
 
 def test_bersaglio_fermo():
     bersaglio = bersagli.Bersaglio(numero=1, forma="seno", raggio=2.0, partenza=(3.0, 20.0, 50.0), nato=10.0)
     assert not bersaglio.mobile
     assert bersaglio.velocita_scalare == 0.0
     assert bersaglio.tempo_di_uscita is None
+    # La sua zona nasce con lui, col suo raggio; un fermo non ha percorso.
+    assert isinstance(bersaglio.zona, fisica.Zona) and bersaglio.zona.raggio == 2.0 and bersaglio.zona is bersaglio.zona
+    assert bersaglio._percorso is None
     assert np.allclose(bersaglio.posizione(100.0), (3.0, 20.0, 50.0))
     assert bersaglio.posizione(np.array([10.0, 20.0, 30.0])).shape == (3, 3)
     assert bersaglio.vivo(10.0) is True
@@ -467,18 +445,41 @@ def test_bersaglio_fermo():
 
 
 def test_bersaglio_mobile_resta_nella_zona():
+    """D28: il mobile va dritto e rimbalza sulle pareti della sua zona, col suo fisica.Percorso: dentro in ogni
+    istante, continuo e a velocità costante, come rimbalzava sulle pareti del cubo."""
     raggio = 1.5
     bersaglio = bersagli.Bersaglio(numero=2, forma="sega", raggio=raggio, partenza=(0.0, 25.0, 55.0), velocita=(9.0, -4.0, 6.0), nato=5.0)
     assert bersaglio.mobile
-    assert bersaglio.velocita_scalare == pytest.approx(math.sqrt(81 + 16 + 36))
+    rapidita = math.sqrt(81 + 16 + 36)
+    assert bersaglio.velocita_scalare == pytest.approx(rapidita)
     assert bersaglio.tempo_di_uscita is None
-    minimi, massimi = fisica.zona_del_centro(raggio)
-    posizioni = bersaglio.posizione(np.arange(5.0, 200.0, 0.01))
-    assert np.all(posizioni >= minimi - 1e-9)
-    assert np.all(posizioni <= massimi + 1e-9)
+    assert isinstance(bersaglio._percorso, fisica.Percorso) and bersaglio._percorso.zona is bersaglio.zona
+    assert bersaglio.zona.raggio == raggio
+    passo = 0.01
+    tempi = np.arange(5.0, 200.0, passo)
+    posizioni = bersaglio.posizione(tempi)
+    assert posizioni.shape == (len(tempi), 3)
+    assert np.all(bersaglio.zona.scarti(posizioni) <= 1e-6)
     assert np.allclose(posizioni[0], (0.0, 25.0, 55.0))
-    # Prima di un rimbalzo il moto è rettilineo.
+    assert bersaglio._percorso.rimbalzi > 5
+    passi = np.linalg.norm(np.diff(posizioni, axis=0), axis=1)
+    assert passi.max() <= rapidita * passo * (1 + 1e-9)
+    assert np.mean(np.isclose(passi, rapidita * passo, rtol=1e-6)) > 0.99
+    # Prima di un rimbalzo il moto è rettilineo, e il tempo del percorso si conta dalla nascita.
     assert np.allclose(bersaglio.posizione(5.5), (4.5, 23.0, 58.0))
+    assert bersaglio.posizione(123.4) == pytest.approx(bersaglio._percorso.posizione(123.4 - 5.0))
+    assert bersaglio.posizione(77.0).shape == (3,)
+
+
+def test_mobile_nato_fuori_dalla_zona_e_bonus_vanno_dritti():
+    """Un mobile che nasce fuori dalla sua zona va dritto, come il moto libero di fisica.Percorso, e il bonus
+    va dritto sempre, senza percorso, perché entra ed esce dal settore."""
+    fuori = bersagli.Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=(-60.0, 20.0, 40.0), velocita=(6.0, 0.0, 0.0))
+    tempi = np.linspace(0.0, 30.0, 61)
+    assert fuori.posizione(tempi) == pytest.approx(np.array((-60.0, 20.0, 40.0)) + np.outer(tempi, (6.0, 0.0, 0.0)))
+    bonus = bersagli.Bersaglio(numero=2, forma="seno", raggio=1.0, partenza=(0.0, 20.0, 50.0), velocita=(0.0, 0.0, 9.0), bonus=True, nato=3.0)
+    assert bonus._percorso is None
+    assert bonus.posizione(13.0) == pytest.approx((0.0, 20.0, 140.0))
 
 
 # La generazione a caso.
@@ -489,7 +490,6 @@ def test_genera_bersagli_nella_zona():
         for numero in range(40):
             bersaglio = bersagli.genera(livello, rng, numero, 7.5)
             raggio = bersagli.raggio_del_livello(livello)
-            minimi, massimi = fisica.zona_del_centro(raggio)
             assert bersaglio.numero == numero
             assert bersaglio.nato == 7.5
             assert not bersaglio.bonus
@@ -497,10 +497,12 @@ def test_genera_bersagli_nella_zona():
             assert bersaglio.forma in FORME_LFO
             assert FREQUENZA_LFO[0] <= bersaglio.frequenza_lfo <= FREQUENZA_LFO[1]
             assert 0.0 <= bersaglio.fase_lfo < 1.0
-            assert np.all(bersaglio.partenza >= minimi)
-            assert np.all(bersaglio.partenza <= massimi)
+            # D28: la partenza sta nella zona del suo raggio, cioè col bersaglio tutto dentro la cupola.
+            assert bersaglio.zona.raggio == pytest.approx(raggio)
+            assert bersaglio.zona.contiene(bersaglio.partenza, tolleranza=0.0)
             assert bersaglio.velocita_scalare == pytest.approx(bersagli.velocita_del_livello(livello))
             assert bersaglio.mobile == (livello >= LIVELLO_DEI_MOBILI)
+            assert (bersaglio._percorso is not None) == bersaglio.mobile
             assert bersaglio.portante in BERSAGLIO_PORTANTI
             assert ESCURSIONE_A_CASO[0] <= bersaglio.escursione <= ESCURSIONE_A_CASO[1]
             assert set(bersaglio.parametri_lfo) == {p.nome for p in bersagli.PARAMETRI_LFO[bersaglio.forma]}
@@ -544,29 +546,62 @@ def _voce(bersaglio):
     return (bersaglio.forma, bersaglio.frequenza_lfo, bersaglio.fase_lfo, bersaglio.seme, bersaglio.parametri_lfo, bersaglio.escursione, bersaglio.portante)
 
 
+def _partenza_attesa(rng, raggio):
+    """La partenza di genera rifatta a mano nell'ordine di fisica.Zona.punto_a_caso (D28): la distanza, l'azimut
+    e il seno dell'elevazione, uniformi, ripetuti finché il punto non sta nella zona del raggio. Restituisce
+    anche quante estrazioni sono servite."""
+    zona = fisica.Zona(raggio)
+    giri = 0
+    while True:
+        giri += 1
+        distanza = rng.uniform(zona.interno, zona.esterno)
+        azimut = math.radians(rng.uniform(-SETTORE_AZIMUT, SETTORE_AZIMUT))
+        elevazione = math.asin(rng.uniform(0.0, math.sin(math.radians(ELEVAZIONE_MASSIMA))))
+        punto = distanza * np.array((math.cos(elevazione) * math.sin(azimut), math.sin(elevazione), math.cos(elevazione) * math.cos(azimut)))
+        if zona.contiene(punto, tolleranza=0.0):
+            return punto, giri
+
+
+def _bordo_della_corda(raggio, profondita):
+    """Fin dove va, da una parte e dall'altra, la corda del bonus dentro il settore, col centro a un raggio dai due lati."""
+    settore = math.radians(SETTORE_AZIMUT)
+    return (profondita * math.sin(settore) - raggio) / math.cos(settore)
+
+
 def test_genera_estrae_nell_ordine_scritto():
     portanti = ("seno", "triangolo")
     for livello in (1, LIVELLO_DEI_MOBILI + 2):
         usato, rifatto = random.Random(77), random.Random(77)
         bersaglio = bersagli.genera(livello, usato, 3, 1.5, portanti=portanti)
-        minimi, massimi = fisica.zona_del_centro(bersagli.raggio_del_livello(livello))
-        partenza = [rifatto.uniform(minimi[asse], massimi[asse]) for asse in range(3)]
+        partenza, _giri = _partenza_attesa(rifatto, bersagli.raggio_del_livello(livello))
         direzione = np.array([rifatto.gauss(0.0, 1.0) for _ in range(3)])
         voce = _voce_attesa(rifatto, portanti)
-        assert np.array_equal(bersaglio.partenza, partenza)
+        assert bersaglio.partenza == pytest.approx(partenza)
         assert np.allclose(bersaglio.velocita, direzione / np.linalg.norm(direzione) * bersagli.velocita_del_livello(livello))
         assert _voce(bersaglio) == voce
         # E nient'altro: dopo, i due generatori sono allo stesso punto.
         assert usato.random() == rifatto.random()
-    usato, rifatto = random.Random(78), random.Random(78)
-    bonus = bersagli.genera_bonus(LIVELLO_DEI_BONUS, usato, 4, 2.0, portanti=portanti)
-    raggio = bersagli.raggio_del_livello(LIVELLO_DEI_BONUS) * RAGGIO_BONUS_FATTORE
-    minimi, massimi = fisica.zona_del_centro(raggio)
-    da_sinistra = rifatto.random() < 0.5
-    altezza, profondita = rifatto.uniform(minimi[1], massimi[1]), rifatto.uniform(minimi[2], massimi[2])
-    assert (bonus.velocita[0] > 0.0, bonus.partenza[1], bonus.partenza[2]) == (da_sinistra, altezza, profondita)
-    assert _voce(bonus) == _voce_attesa(rifatto, portanti)
-    assert usato.random() == rifatto.random()
+    # Una partenza che chiede più di un'estrazione, perché la prima cade fuori dalla zona.
+    for seme in itertools.count(100):
+        if _partenza_attesa(random.Random(seme), RAGGIO_INIZIALE)[1] > 1:
+            break
+    usato, rifatto = random.Random(seme), random.Random(seme)
+    assert bersagli.genera(1, usato, 1, 0.0).partenza == pytest.approx(_partenza_attesa(rifatto, RAGGIO_INIZIALE)[0])
+    # Il bonus: il lato, poi l'altezza e la profondità, ripetute finché la corda non sta nella zona, poi il suono.
+    for seme in (78, 79, 80, 81):
+        usato, rifatto = random.Random(seme), random.Random(seme)
+        bonus = bersagli.genera_bonus(LIVELLO_DEI_BONUS, usato, 4, 2.0, portanti=portanti)
+        raggio = bersagli.raggio_del_livello(LIVELLO_DEI_BONUS) * RAGGIO_BONUS_FATTORE
+        zona = fisica.Zona(raggio)
+        da_sinistra = rifatto.random() < 0.5
+        while True:
+            altezza, profondita = rifatto.uniform(zona.pavimento, zona.esterno), rifatto.uniform(0.0, zona.esterno)
+            bordo = _bordo_della_corda(raggio, profondita)
+            if bordo > 0.0 and zona.contiene((0.0, altezza, profondita), tolleranza=0.0) and zona.contiene((bordo, altezza, profondita), tolleranza=0.0):
+                break
+        assert (bool(bonus.velocita[0] > 0.0), bonus.partenza[1], bonus.partenza[2]) == (da_sinistra, altezza, profondita)
+        assert _voce(bonus) == _voce_attesa(rifatto, portanti)
+        assert usato.random() == rifatto.random()
 
 
 def test_genera_con_le_portanti():
@@ -593,33 +628,49 @@ def test_genera_con_le_portanti():
     assert BERSAGLIO_FORMA in BERSAGLIO_PORTANTI
 
 
-def test_genera_bonus_attraversa_il_cubo():
+def test_genera_bonus_attraversa_il_settore():
+    """D28: il bonus nasce col centro a un raggio fuori dal lato di sinistra o di destra, già tangente al lato da
+    fuori, attraversa il settore lungo x a quota e profondità costanti, su una corda che dentro il settore sta
+    tutta nella zona del suo raggio, ed esce del tutto dall'altro lato in durata_del_bonus secondi."""
     rng = random.Random(8)
     lati = set()
+    settore = math.radians(SETTORE_AZIMUT)
     for numero in range(60):
         livello = LIVELLO_DEI_BONUS + numero % 20
         bonus = bersagli.genera_bonus(livello, rng, numero, 30.0)
         raggio = bersagli.raggio_del_livello(livello) * RAGGIO_BONUS_FATTORE
         durata = bersagli.durata_del_bonus(livello)
+        zona = bonus.zona
         assert bonus.bonus
         assert bonus.mobile
-        assert bonus.raggio == pytest.approx(raggio)
+        assert bonus._percorso is None
+        assert bonus.raggio == pytest.approx(raggio) and zona.raggio == pytest.approx(raggio)
         assert bonus.velocita[1] == 0.0
         assert bonus.velocita[2] == 0.0
-        assert abs(bonus.velocita[0]) == pytest.approx((CUBO_LATO + 2 * raggio) / durata)
+        altezza, profondita = bonus.partenza[1], bonus.partenza[2]
+        assert zona.pavimento <= altezza <= zona.esterno and 0.0 <= profondita <= zona.esterno
+        # La corda intera va da un raggio fuori da un lato a un raggio fuori dall'altro, in tanti secondi.
+        fuori = (profondita * math.sin(settore) + raggio) / math.cos(settore)
+        assert abs(bonus.velocita[0]) == pytest.approx(2.0 * fuori / durata)
         assert bonus.tempo_di_uscita == pytest.approx(30.0 + durata)
         assert bonus.portante in BERSAGLIO_PORTANTI
         assert ESCURSIONE_A_CASO[0] <= bonus.escursione <= ESCURSIONE_A_CASO[1]
-        minimi, massimi = fisica.zona_del_centro(raggio)
-        assert minimi[1] <= bonus.partenza[1] <= massimi[1]
-        assert minimi[2] <= bonus.partenza[2] <= massimi[2]
-        # Nasce tangente al cubo da fuori, ed esce del tutto dall'altra parte.
+        # Nasce tangente da fuori al lato da cui parte, ed esce del tutto dall'altro.
+        da_sinistra = bonus.velocita[0] > 0.0
+        partenza_dal_lato, arrivo_dal_lato = (zona.normale_sinistra, zona.normale_destra) if da_sinistra else (zona.normale_destra, zona.normale_sinistra)
         inizio = bonus.posizione(30.0)
         fine = bonus.posizione(bonus.tempo_di_uscita)
-        assert abs(inizio[0]) == pytest.approx(CUBO_X[1] + raggio)
+        assert inizio @ partenza_dal_lato == pytest.approx(raggio)
+        assert fine @ arrivo_dal_lato == pytest.approx(raggio)
         assert fine[0] == pytest.approx(-inizio[0])
         assert np.allclose(fine[1:], inizio[1:])
         lati.add(math.copysign(1.0, bonus.velocita[0]))
+        # Dentro il settore, col centro a un raggio dai due lati, la corda sta tutta nella zona, e non è vuota.
+        tempi = np.linspace(30.0, bonus.tempo_di_uscita, 801)
+        posizioni = bonus.posizione(tempi)
+        nel_settore = (posizioni @ zona.normale_destra <= -raggio) & (posizioni @ zona.normale_sinistra <= -raggio)
+        assert nel_settore.sum() > 10
+        assert zona.contiene(posizioni[nel_settore]).all()
         # Vivo dal suo nato all'uscita, non prima e non dopo.
         assert bonus.vivo(30.0)
         assert bonus.vivo(30.0 + durata / 2)
@@ -631,10 +682,59 @@ def test_genera_bonus_attraversa_il_cubo():
     assert lati == {-1.0, 1.0}
 
 
+def test_tempo_di_uscita_dal_lato_verso_cui_va():
+    """D28: il bonus esce del tutto dal settore quando il suo centro sta a un raggio oltre il lato verso cui va,
+    da qualunque punto parta e con qualunque velocità che vada verso un lato; un bonus che non va verso nessun
+    lato non esce mai, e gli altri bersagli non hanno un tempo di uscita."""
+    settore = math.radians(SETTORE_AZIMUT)
+    raggio = 1.0
+    for partenza, velocita, nato in (((0.0, 20.0, 50.0), (-5.0, 0.0, 0.0), 0.0), ((-10.0, 30.0, 40.0), (4.0, 0.0, 0.0), 12.0),
+                                     ((5.0, 25.0, 45.0), (3.0, 1.0, 2.0), 7.0), ((-3.0, 15.0, 60.0), (-2.0, -0.5, 1.0), 1.0)):
+        bonus = bersagli.Bersaglio(numero=1, forma="seno", raggio=raggio, partenza=partenza, velocita=velocita, nato=nato, bonus=True)
+        lato = bonus.zona.normale_destra if velocita[0] > 0.0 else bonus.zona.normale_sinistra
+        uscita = bonus.tempo_di_uscita
+        assert uscita > nato
+        assert bonus.posizione(uscita) @ lato == pytest.approx(raggio)
+        assert bonus.posizione(uscita - 0.01) @ lato < raggio
+        assert bonus.vivo(uscita) and not bonus.vivo(uscita + 0.01)
+    # Già fuori del tutto, e diretto ancora più in là: esce subito, quando nasce.
+    oltre = (100.0 * math.sin(settore + 0.3), 20.0, 100.0 * math.cos(settore + 0.3))
+    assert bersagli.Bersaglio(numero=2, forma="seno", raggio=raggio, partenza=oltre, velocita=(5.0, 0.0, 0.0), nato=4.0, bonus=True).tempo_di_uscita == 4.0
+    # Dritto in avanti non va verso nessun lato.
+    avanti = bersagli.Bersaglio(numero=3, forma="seno", raggio=raggio, partenza=(0.0, 20.0, 40.0), velocita=(0.0, 0.0, 6.0), bonus=True)
+    assert avanti.tempo_di_uscita == math.inf and avanti.vivo(1e9)
+    normale = bersagli.Bersaglio(numero=4, forma="seno", raggio=raggio, partenza=(0.0, 20.0, 40.0), velocita=(5.0, 0.0, 0.0))
+    assert normale.tempo_di_uscita is None
+
+
 def test_bonus_fermo_non_esce_mai():
     bonus = bersagli.Bersaglio(numero=1, forma="seno", raggio=1.0, partenza=(0.0, 10.0, 50.0), bonus=True)
     assert bonus.tempo_di_uscita == math.inf
     assert bonus.vivo(1e9)
+
+
+def test_copertura_della_traversata_del_bonus(monkeypatch):
+    """D28: ogni punto della cupola resta raggiungibile, anche quelli della corda del bonus. Per bonus di ogni
+    livello, ogni centro della traversata dentro il settore, dove la corda sta tutta nella zona del suo raggio,
+    si raggiunge con i tre valori dentro le scale, e il tiro trovato ci passa. Come nella prova della cupola di
+    test_fisica, qui senza MARGINE_DI_COPERTURA."""
+    monkeypatch.setattr(fisica, "MARGINE_DI_COPERTURA", 0.0)
+    rng = random.Random(13)
+    scoperti = []
+    for numero in range(40):
+        livello = LIVELLO_DEI_BONUS + numero % 20
+        bonus = bersagli.genera_bonus(livello, rng, numero, 0.0)
+        bordo = _bordo_della_corda(bonus.raggio, bonus.partenza[2])
+        for x in np.linspace(-bordo, bordo, 11):
+            centro = np.array((x, bonus.partenza[1], bonus.partenza[2]))
+            valori = fisica.soluzione(centro)
+            if valori is None:
+                scoperti.append((livello, tuple(round(float(c), 2) for c in centro)))
+                continue
+            traiettoria = fisica.Traiettoria(*fisica.parametri_del_tiro(*valori))
+            tempo = math.hypot(centro[0], centro[2]) / math.hypot(traiettoria.iniziale[0], traiettoria.iniziale[2])
+            assert np.linalg.norm(traiettoria.posizione(tempo) - centro) < 0.01, (livello, centro, valori)
+    assert not scoperti, f"{len(scoperti)} centri del bonus senza soluzione, il primo {scoperti[0]}"
 
 
 # L'escursione e i parametri sonori.

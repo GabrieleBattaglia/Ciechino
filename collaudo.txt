@@ -1,0 +1,25 @@
+Collaudo di Ciechino 2.0.0, la cupola, la mira manuale e la riserva più larga: cancella le righe superate, annota dopo i due punti quelle con problemi.
+Prima: cuffie in testa, NVDA acceso col braille, Leggi i resoconti con la sintesi accesa; dalla cartella E:\git\mine\Ciechino lancia python Ciechino.py.
+Passo 1: apri gli Ascolti dal menu Aiuto e ascolta i passi 2, 3 e 4: da un lato all'altro, l'altezza, la distanza.
+Domanda 1: nel passo 2 cambia soltanto la panoramica, nel 3 soltanto la nota, nel 4 soprattutto il volume?
+Passo 2: negli Ascolti ascolta i passi della mira manuale e del tempo della mira, poi chiudi con Esc.
+Domanda 2: i suoni della direzione, dell'alzo e della potenza, le loro tacche e il colpo sordo dei capi si distinguono bene, e il tick del tempo si sente salire fino allo sparo?
+Passo 3: comincia una partita con Spazio, poi premi Spazio per mirare.
+Domanda 3: NVDA dice Mira e il fuoco va lì, e premendo le frecce, Home e Fine NVDA tace, senza rileggere righe?
+Passo 4: tieni giù la freccia destra per circa un secondo e lasciala; poi fai lo stesso con la freccia su e con Fine.
+Domanda 4: ogni suono si muove finché tieni giù il tasto e tace appena lo lasci, senza ritardi che disturbino, e le tacche arrivano a ogni decimo?
+Passo 5: tieni giù insieme la freccia sinistra e Home.
+Domanda 5: i due valori si muovono insieme, e si sentono tutti e due?
+Passo 6: tieni giù Fine finché la potenza arriva al massimo.
+Domanda 6: al capo senti il colpo sordo, e il suono della potenza si ferma?
+Passo 7: premi F7 e leggi la barra di stato con le frecce, col braille; poi premi F6.
+Domanda 7: la riga dei valori dice direzione, alzo e potenza, coi gradi col decimale, e «senza tempo»; con F6 torni sulla Mira col suo suono, e le frecce muovono di nuovo la mira?
+Passo 8: premi Invio.
+Domanda 8: lo sparo parte subito, il fuoco torna nella vista e il resoconto arriva come prima?
+Passo 9: mira molto in alto, con l'alzo e la potenza al massimo, e spara.
+Domanda 9: la nota del proiettile sale fino all'apice e poi scende, senza restare ferma in cima?
+Passo 10: quando arrivi al livello 4, il primo dopo la palestra, avvia la mira e lascia che il tempo scada.
+Domanda 10: senti un tick al secondo sempre più acuto, la barra dice i secondi che restano, il tempo parte dopo la fanfara del livello e la voce del resoconto, e allo scadere il colpo parte da solo?
+Domanda 11: dal livello 4 i bersagli mobili si muovono anche mentre miri: riesci a sentirli muovere e ad anticiparli?
+Domanda 12: venti colpi all'inizio, quindici a ogni livello e otto col bonus ti sembrano la misura giusta?
+Esito:
