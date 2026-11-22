@@ -360,7 +360,8 @@ def test_il_suono_di_f6(creata):
 
 def test_gli_eventi_usciti_con_la_mira_manuale(creata, originale):
     """D29: il valore preso e il proiettile perduto non sono più eventi, né azioni, né preset della tabella dello strumento,
-    che non li firma più; i loro preset restano nella collezione così com'erano, perché ogni suono unico è patrimonio comune."""
+    che non li firma più; i loro preset restano nella collezione, perché ogni suono unico è patrimonio comune, e dal 22 novembre
+    2026, GBUtils V312, senza la firma di Ciechino."""
     for evento, nome in EVENTI_USCITI.items():
         assert evento not in suoni.EVENTI and evento not in suoni.AZIONI, evento
         assert evento not in crea_preset.EVENTI_FREQUENTI, evento
@@ -368,6 +369,9 @@ def test_gli_eventi_usciti_con_la_mira_manuale(creata, originale):
         assert nome in originale, nome
         assert creata.dati[nome] == originale[nome], nome
         assert not crea_preset.firmato(creata.dati[nome]), nome
+    vera = _leggi(crea_preset.percorso_condiviso())
+    for nome in EVENTI_USCITI.values():
+        assert nome in vera and not crea_preset.firmato(vera[nome]), nome
 
 
 def test_sparo_colpiti_e_terra_sono_di_rumore(creata):
