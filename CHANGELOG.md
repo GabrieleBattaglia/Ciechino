@@ -8,6 +8,8 @@ Il puntatore della mira prende adesso il timbro del tuo proiettile, quello che s
 
 Durante la mira, dallo spazio fino al colpo, il puntatore non tace più coi valori fermi: resta acceso 18 decibel più piano, col volume che segue sempre la potenza, così sai sempre dove stai puntando. Tace allo sparo, con Esc e durante la pausa, e si riaccende alla ripresa. Negli Ascolti, fra le due corse di ogni valore, il puntatore resta acceso piano come in partita.
 
+Pubblicata su GitHub il 22 novembre 2026 come release v2.0.3, dopo il collaudo di Gabriele, con l'archivio Ciechino.zip e l'installatore Ciechino-Setup-2.0.3.exe in allegato. È la prima release dopo la 1.0.0, e porta anche le novità della 2.0.0 e della 2.0.1, che non sono uscite da sole. Verificato che l'aggiornamento automatico la riconosca e ne riceva le note. L'eseguibile è stato provato su una copia a volume zero, su un desktop di Windows nascosto: apertura sulla scheda audio, gli Ascolti partiti da soli alla prima apertura coi loro quattordici passi, la collezione dei suoni nel pacchetto, chiusura senza processi rimasti e senza auto_updater_error.log.
+
 ## [2.0.1] - 2026-11-22
 
 Il suono della mira adesso è il tuo puntatore, come ha chiesto Gabriele: una voce sola, in onda triangolare, che porta sempre tutti e tre i valori, la direzione nel punto da cui arriva, l'alzo nell'altezza della nota, da 150 a 2.400 hertz, e la potenza nel volume. Se muovi la direzione, la nota e il volume restano quelli dell'alzo e della potenza, e lo stesso per gli altri due; con due tasti giù cambiano insieme due cose dello stesso suono. Fino alla 2.0.0 ogni valore aveva la sua voce, e gli altri due tacevano.
