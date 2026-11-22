@@ -328,8 +328,8 @@ class Suoni:
             self._mono[preset] = mono
         return mono
 
-    def _buffer(self, evento, posizione, guadagno_db):
-        """Il buffer dell'evento, con la posizione e il guadagno, oppure None se l'evento non c'è."""
+    def _buffer(self, evento, posizione, guadagno_db, pan=None):
+        """Il buffer dell'evento, con la posizione o il pan e il guadagno, oppure None se l'evento non c'è."""
         preset = self._preset(evento)
         if preset is None:
             return None
@@ -338,7 +338,7 @@ class Suoni:
         from sintesi import db_in_lineare
 
         guadagno = db_in_lineare(guadagno_db)
-        if posizione is None:
+        if posizione is None and pan is None:
             stereo = self._stereo_di(preset)
             if guadagno == 1.0 or not len(stereo):
                 return stereo
@@ -346,6 +346,9 @@ class Suoni:
         from fisica import suono_di
         from sintesi import panoramica
 
+        if posizione is None:
+            # Un pan senza posizione, come il punto del puntatore della mira per il suono del capo (D31).
+            return panoramica(self._mono_di(preset) * np.float32(guadagno), pan)
         punto = np.asarray(posizione, dtype=float).reshape(3)
         # La frequenza dello spazio non serve: un effetto tiene l'altezza del suo preset.
         _frequenza, pan, guadagno_della_distanza = suono_di(punto)
@@ -373,15 +376,17 @@ class Suoni:
         self._conta(evento)
         return voce
 
-    def pronto(self, evento, posizione=None, guadagno_db=0.0, conta_subito=True):
+    def pronto(self, evento, posizione=None, guadagno_db=0.0, conta_subito=True, pan=None):
         """Il buffer dell'evento già collocato nello spazio e col suo guadagno, (N, 2) float32, da
         passare più tardi a motore.suona dentro un evento programmato; None se l'evento è
         sconosciuto, un buffer vuoto se il suo preset non ha suono. Senza posizione e a zero decibel
         è il buffer della memoria, in sola lettura.
         L'evento si conta subito; con conta_subito falso no, e chi l'ha preparato lo conta con
         suonato quando il motore l'ha fatto partire davvero: è il caso degli effetti che un
-        annullamento può lasciare muti."""
-        buffer = self._buffer(evento, posizione, guadagno_db)
+        annullamento può lasciare muti.
+        pan, senza posizione, fa il preset mono e lo mette in quel punto, da meno uno, tutto a sinistra, a
+        uno, tutto a destra, senza il guadagno della distanza: è il punto del puntatore della mira (D31)."""
+        buffer = self._buffer(evento, posizione, guadagno_db, pan)
         if conta_subito and buffer is not None and len(buffer):
             self._conta(evento)
         return buffer

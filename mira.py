@@ -45,6 +45,19 @@ class Asse:
     def ferma(self, tempo):
         self.muovi(0, tempo)
 
+    def in_moto(self, tempo):
+        """Vero dove il valore si muove, al tempo dato: col verso non zero, dal tempo dal fino all'arrivo al
+        capo, escluso. Uno scalare per un tempo, un array di bool per un array; lo stato si legge una volta
+        sola, come in valore. Il puntatore suona dove almeno un valore è in moto (D31)."""
+        valore, verso, dal = self.stato
+        tempi = np.asarray(tempo, dtype=float)
+        if verso == 0:
+            esito = np.zeros(tempi.shape, dtype=bool)
+        else:
+            capo = 1.0 if verso > 0 else 0.0
+            esito = (tempi >= dal) & (tempi < dal + abs(capo - valore) / VELOCITA_DELLA_MIRA)
+        return bool(esito) if esito.ndim == 0 else esito
+
     def capo(self):
         """Il capo verso cui va, 0 o 1, o None da fermo."""
         if self.verso > 0:

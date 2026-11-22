@@ -1,9 +1,10 @@
 """
 Le prove di sintesi.py: le portanti, la panoramica e i bip, contati al campione, e i suoni della mira manuale,
-il suono di un valore che si muove, le sue tacche e il tick del tempo, misurati sull'onda.
+il puntatore che porta i tre valori, le tacche e il tick del tempo, misurati sull'onda.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
-Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 prova parametri_dell_asse, tacca_dell_asse e tick_del_tempo,
-e non più il buffer delle scivolate, coi suoi bip e le sue tacche, uscito con la mira manuale di D29.
+Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 prova i suoni della mira manuale di D29, e non più il buffer
+delle scivolate, coi suoi bip e le sue tacche; dalla 2.0.1 il puntatore di D31, parametri_del_puntatore e
+pan_della_direzione, al posto della voce di ogni valore, con tacca_mono, tacca_dell_asse e tick_del_tempo.
 """
 
 import numpy as np
@@ -12,16 +13,16 @@ import pytest
 import sintesi
 from costanti import (
     ALZO_FREQUENZE,
-    DIREZIONE_FREQUENZA,
     DURATA_DELLA_SCALA,
     FS,
     PARAMETRI,
+    PARTENZA_DELLA_MIRA,
     POTENZA_DB_MINIMO,
-    POTENZA_FREQUENZA,
-    SCIVOLATA_DB,
-    SCIVOLATA_FORMA,
+    PUNTATORE_DB,
+    PUNTATORE_FORMA,
     TACCA_DB,
     TACCA_DURATA,
+    TACCA_FORMA,
     TACCA_FREQUENZE,
     TACCHE,
     TICK_DB,
@@ -161,70 +162,88 @@ def test_bip_lunghezza_livello_e_rampe():
     assert np.max(np.abs(onda)) == pytest.approx(sintesi.db_in_lineare(-12.0), rel=0.02)
 
 
-def test_i_parametri_della_direzione():
-    """La direzione: DIREZIONE_FREQUENZA ferma, a SCIVOLATA_DB, da tutto a sinistra a tutto a destra."""
+def _puntatore(**valori):
+    """parametri_del_puntatore coi valori dati per nome, e gli altri al centro, da dove parte la mira."""
+    tre = dict.fromkeys(PARAMETRI, PARTENZA_DELLA_MIRA) | valori
+    return sintesi.parametri_del_puntatore(*(tre[nome] for nome in PARAMETRI))
+
+
+def test_la_direzione_nella_panoramica_del_puntatore():
+    """D31: la direzione è la panoramica del puntatore, da tutto a sinistra a tutto a destra, e non cambia né la nota
+    né il volume, che restano quelli dell'alzo e della potenza."""
     valori = np.linspace(0.0, 1.0, 11)
-    frequenze, pan, guadagni = sintesi.parametri_dell_asse("direzione", valori)
-    assert frequenze.shape == pan.shape == guadagni.shape == valori.shape
-    np.testing.assert_allclose(frequenze, DIREZIONE_FREQUENZA)
-    np.testing.assert_allclose(pan, 2.0 * valori - 1.0, rtol=0, atol=1e-12)
-    assert pan[0] == -1.0 and pan[5] == pytest.approx(0.0, abs=1e-12) and pan[-1] == 1.0
-    np.testing.assert_allclose(guadagni, sintesi.db_in_lineare(SCIVOLATA_DB))
+    for alzo, potenza in ((0.5, 0.5), (0.0, 1.0), (0.8, 0.2)):
+        frequenze, pan, guadagni = _puntatore(direzione=valori, alzo=alzo, potenza=potenza)
+        assert frequenze.shape == pan.shape == guadagni.shape == valori.shape
+        np.testing.assert_allclose(pan, 2.0 * valori - 1.0, rtol=0, atol=1e-12)
+        assert pan[0] == -1.0 and pan[5] == pytest.approx(0.0, abs=1e-12) and pan[-1] == 1.0
+        np.testing.assert_allclose(frequenze, _puntatore(alzo=alzo)[0][0])
+        np.testing.assert_allclose(guadagni, _puntatore(potenza=potenza)[2][0])
+    np.testing.assert_allclose(sintesi.pan_della_direzione(valori), 2.0 * valori - 1.0, rtol=0, atol=1e-12)
+    assert sintesi.pan_della_direzione(0.25) == -0.5 and isinstance(sintesi.pan_della_direzione(0.25), float)
+    assert sintesi.pan_della_direzione(-1.0) == -1.0 and sintesi.pan_della_direzione(2.0) == 1.0
 
 
-def test_la_nota_dell_alzo_e_esponenziale():
-    """L'alzo: al centro, a SCIVOLATA_DB, da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1]; a passi uguali del valore
-    corrispondono intervalli uguali, e a metà scala c'è la media geometrica dei due capi."""
+def test_l_alzo_nell_altezza_del_puntatore():
+    """L'alzo è l'altezza del puntatore, da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] su scala esponenziale: a passi uguali
+    del valore intervalli uguali, a metà scala la media geometrica dei due capi; panoramica e volume restano quelli
+    della direzione e della potenza."""
     basso, alto = ALZO_FREQUENZE
     valori = np.linspace(0.0, 1.0, 21)
-    frequenze, pan, guadagni = sintesi.parametri_dell_asse("alzo", valori)
-    assert frequenze[0] == pytest.approx(basso) and frequenze[-1] == pytest.approx(alto)
-    assert frequenze[10] == pytest.approx(np.sqrt(basso * alto))
-    np.testing.assert_allclose(frequenze, basso * (alto / basso) ** valori)
-    rapporti = frequenze[1:] / frequenze[:-1]
-    np.testing.assert_allclose(rapporti, rapporti[0])
-    assert np.all(rapporti > 1.0)
-    np.testing.assert_array_equal(pan, 0.0)
-    np.testing.assert_allclose(guadagni, sintesi.db_in_lineare(SCIVOLATA_DB))
+    for direzione, potenza in ((0.5, 0.5), (1.0, 0.0), (0.1, 0.9)):
+        frequenze, pan, guadagni = _puntatore(direzione=direzione, alzo=valori, potenza=potenza)
+        assert frequenze[0] == pytest.approx(basso) and frequenze[-1] == pytest.approx(alto)
+        assert frequenze[10] == pytest.approx(np.sqrt(basso * alto))
+        np.testing.assert_allclose(frequenze, basso * (alto / basso) ** valori)
+        rapporti = frequenze[1:] / frequenze[:-1]
+        np.testing.assert_allclose(rapporti, rapporti[0])
+        assert np.all(rapporti > 1.0)
+        np.testing.assert_allclose(pan, 2.0 * direzione - 1.0)
+        np.testing.assert_allclose(guadagni, _puntatore(potenza=potenza)[2][0])
 
 
-def test_il_livello_della_potenza_in_decibel():
-    """La potenza: POTENZA_FREQUENZA al centro, che cresce lineare in decibel da POTENZA_DB_MINIMO sotto SCIVOLATA_DB
-    fino a SCIVOLATA_DB."""
+def test_la_potenza_nel_volume_del_puntatore():
+    """La potenza è il volume del puntatore, che cresce lineare in decibel da POTENZA_DB_MINIMO sotto PUNTATORE_DB fino a
+    PUNTATORE_DB: 20 decibel, così anche al minimo il puntatore si sente; panoramica e nota restano quelle della
+    direzione e dell'alzo, e il volume non le compensa."""
+    assert POTENZA_DB_MINIMO == -20.0 and PUNTATORE_DB == -9.0
     valori = np.linspace(0.0, 1.0, 21)
-    frequenze, pan, guadagni = sintesi.parametri_dell_asse("potenza", valori)
-    np.testing.assert_allclose(frequenze, POTENZA_FREQUENZA)
-    np.testing.assert_array_equal(pan, 0.0)
-    decibel = sintesi.lineare_in_db(guadagni)
-    assert decibel[0] == pytest.approx(SCIVOLATA_DB + POTENZA_DB_MINIMO)
-    assert decibel[-1] == pytest.approx(SCIVOLATA_DB)
-    np.testing.assert_allclose(decibel, SCIVOLATA_DB + POTENZA_DB_MINIMO * (1.0 - valori), rtol=0, atol=1e-9)
-    np.testing.assert_allclose(np.diff(decibel), -POTENZA_DB_MINIMO / 20.0, rtol=1e-9)
+    for direzione, alzo in ((0.5, 0.5), (0.0, 1.0), (0.7, 0.0)):
+        frequenze, pan, guadagni = _puntatore(direzione=direzione, alzo=alzo, potenza=valori)
+        decibel = sintesi.lineare_in_db(guadagni)
+        assert decibel[0] == pytest.approx(PUNTATORE_DB + POTENZA_DB_MINIMO)
+        assert decibel[-1] == pytest.approx(PUNTATORE_DB)
+        np.testing.assert_allclose(decibel, PUNTATORE_DB + POTENZA_DB_MINIMO * (1.0 - valori), rtol=0, atol=1e-9)
+        np.testing.assert_allclose(np.diff(decibel), -POTENZA_DB_MINIMO / 20.0, rtol=1e-9)
+        np.testing.assert_allclose(pan, 2.0 * direzione - 1.0)
+        np.testing.assert_allclose(frequenze, _puntatore(alzo=alzo)[0][0])
 
 
-def test_i_parametri_fuori_scala_e_di_un_valore_solo():
-    """Un valore oltre i capi vale il capo; un numero solo dà tre array di un elemento; un parametro sconosciuto è un
-    errore di chi chiama."""
-    for parametro in PARAMETRI:
-        fuori = sintesi.parametri_dell_asse(parametro, [-0.5, 1.5])
-        capi = sintesi.parametri_dell_asse(parametro, [0.0, 1.0])
-        for a, b in zip(fuori, capi, strict=True):
-            np.testing.assert_array_equal(a, b)
-        solo = sintesi.parametri_dell_asse(parametro, 0.3)
-        assert all(isinstance(array, np.ndarray) and array.shape == (1,) for array in solo), parametro
-        np.testing.assert_allclose(np.concatenate(solo), np.concatenate(sintesi.parametri_dell_asse(parametro, [0.3])))
-    with pytest.raises(ValueError):
-        sintesi.parametri_dell_asse("velocità", 0.5)
+def test_i_valori_del_puntatore_fuori_scala_e_insieme():
+    """Un valore oltre i capi vale il capo; tre numeri danno tre array di un elemento; due valori che si muovono
+    insieme cambiano insieme lo stesso suono."""
+    fuori = sintesi.parametri_del_puntatore([-0.5, 1.5], [1.5, -0.5], [-2.0, 3.0])
+    capi = sintesi.parametri_del_puntatore([0.0, 1.0], [1.0, 0.0], [0.0, 1.0])
+    for a, b in zip(fuori, capi, strict=True):
+        np.testing.assert_array_equal(a, b)
+    solo = sintesi.parametri_del_puntatore(0.3, 0.6, 0.9)
+    assert all(isinstance(array, np.ndarray) and array.shape == (1,) for array in solo)
+    insieme = np.linspace(0.0, 1.0, 5)
+    frequenze, pan, guadagni = sintesi.parametri_del_puntatore(insieme, 0.5, insieme)
+    assert frequenze.shape == pan.shape == guadagni.shape == insieme.shape
+    np.testing.assert_allclose(pan, 2.0 * insieme - 1.0)
+    np.testing.assert_allclose(sintesi.lineare_in_db(guadagni), PUNTATORE_DB + POTENZA_DB_MINIMO * (1.0 - insieme), atol=1e-9)
+    np.testing.assert_allclose(frequenze, np.sqrt(ALZO_FREQUENZE[0] * ALZO_FREQUENZE[1]))
 
 
 def _scala(parametro):
-    """Il suono di un valore che corre da un capo all'altro, in DURATA_DELLA_SCALA, come lo fa la voce del motore: lo
-    stato di un Asse, i parametri di ogni campione e l'Oscillatore della forma del parametro."""
+    """Il puntatore mentre un valore corre da un capo all'altro, in DURATA_DELLA_SCALA, con gli altri due al centro, come
+    lo fa la voce del motore: lo stato di un Asse, i parametri di ogni campione e l'Oscillatore di PUNTATORE_FORMA."""
     asse = Asse(0.0)
     asse.muovi(1, 0.0)
     tempi = np.arange(_campioni(DURATA_DELLA_SCALA)) / FS
-    frequenze, pan, guadagni = sintesi.parametri_dell_asse(parametro, asse.valore(tempi))
-    mono = sintesi.Oscillatore(SCIVOLATA_FORMA[parametro]).rendi(frequenze) * guadagni
+    frequenze, pan, guadagni = _puntatore(**{parametro: asse.valore(tempi)})
+    mono = sintesi.Oscillatore(PUNTATORE_FORMA).rendi(frequenze) * guadagni
     return sintesi.panoramica(mono, pan).astype(np.float64)
 
 
@@ -251,8 +270,8 @@ def test_la_frequenza_istantanea_dell_alzo():
 
 
 def test_l_inviluppo_della_potenza_in_decibel():
-    """La potenza a 330 hertz: un decimo di secondo sono 33 periodi esatti, e il livello in decibel sale in linea retta
-    di POTENZA_DB_MINIMO, cambiato di segno, lungo la scala."""
+    """Il puntatore con l'alzo al centro, a 600 hertz: un decimo di secondo sono 60 periodi esatti, e il livello in
+    decibel sale in linea retta di POTENZA_DB_MINIMO, cambiato di segno, lungo la scala della potenza."""
     scala = _scala("potenza")
     finestra = _campioni(0.1)
     centri, livelli = [], []
@@ -289,7 +308,7 @@ def test_ogni_tacca_ha_la_sua_frequenza_e_la_sua_forma(parametro):
     frequenze = sintesi.frequenze_delle_tacche(TACCHE - 1)
     assert len(frequenze) == TACCHE - 1
     assert frequenze[0] == pytest.approx(TACCA_FREQUENZE[0]) and frequenze[-1] == pytest.approx(TACCA_FREQUENZE[1]) == 2400.0
-    forma = SCIVOLATA_FORMA[parametro]
+    forma = TACCA_FORMA[parametro]
     misurate = []
     for k in range(1, TACCHE):
         tacca = sintesi.tacca_dell_asse(parametro, k)
@@ -309,6 +328,9 @@ def test_ogni_tacca_ha_la_sua_frequenza_e_la_sua_forma(parametro):
         pan = 2.0 * k / TACCHE - 1.0 if parametro == "direzione" else 0.0
         atteso = sintesi.panoramica(sintesi.bip(frequenze[k - 1], TACCA_DURATA, TACCA_DB, forma), pan)
         np.testing.assert_allclose(tacca, atteso, rtol=0, atol=1e-6)
+        mono = sintesi.tacca_mono(parametro, k)
+        assert mono.dtype == np.float32 and mono.shape == (_campioni(TACCA_DURATA),), k
+        np.testing.assert_allclose(mono, sintesi.bip(frequenze[k - 1], TACCA_DURATA, TACCA_DB, forma), rtol=0, atol=1e-6)
     assert np.all(np.diff(misurate) > 0)
 
 
@@ -326,13 +348,28 @@ def test_la_panoramica_delle_tacche():
     assert stimati[0] < -0.7 and stimati[4] == pytest.approx(0.0, abs=1e-3) and stimati[-1] > 0.7
 
 
+def test_le_tacche_dal_punto_del_puntatore():
+    """D31: col pan dato, quello del puntatore nell'istante della tacca, la tacca di ogni valore viene da lì, ed è la
+    tacca mono collocata con sintesi.panoramica."""
+    for parametro in PARAMETRI:
+        for pan in (-1.0, -0.4, 0.0, 0.6, 1.0):
+            tacca = sintesi.tacca_dell_asse(parametro, 3, pan=pan)
+            assert tacca.dtype == np.float32
+            assert _pan_stimato(tacca) == pytest.approx(pan, abs=1e-3), (parametro, pan)
+            np.testing.assert_allclose(tacca, sintesi.panoramica(sintesi.tacca_mono(parametro, 3), pan), rtol=0, atol=1e-7)
+
+
 def test_le_tacche_fuori_dalla_scala():
     """La tacca zero e la decima sono i capi, che hanno il suono fine_scala: tacca_dell_asse non le fa."""
     for k in (0, TACCHE, -1, TACCHE + 1):
         with pytest.raises(ValueError):
             sintesi.tacca_dell_asse("alzo", k)
+        with pytest.raises(ValueError):
+            sintesi.tacca_mono("potenza", k)
     with pytest.raises(ValueError):
         sintesi.tacca_dell_asse("velocità", 1)
+    with pytest.raises(ValueError):
+        sintesi.tacca_mono("velocità", 1)
 
 
 def test_le_tacche_a_un_altra_frequenza_di_campionamento():
@@ -393,7 +430,8 @@ def test_nessun_buffer_oltre_uno():
         assert len(dati) > 0
         assert np.all(np.isfinite(dati))
         assert np.max(np.abs(dati)) <= 1.0
-    for parametro in PARAMETRI:
-        _frequenze, pan, guadagni = sintesi.parametri_dell_asse(parametro, np.linspace(0.0, 1.0, 101))
-        assert np.all((pan >= -1.0) & (pan <= 1.0)) and np.all((guadagni > 0.0) & (guadagni <= 1.0)), parametro
+    griglia = np.linspace(0.0, 1.0, 11)
+    _frequenze, pan, guadagni = sintesi.parametri_del_puntatore(griglia[:, None, None], griglia[None, :, None], griglia[None, None, :])
+    assert pan.shape == guadagni.shape == (11, 11, 11)
+    assert np.all((pan >= -1.0) & (pan <= 1.0)) and np.all((guadagni > 0.0) & (guadagni <= 1.0))
 

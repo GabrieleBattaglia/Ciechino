@@ -6,10 +6,10 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Ciechino 2.0.0\n"
+"Project-Id-Version: Ciechino 2.0.1\n"
 "Report-Msgid-Bugs-To: "
 "https://github.com/GabrieleBattaglia/Ciechino/issues\n"
-"POT-Creation-Date: 2026-11-22 12:15+0100\n"
+"POT-Creation-Date: 2026-11-22 14:12+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -67,19 +67,19 @@ msgstr ""
 msgid "Scarico l'aggiornamento."
 msgstr ""
 
-#: ascolti.py:293
+#: ascolti.py:294
 msgid ""
 "Gli Ascolti ti fanno sentire, un passo alla volta, come suona lo spazio "
 "di Ciechino: prima di giocare, o quando vuoi ritarare l'orecchio."
 msgstr ""
 
-#: ascolti.py:295
+#: ascolti.py:296
 msgid ""
 "Il primo è il test stereo: un suono parte tutto a sinistra, resta lì un "
 "attimo, scivola piano fino a tutto a destra, e lì si ferma."
 msgstr ""
 
-#: ascolti.py:296
+#: ascolti.py:297
 msgid ""
 "Se lo senti partire a destra e arrivare a sinistra, le cuffie sono "
 "indossate al contrario, o gli altoparlanti sono scambiati: gira le "
@@ -90,7 +90,7 @@ msgstr ""
 
 #. Traduttori: distanza e altezza sono misure come «55 metri», raggio come «5
 #. metri».
-#: ascolti.py:307
+#: ascolti.py:308
 #, python-brace-format
 msgid ""
 "Un bersaglio fermo nel mezzo della cupola, {distanza} davanti a te e a "
@@ -99,7 +99,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: angolo è un angolo, come «34 gradi».
-#: ascolti.py:310
+#: ascolti.py:311
 #, python-brace-format
 msgid ""
 "Poi gira verso sinistra fino al lato della cupola, a {angolo} a sinistra,"
@@ -108,7 +108,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: massimo è come «40 gradi», angolo come «34 gradi».
-#: ascolti.py:313
+#: ascolti.py:314
 #, python-brace-format
 msgid ""
 "Ascolta la panoramica: è l'unica cosa che cambia, e segue l'angolo del "
@@ -119,7 +119,7 @@ msgstr ""
 
 #. Traduttori: terra e cima sono altezze, come «5 metri» e «52 metri»; distanza
 #. come «55 metri».
-#: ascolti.py:324
+#: ascolti.py:325
 #, python-brace-format
 msgid ""
 "Lo stesso bersaglio, dal mezzo, scende fino a terra, dove il suo centro "
@@ -130,7 +130,7 @@ msgstr ""
 
 #. Traduttori: ottava è una misura come «20,3 metri»; grave e acuto sono
 #. frequenze già scritte, come 262 e 1.315.
-#: ascolti.py:328
+#: ascolti.py:329
 #, python-brace-format
 msgid ""
 "Ascolta la nota: più è grave, più il bersaglio è in basso. Sale di "
@@ -141,7 +141,7 @@ msgstr ""
 
 #. Traduttori: vicino e lontano sono distanze, come «35 metri» e «75 metri»;
 #. altezza come «27,5 metri».
-#: ascolti.py:340
+#: ascolti.py:341
 #, python-brace-format
 msgid ""
 "Lo stesso bersaglio, dal mezzo, viene vicino al massimo, a {vicino} da "
@@ -150,7 +150,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: decibel è un numero già scritto, come 10.
-#: ascolti.py:344
+#: ascolti.py:345
 #, python-brace-format
 msgid ""
 "La nota e la panoramica restano quelle: cambia soltanto il volume, di "
@@ -158,7 +158,7 @@ msgid ""
 " scala della distanza, nel mezzo della cupola."
 msgstr ""
 
-#: ascolti.py:346
+#: ascolti.py:347
 msgid ""
 "Il volume che senti dipende anche dal volume del computer, da quello di "
 "Ciechino e dalle cuffie o dagli altoparlanti: quando ne cambi uno, "
@@ -168,7 +168,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: punti è come «3 punti».
-#: ascolti.py:355
+#: ascolti.py:356
 #, python-brace-format
 msgid ""
 "Il bersaglio salta in {punti} presi a caso nella cupola, uno dopo "
@@ -176,7 +176,7 @@ msgid ""
 " destra o a sinistra, in alto o in basso, vicino o lontano."
 msgstr ""
 
-#: ascolti.py:356 classifica.py:472 gui/finestra.py:512 gui/finestra.py:1310
+#: ascolti.py:357 classifica.py:472 gui/finestra.py:512 gui/finestra.py:1310
 #: resoconti.py:148 statistiche.py:567
 #, python-brace-format
 msgid "{n} punto"
@@ -184,7 +184,7 @@ msgid_plural "{n} punti"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ascolti.py:357
+#: ascolti.py:358
 msgid ""
 "Quando l'ultimo ha finito di suonare, in fondo a questo testo compare "
 "dove erano, in metri, e il cursore va lì; poi lo spazio te li fa "
@@ -193,7 +193,7 @@ msgstr ""
 
 #. Traduttori: piccolo, primo e gigante sono raggi, come «0,5 metri», «5 metri»
 #. e «10 metri».
-#: ascolti.py:366
+#: ascolti.py:367
 #, python-brace-format
 msgid ""
 "Un bersaglio fermo nel mezzo della cupola, che cresce: parte "
@@ -204,7 +204,7 @@ msgstr ""
 
 #. Traduttori: piccolo e gigante sono numeri di semitoni già scritti, come 0,4
 #. e 7,2.
-#: ascolti.py:370
+#: ascolti.py:371
 #, python-brace-format
 msgid ""
 "Ascolta l'oscillazione della nota: col bersaglio piccolissimo è quasi un "
@@ -217,7 +217,7 @@ msgstr ""
 #. Traduttori: quante è il numero delle forme, come 12; per_passo come 6;
 #. timbro è un timbro, come «organo»; secondi è un numero già scritto, come
 #. 2,5.
-#: ascolti.py:390
+#: ascolti.py:391
 #, python-brace-format
 msgid ""
 "Il modo in cui la nota oscilla è la forma del bersaglio: ogni bersaglio "
@@ -227,7 +227,7 @@ msgid ""
 "secondi, staccata dalla seguente da un breve silenzio."
 msgstr ""
 
-#: ascolti.py:395
+#: ascolti.py:396
 msgid ""
 "Nel gioco ogni bersaglio prende a caso anche i dettagli della sua forma e"
 " la velocità dell'oscillazione; qui le forme suonano nel loro disegno di "
@@ -235,21 +235,21 @@ msgid ""
 msgstr ""
 
 #. Traduttori: quante è un numero, come 6.
-#: ascolti.py:400
+#: ascolti.py:401
 #, python-brace-format
 msgid "Altre {quante} forme dell'oscillazione, allo stesso modo."
 msgstr ""
 
 #. Traduttori: forme è l'elenco dei nomi delle forme, come «seno, dente di sega
 #. e triangolo».
-#: ascolti.py:402
+#: ascolti.py:403
 #, python-brace-format
 msgid "In quest'ordine: {forme}."
 msgstr ""
 
 #. Traduttori: quanti è un numero, come 3; secondi un numero già scritto, come
 #. 2,5; timbri l'elenco dei timbri, come «organo, triangolo e sega morbida».
-#: ascolti.py:409
+#: ascolti.py:410
 #, python-brace-format
 msgid ""
 "Il timbro della voce, la sua forma d'onda, ogni bersaglio lo prende a "
@@ -259,7 +259,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: proiettile è un timbro, come «seno».
-#: ascolti.py:413
+#: ascolti.py:414
 #, python-brace-format
 msgid ""
 "Il timbro {proiettile} è quello del tuo proiettile, che scegli con "
@@ -268,39 +268,51 @@ msgid ""
 "allo stesso modo."
 msgstr ""
 
-#. Traduttori: durata è come «3 secondi»; basso e alto sono frequenze già
-#. scritte, come 150 e 2.400.
-#: ascolti.py:422
+#. Traduttori: basso e alto sono frequenze già scritte, come 150 e 2.400;
+#. decibel è un numero già scritto, come 20.
+#: ascolti.py:423
 #, python-brace-format
 msgid ""
 "La mira manuale, come in partita, ma senza sparare: prima il respiro che "
-"avvia la mira, coi tre valori al centro della loro scala. Poi la "
-"direzione, come tenendo giù la freccia destra e poi la sinistra: un suono"
-" che va dal mezzo a tutto a destra, dove si ferma col suo colpo sordo, e "
-"poi fino a tutto a sinistra; poi l'alzo, con le frecce su e giù, una nota"
-" che sale fino a {alto} hertz e scende fino a {basso}; poi la potenza, "
-"con Fine e Home, che cresce fino al pieno e cala fino al quasi silenzio."
+"avvia la mira, coi tre valori al centro della loro scala. Poi il "
+"puntatore, il suono della mira: una voce sola che porta sempre tutti e "
+"tre i valori, la direzione nella posizione fra le orecchie, l'alzo "
+"nell'altezza della nota, da {basso} a {alto} hertz, e la potenza nel "
+"volume, {decibel} decibel dal minimo al massimo."
+msgstr ""
+
+#: ascolti.py:427
+msgid ""
+"Qui si muove un valore alla volta, con gli altri due al centro. Prima la "
+"direzione, come tenendo giù la freccia destra e poi la sinistra: il "
+"puntatore va dal mezzo a tutto a destra, dove si ferma col suo colpo "
+"sordo, e poi fino a tutto a sinistra; poi l'alzo, con le frecce su e giù,"
+" la nota che sale fino in cima e scende fino in fondo; poi la potenza, "
+"con Fine e Home, che cresce fino al pieno e cala fino al minimo, dove si "
+"sente ancora."
 msgstr ""
 
 #. Traduttori: durata è come «3 secondi».
-#: ascolti.py:428
+#: ascolti.py:432
 #, python-brace-format
 msgid ""
 "Ogni valore percorre tutta la sua scala in {durata}, con una tacca a ogni"
-" decimo che attraversa, sempre più acuta verso il massimo."
+" decimo che attraversa, sempre più acuta verso il massimo, che arriva dal"
+" punto in cui sta il puntatore."
 msgstr ""
 
-#: ascolti.py:430
+#: ascolti.py:434
 msgid ""
 "In partita un valore si muove finché tieni giù il suo tasto, e si ferma "
-"quando lo lasci; due tasti di valori diversi li muovono insieme. Invio "
-"spara coi tre valori di quel momento; Esc annulla la mira, e il "
+"quando lo lasci, mentre gli altri restano dove li hai lasciati, anche nel"
+" suono del puntatore; due tasti di valori diversi li muovono insieme. "
+"Invio spara coi tre valori di quel momento; Esc annulla la mira, e il "
 "proiettile resta nella riserva."
 msgstr ""
 
 #. Traduttori: iniziale, riduzione e minimo sono durate, come «30 secondi», «1
 #. secondo» e «10 secondi».
-#: ascolti.py:438
+#: ascolti.py:443
 #, python-brace-format
 msgid ""
 "Fuori dalla palestra la mira ha un tempo, che si accorcia salendo di "
@@ -310,7 +322,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: minimo è una durata, come «10 secondi».
-#: ascolti.py:443
+#: ascolti.py:448
 #, python-brace-format
 msgid ""
 "Qui senti la mira più breve, di {minimo}: un tick a ogni secondo, sempre "
@@ -320,7 +332,7 @@ msgstr ""
 
 #. Traduttori: altezza e gittata sono misure come «25,3 metri»; secondi è un
 #. numero già scritto, come 4,9.
-#: ascolti.py:454
+#: ascolti.py:459
 #, python-brace-format
 msgid ""
 "Un tiro dal cannone verso il mezzo della cupola, dove non c'è nessun "
@@ -330,7 +342,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: forma è un timbro, come «seno».
-#: ascolti.py:458
+#: ascolti.py:463
 #, python-brace-format
 msgid ""
 "Il proiettile suona in {forma}, la forma che hai scelto con Proiettile "
@@ -340,7 +352,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: vicino e lontano sono distanze, come «35 metri» e «75 metri».
-#: ascolti.py:468
+#: ascolti.py:473
 #, python-brace-format
 msgid ""
 "Gli effetti dei colpi a segno, ognuno col suo jingle: prima il bersaglio "
@@ -348,14 +360,14 @@ msgid ""
 "bonus colpito, otto note più acute e più brillanti, vicino e lontano."
 msgstr ""
 
-#: ascolti.py:471
+#: ascolti.py:476
 msgid ""
 "Anche gli effetti vengono dal punto dello spazio dove avvengono: più sono"
 " lontani, più suonano piano."
 msgstr ""
 
 #. Traduttori: durata è come «14 secondi», livello un numero, come 3.
-#: ascolti.py:479
+#: ascolti.py:484
 #, python-brace-format
 msgid ""
 "Il bersaglio bonus: compare col suo suono, entra dal lato sinistro della "
@@ -365,7 +377,7 @@ msgid ""
 msgstr ""
 
 #. Traduttori: minima è come «6 secondi»; volte e colpi sono numeri, come 5.
-#: ascolti.py:483
+#: ascolti.py:488
 #, python-brace-format
 msgid ""
 "Nel gioco il bonus entra da un lato preso a caso, a un'altezza e a una "
@@ -374,93 +386,93 @@ msgid ""
 " suo livello, e regala {colpi} colpi."
 msgstr ""
 
-#: ascolti.py:486
+#: ascolti.py:491
 msgid "È l'ultimo passo: gli Ascolti si ritrovano quando vuoi, nel menu Aiuto."
 msgstr ""
 
-#: ascolti.py:494 resoconti.py:160 resoconti.py:171
+#: ascolti.py:499 resoconti.py:160 resoconti.py:171
 msgid "al centro"
 msgstr ""
 
 #. Traduttori: metri è una misura, come «12,3 metri».
-#: ascolti.py:497
+#: ascolti.py:502
 #, python-brace-format
 msgid "{metri} a sinistra"
 msgstr ""
 
 #. Traduttori: metri è una misura, come «12,3 metri».
-#: ascolti.py:500
+#: ascolti.py:505
 #, python-brace-format
 msgid "{metri} a destra"
 msgstr ""
 
 #. Traduttori: numero è il numero del punto, come 1; lato è come «12,3 metri a
 #. sinistra»; altezza e distanza sono misure, come «31,0 metri».
-#: ascolti.py:502
+#: ascolti.py:507
 #, python-brace-format
 msgid "Punto {numero}: {lato}, a {altezza} d'altezza, a {distanza} davanti a te."
 msgstr ""
 
-#: ascolti.py:508
+#: ascolti.py:513
 msgid "Ecco dove erano i punti che hai sentito:"
 msgstr ""
 
-#: ascolti.py:716
+#: ascolti.py:721
 msgid "Il test stereo"
 msgstr ""
 
-#: ascolti.py:717
+#: ascolti.py:722
 msgid "Il mezzo della cupola, da un lato all'altro"
 msgstr ""
 
-#: ascolti.py:718
+#: ascolti.py:723
 msgid "L'altezza, a terra e in alto"
 msgstr ""
 
-#: ascolti.py:719
+#: ascolti.py:724
 msgid "La distanza, vicino e lontano"
 msgstr ""
 
-#: ascolti.py:720
+#: ascolti.py:725
 msgid "I punti a caso"
 msgstr ""
 
-#: ascolti.py:721
+#: ascolti.py:726
 msgid "La grandezza, da piccolissimo a gigantesco"
 msgstr ""
 
-#: ascolti.py:726
+#: ascolti.py:731
 msgid "Le forme dell'oscillazione"
 msgstr ""
 
 #. Traduttori: parte e parti sono numeri: le forme dell'oscillazione stanno in
 #. più passi.
-#: ascolti.py:729
+#: ascolti.py:734
 #, python-brace-format
 msgid "Le forme dell'oscillazione, parte {parte} di {parti}"
 msgstr ""
 
-#: ascolti.py:733
+#: ascolti.py:738
 msgid "I timbri dei bersagli"
 msgstr ""
 
-#: ascolti.py:734
+#: ascolti.py:739
 msgid "La mira manuale"
 msgstr ""
 
-#: ascolti.py:735
+#: ascolti.py:740
 msgid "Il tempo della mira"
 msgstr ""
 
-#: ascolti.py:736
+#: ascolti.py:741
 msgid "Il proiettile in volo"
 msgstr ""
 
-#: ascolti.py:737
+#: ascolti.py:742
 msgid "Il centro e il bonus, vicino e lontano"
 msgstr ""
 
-#: ascolti.py:738
+#: ascolti.py:743
 msgid "Il bonus che attraversa la cupola"
 msgstr ""
 

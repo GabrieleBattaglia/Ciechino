@@ -5,7 +5,7 @@ Nasce il 2026-11-19 con la 0.1.0, dal punto 73 di idee.txt.
 """
 
 __app_name__ = "Ciechino"
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 __date__ = "2026-11-22"
 __author__ = "Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode)"
 

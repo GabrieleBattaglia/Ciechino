@@ -71,7 +71,7 @@ from gui import dialoghi
 from gui import finestra as modulo_finestra
 from gui.finestra import RIGHE_DELLA_BARRA, TASTO_DI_OGNI_VERSO, FinestraPrincipale
 from partita import Partita, punti_del_centro, tempo_della_mira
-from sintesi import tick_del_tempo
+from sintesi import panoramica, tick_del_tempo
 from volo import calcola_volo
 
 SEME = 2026
@@ -976,12 +976,13 @@ def test_la_mira_manuale_coi_tasti_nella_finestra_vera(app_wx, preset_finti, mes
         prima = len(tavolo.nel_motore)
         dal = motore.campione_udibile()
         tavolo.premi(destra)
-        assert partita.tasti_giu() == [("direzione", 1)] and "direzione" in partita._voci_degli_assi
+        assert partita.tasti_giu() == [("direzione", 1)] and partita._voce_del_puntatore is not None
         tacche = partita._tacche["direzione"]
         davanti = {voce.inizio: voce for voce in tavolo.nel_motore[prima:]}
         for k in range(TACCHE // 2 + 1, TACCHE):
             inizio = round((dal / fs + (k / TACCHE - PARTENZA_DELLA_MIRA) / VELOCITA_DELLA_MIRA) * fs)
-            assert np.array_equal(davanti[inizio].buffer, tacche[k])
+            # La tacca mono del suo decimo, dal punto del puntatore, quello della direzione che la attraversa (D31).
+            assert np.allclose(davanti[inizio].buffer, panoramica(tacche[k], 2.0 * k / TACCHE - 1.0), rtol=0, atol=1e-7)
         assert partita._capi_in_fila["direzione"] == round((dal / fs + (1.0 - PARTENZA_DELLA_MIRA) / VELOCITA_DELLA_MIRA) * fs)
         # La ripetizione del tasto tenuto giù arriva dal gancio, ma non conta: il moto è già partito.
         ripetuto = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
@@ -1014,14 +1015,14 @@ def test_la_mira_manuale_coi_tasti_nella_finestra_vera(app_wx, preset_finti, mes
         tavolo.porta_udibile_a(perso)
         assert partita.tasti_giu() == [("alzo", 1)]
         tavolo.battito()
-        assert partita.tasti_giu() == [] and "alzo" not in partita._voci_degli_assi
+        assert partita.tasti_giu() == [] and partita.mira.assi["alzo"].verso == 0
         tavolo.avanza(BLOCCHI_DEGLI_EFFETTI)
         assert _valori_adesso(partita) == pytest.approx([0.75, 0.7, 0.5], abs=1e-9)
 
         # F7 porta il fuoco nella barra, per leggere: lì Fine va avanti, verso la barra, e la potenza non si muove.
         assert not _tasto(finestra, wx.WXK_F7).GetSkipped() and tavolo.fuoco() is finestra.barra
         fine = TASTO_DI_OGNI_VERSO[("potenza", 1)]
-        assert _tasto(finestra, fine).GetSkipped() and partita.tasti_giu() == [] and "potenza" not in partita._voci_degli_assi
+        assert _tasto(finestra, fine).GetSkipped() and partita.tasti_giu() == [] and partita.mira.assi["potenza"].verso == 0
         tavolo.avanza(BLOCCHI_DEGLI_EFFETTI)
         assert _valori_adesso(partita) == pytest.approx([0.75, 0.7, 0.5], abs=1e-9) and partita.mira.pressioni == 2
         # F6 riporta il fuoco sulla Mira, col suo suono, e da lì Fine alza la potenza; tornato il fuoco nella barra con F7, col
@@ -1045,7 +1046,7 @@ def test_la_mira_manuale_coi_tasti_nella_finestra_vera(app_wx, preset_finti, mes
         # L'Invio dalla barra spara coi valori del momento; il fuoco, che F7 ha messo nella barra, resta lì.
         tavolo.invio()
         assert partita.fase == "volo" and partita.valori == pytest.approx(valori, abs=1e-9) and partita.mira is None
-        assert tavolo.fuoco() is finestra.barra and partita._voci_degli_assi == {}
+        assert tavolo.fuoco() is finestra.barra and partita._voce_del_puntatore is None
         assert finestra.statistiche.dati["conti"]["tasti_della_mira"] == 3 and finestra.statistiche.dati["conti"]["mire_sparate"] == 1
         nuovi = _volo(tavolo)
         assert nuovi[0].tipo == "resoconto" and nuovi[0].dati["tiro"] == 1
@@ -1189,8 +1190,8 @@ def test_un_dialogo_e_un_alt_tab_fermano_la_partita_e_la_riprendono(app_wx, pres
             for _blocco in range(SECONDI_NEL_DIALOGO * costanti.FS // costanti.AUDIO_BLOCCO):
                 tavolo.avanza(1)
                 tavolo.battito()
-            # La mira è muta: né il suono del valore né i tick del tempo.
-            muta = partita._voci_degli_assi == {} and partita._tick_in_fila == []
+            # La mira è muta: né il puntatore né i tick del tempo.
+            muta = partita._voce_del_puntatore is None and partita._tick_in_fila == []
             dentro.append((partita.in_pausa, muta, partita.tasti_giu(), _valori_adesso(partita), partita.secondi_della_mira(), partita.fase, partita.riserva))
             return wx.ID_OK
 
@@ -1565,10 +1566,10 @@ def test_ctrl_p_dal_tasto_rapido_nella_finestra_vera(app_wx, preset_finti, messa
         assert partita.fase == "mira"
         destra = TASTO_DI_OGNI_VERSO[("direzione", 1)]
         tavolo.premi(destra)
-        mira, voce, scadenza = partita.mira, partita._voci_degli_assi["direzione"], partita._scadenza
+        mira, voce, scadenza = partita.mira, partita._voce_del_puntatore, partita._scadenza
         ctrl_p()
         assert not partita.in_pausa and tavolo.suonati[-1][0] == "non_ora" and voce_finta[-1] == "Pausa solo in palestra."
-        assert partita.mira is mira and partita._voci_degli_assi["direzione"] is voce and not voce.finita and partita._scadenza == scadenza
+        assert partita.mira is mira and partita._voce_del_puntatore is voce and not voce.finita and partita._scadenza == scadenza
         assert partita.tasti_giu() == [("direzione", 1)] and tavolo.fuoco() is finestra.controllo_mira
         prima = _valori_adesso(partita)[0]
         tavolo.avanza(BLOCCHI_DEGLI_EFFETTI)
@@ -1579,7 +1580,7 @@ def test_ctrl_p_dal_tasto_rapido_nella_finestra_vera(app_wx, preset_finti, messa
         partita.livello = 1
         ctrl_p()
         assert partita.in_pausa and not partita._pausa_automatica and tavolo.suonati[-1][0] == "pausa"
-        assert partita.tasti_giu() == [] and partita._voci_degli_assi == {} and partita.fase == "mira"
+        assert partita.tasti_giu() == [] and partita._voce_del_puntatore is None and partita.fase == "mira"
         ferma = _valori_adesso(partita)
         tavolo.avanza(BLOCCHI_DEGLI_EFFETTI)
         assert _valori_adesso(partita) == ferma

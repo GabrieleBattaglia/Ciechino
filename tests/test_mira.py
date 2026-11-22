@@ -2,7 +2,8 @@
 Le prove di mira.py, la mira manuale (D29): ogni valore corre a VELOCITA_DELLA_MIRA nel verso del suo tasto
 e si ferma ai capi; due tasti dello stesso valore danno il verso all'ultimo sceso, e lasciato quello torna
 l'altro; la ripetizione di un tasto già giù non cambia niente; lascia_tutto ferma tutti; le tacche e il capo
-davanti a un valore cadono ai tempi giusti, in salita e in discesa.
+davanti a un valore cadono ai tempi giusti, in salita e in discesa. Dalla 2.0.1 in_moto, che dice al puntatore di D31
+dove almeno un valore si muove.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 prova Asse e Mira, e non più valore_scelto, la compensazione
 del tasto, il margine e la scadenza delle scivolate, usciti con D29.
@@ -79,6 +80,25 @@ def test_da_un_capo_all_altro_in_durata_della_scala():
     assert asse.valore(INIZIO + DURATA_DELLA_SCALA - 0.001) > 0.0
     assert asse.valore(INIZIO + DURATA_DELLA_SCALA) == pytest.approx(0.0, abs=1e-12)
     assert asse.tempo_al_capo() == pytest.approx(INIZIO + DURATA_DELLA_SCALA)
+
+
+def test_in_moto_dal_tasto_fino_al_capo():
+    """D31: in_moto è vero dal tempo del tasto fino all'arrivo al capo, escluso; da fermo mai, e nemmeno per un valore che sta
+    già al capo verso cui va; uno scalare per un tempo, un array di bool per un array."""
+    asse = Asse()
+    assert asse.in_moto(INIZIO) is False and not asse.in_moto(np.array([0.0, INIZIO])).any()
+    asse.muovi(1, INIZIO)
+    arrivo = asse.tempo_al_capo()
+    assert arrivo == pytest.approx(INIZIO + _tempo(PARTENZA_DELLA_MIRA, 1.0))
+    assert asse.in_moto(INIZIO - 0.1) is False and asse.in_moto(INIZIO) is True
+    assert asse.in_moto(arrivo - 1e-6) is True and asse.in_moto(arrivo) is False
+    np.testing.assert_array_equal(asse.in_moto(np.array([INIZIO - 1.0, INIZIO + 0.5, arrivo + 1.0])), [False, True, False])
+    asse.muovi(1, arrivo + 1.0)
+    assert asse.in_moto(arrivo + 1.0) is False and asse.in_moto(arrivo + 2.0) is False
+    asse.muovi(-1, arrivo + 1.0)
+    assert asse.in_moto(arrivo + 1.5) is True
+    asse.ferma(arrivo + 2.0)
+    assert asse.in_moto(arrivo + 2.0) is False
 
 
 def test_il_valore_di_un_array_di_tempi():

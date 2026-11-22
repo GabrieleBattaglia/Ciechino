@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [2.0.1] - 2026-11-22
+
+Il suono della mira adesso è il tuo puntatore, come ha chiesto Gabriele: una voce sola, in onda triangolare, che porta sempre tutti e tre i valori, la direzione nel punto da cui arriva, l'alzo nell'altezza della nota, da 150 a 2.400 hertz, e la potenza nel volume. Se muovi la direzione, la nota e il volume restano quelli dell'alzo e della potenza, e lo stesso per gli altri due; con due tasti giù cambiano insieme due cose dello stesso suono. Fino alla 2.0.0 ogni valore aveva la sua voce, e gli altri due tacevano.
+
+La potenza va adesso da meno 29 a meno 9 decibel, 20 decibel dal minimo al massimo invece di 40, così il puntatore si sente bene anche con la potenza al minimo. Le tacche dei decimi e il colpo sordo dei capi arrivano dal punto del puntatore, con la direzione di quell'istante. Negli Ascolti il passo della mira fa sentire il puntatore, con un valore alla volta e gli altri due al centro.
+
 ## [2.0.0] - 2026-11-22
 
 Lo spazio dei bersagli non è più un cubo, ma una cupola, come ha voluto Gabriele: un guscio fra due sfere centrate sotto i tuoi piedi, la vicina di 30 metri di raggio e la lontana di 80, che si apre davanti a te da 40 gradi a sinistra a 40 gradi a destra e sale dal prato fino a 78,8 metri d'altezza. Ne resta fuori soltanto un cono stretto in cima, sopra gli 80 gradi d'elevazione, dove arriverebbe soltanto un tiro quasi verticale. Le scale della mira sono adesso tutte utili: la direzione copre esattamente i due lati della cupola, l'alzo va da 15 a 85 gradi, e la potenza arriva sempre a 39,6 metri al secondo, mentre il suo minimo segue l'alzo, 17,7 metri al secondo a 45 gradi e 28,0 a 15, così ogni combinazione dei tre valori attraversa la cupola e nessun pezzo delle scale spara dove un bersaglio non può stare. Ogni punto della cupola si raggiunge coi tre valori dentro le loro scale, capi compresi: con la mira manuale un capo si tocca tenendo giù il tasto, e il margine del 2% che teneva lontani i capi non serve più. I bersagli mobili rimbalzano sulle pareti della cupola, e il bonus la attraversa da un lato all'altro.

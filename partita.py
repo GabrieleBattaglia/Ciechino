@@ -79,11 +79,12 @@ from costanti import (
     PROBABILITA_BONUS,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
+    PUNTATORE_FORMA,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     RITARDO_DEL_RESOCONTO,
-    SCIVOLATA_FORMA,
+    SFUMATURA_STOP,
     STACCO_FRA_GLI_AVVISI,
     TACCHE,
     TEMPO_DELLA_MIRA_INIZIALE,
@@ -93,7 +94,7 @@ from costanti import (
 )
 from motore_audio import VoceTono
 from resoconti import Messaggio
-from sintesi import parametri_dell_asse, tacca_dell_asse, tick_del_tempo
+from sintesi import pan_della_direzione, panoramica, parametri_del_puntatore, tacca_mono, tick_del_tempo
 from volo import calcola_volo, parametri_del_proiettile
 
 __all__ = ["CONTI_DEL_PROIETTILE", "FASI", "Messaggio", "Partita", "esempio_del_proiettile", "nella_palestra", "punti_del_centro", "tempo_della_mira",
@@ -210,6 +211,40 @@ def esempio_del_proiettile(motore, forma, durata=DURATA_DELL_ESEMPIO):
     return voce
 
 
+def _suono_del_puntatore(assi, tempi):
+    """(frequenze, pan, guadagni lineari, in moto) del puntatore ai tempi dati, dell'audio, per i tre Asse
+    nell'ordine di PARAMETRI, senza l'inviluppo che lo apre e lo chiude (D31): i parametri di
+    sintesi.parametri_del_puntatore coi valori di quegli istanti, e vero dove almeno un valore si muove.
+    La voce del puntatore tiene i suoi assi, e non legge la partita, che a fine mira la dimentica."""
+    tempi = np.atleast_1d(np.asarray(tempi, dtype=float))
+    frequenze, pan, guadagni = parametri_del_puntatore(*(asse.valore(tempi) for asse in assi))
+    in_moto = np.zeros(tempi.shape, dtype=bool)
+    for asse in assi:
+        in_moto |= asse.in_moto(tempi)
+    return frequenze, pan, guadagni, in_moto
+
+
+def _rampa(bersaglio, partenza, passo):
+    """L'inviluppo che insegue il bersaglio, un array di vero e falso, partendo da partenza e cambiando al più
+    di passo a ogni campione, verso uno dove il bersaglio è vero e verso zero dove è falso: così il puntatore
+    entra ed esce senza click (D31). Restituisce l'inviluppo e il suo ultimo valore, da cui riparte il blocco
+    seguente."""
+    bersaglio = np.asarray(bersaglio, dtype=float)
+    uscita = np.empty(len(bersaglio))
+    valore = float(partenza)
+    inizio = 0
+    for fine in [*(np.flatnonzero(np.diff(bersaglio)) + 1), len(bersaglio)]:
+        if fine <= inizio:
+            continue
+        meta = float(bersaglio[inizio])
+        passi = passo * np.arange(1, fine - inizio + 1)
+        tratto = np.minimum(meta, valore + passi) if meta >= valore else np.maximum(meta, valore - passi)
+        uscita[inizio:fine] = tratto
+        valore = float(tratto[-1])
+        inizio = fine
+    return uscita, valore
+
+
 class Partita:
     """Una partita di Ciechino, dall'inizio alla fine, e poi la seguente.
     motore è il Motore audio, suoni i Suoni che suonano sul motore; statistiche, se c'è, riceve ogni
@@ -245,9 +280,9 @@ class Partita:
         self.proiettile = self.proiettile_scelto
         if statistiche is not None:
             suoni.conta = statistiche.suono
-        # Le tacche dei tre valori si preparano una volta sola: sintetizzarle a ogni tasto farebbe
-        # aspettare il giocatore, e sono sempre le stesse.
-        self._tacche = {parametro: {k: tacca_dell_asse(parametro, k, fs=motore.fs) for k in range(1, TACCHE)} for parametro in PARAMETRI}
+        # Le tacche dei tre valori si preparano una volta sola, mono: sintetizzarle a ogni tasto farebbe
+        # aspettare il giocatore, e sono sempre le stesse; il punto del puntatore lo prendono in fila (D31).
+        self._tacche = {parametro: {k: tacca_mono(parametro, k, fs=motore.fs) for k in range(1, TACCHE)} for parametro in PARAMETRI}
         self.fase = "pronta"
         self.in_pausa = False
         self.livello = 0
@@ -261,11 +296,12 @@ class Partita:
         self.valori = []
         self.ultimo_volo = None
         self.bonus = None
-        # La mira manuale in corso (D29), e i suoi suoni: la voce di ogni valore che si muove, le tacche e il
-        # suono del capo messi in fila davanti a lui, i tick del tempo; il campione in cui scade la mira a
-        # tempo, i secondi che le restavano all'ultima ripartenza e il campione udibile di quella ripartenza.
+        # La mira manuale in corso (D29), e i suoi suoni: il puntatore, la voce sola che porta i tre valori
+        # (D31), le tacche e il suono del capo messi in fila davanti a ogni valore, i tick del tempo; il
+        # campione in cui scade la mira a tempo, i secondi che le restavano all'ultima ripartenza e il
+        # campione udibile di quella ripartenza.
         self.mira = None
-        self._voci_degli_assi = {}
+        self._voce_del_puntatore = None
         self._in_fila_degli_assi = {parametro: [] for parametro in PARAMETRI}
         self._capi_in_fila = {}
         self._tick_in_fila = []
@@ -758,14 +794,14 @@ class Partita:
 
     # I suoni e i conti.
 
-    def _pronto_senza_conto(self, evento, posizione):
+    def _pronto_senza_conto(self, evento, posizione, pan=None):
         """Il buffer di un effetto preparato senza contarlo: Suoni conta un effetto quando è pronto,
         ma l'uscita del bonus non si sente se il bonus viene colpito prima, e l'impatto non si sente
         se la partita si abbandona col proiettile in volo, e allora il conto sarebbe falso. Lo si
         conta quando il battito sa che è suonato."""
         conta, self.suoni.conta = self.suoni.conta, None
         try:
-            return self.suoni.pronto(evento, posizione=posizione)
+            return self.suoni.pronto(evento, posizione=posizione, pan=pan)
         finally:
             self.suoni.conta = conta
 
@@ -997,38 +1033,83 @@ class Partita:
             self._conta_suono("fine_scala")
 
     def _suona_l_asse(self, parametro):
-        """I suoni del valore dopo un cambio del suo moto: la voce di prima si spegne, e se il valore si
-        muove ne nasce una nuova dal prossimo campione sicuro, che legge lo stato dell'asse a ogni blocco;
-        davanti a lui, in fila, le tacche dei decimi che attraverserà e il suono fine_scala del capo, dove
-        anche la sua voce si ferma. Il suono del capo si conta quando si sente, al battito."""
+        """I suoni della mira dopo un cambio del moto di un valore (D31): il puntatore, la voce sola che porta
+        i tre valori, nasce al primo valore che si muove e da lì li segue da solo; davanti al valore, in fila,
+        le tacche dei decimi che attraverserà e il suono fine_scala del capo, dove si ferma, ognuno dal punto
+        del puntatore nell'istante in cui suona. Se cambia la direzione, cambia anche il punto da cui
+        suoneranno le tacche e il capo degli altri valori in corsa, e quelli si rimettono in fila. Il suono
+        del capo si conta quando si sente, al battito."""
         self._ferma_in_fila(parametro)
-        vecchia = self._voci_degli_assi.pop(parametro, None)
-        if vecchia is not None:
-            self.motore.ferma(vecchia)
         asse = self.mira.assi[parametro]
+        k = self.motore.prossimo_campione()
+        if parametro == "direzione":
+            for altro in PARAMETRI:
+                if altro != parametro:
+                    self._rimetti_in_fila(altro, k)
         if asse.verso == 0:
             return
+        self._accendi_il_puntatore(k)
+        capo = max(k, round(asse.tempo_al_capo() * self.motore.fs))
+        self._in_fila_degli_assi[parametro], self._capi_in_fila[parametro] = self._metti_in_fila(parametro, k, capo)
+
+    def _pan_del_puntatore(self, tempo):
+        """Il pan del puntatore al tempo dato, dell'audio: quello della direzione in quell'istante."""
+        return pan_della_direzione(self.mira.assi["direzione"].valore(tempo))
+
+    def _metti_in_fila(self, parametro, da, capo):
+        """Mette in fila, dal campione da in poi, le tacche che il valore attraverserà correndo e, al campione
+        capo, se non viene prima di da, il suono fine_scala, ognuno col pan del puntatore nel suo istante.
+        Restituisce le voci in fila e il campione del capo, o None se il capo resta fuori."""
         fs = self.motore.fs
-        k = self.motore.prossimo_campione()
-
-        def parametri(tempi_di_gioco, tempi_audio):
-            return parametri_dell_asse(parametro, asse.valore(tempi_audio))
-
-        voce = VoceTono(parametri, SCIVOLATA_FORMA[parametro], inizio=k)
-        self.motore.aggiungi(voce)
-        self._voci_degli_assi[parametro] = voce
         in_fila = []
-        for tempo, indice in asse.tacche_davanti():
+        for tempo, indice in self.mira.assi[parametro].tacche_davanti():
             inizio = round(tempo * fs)
-            if inizio >= k:
-                in_fila.append(self.motore.suona(self._tacche[parametro][indice], inizio=inizio))
-        capo = max(k, round(asse.tempo_al_capo() * fs))
-        buffer = self._pronto_senza_conto("fine_scala", None)
+            if inizio >= da:
+                tacca = panoramica(self._tacche[parametro][indice], self._pan_del_puntatore(tempo))
+                in_fila.append(self.motore.suona(tacca, inizio=inizio))
+        if capo is None or capo < da:
+            return in_fila, None
+        buffer = self._pronto_senza_conto("fine_scala", None, pan=self._pan_del_puntatore(capo / fs))
         if buffer is not None and len(buffer):
             in_fila.append(self.motore.suona(buffer, inizio=capo))
-        self.motore.ferma(voce, capo)
-        self._in_fila_degli_assi[parametro] = in_fila
-        self._capi_in_fila[parametro] = capo
+        return in_fila, capo
+
+    def _rimetti_in_fila(self, parametro, da):
+        """Le tacche e il capo di un valore in corsa, quando la direzione cambia moto e li farà suonare da
+        un altro punto: quelli che partono dal campione da in poi si fermano e tornano in fila col pan nuovo,
+        quelli di prima restano, e il capo resta nello stesso campione."""
+        vecchie = self._in_fila_degli_assi.get(parametro, [])
+        for voce in vecchie:
+            if voce.inizio >= da:
+                self.motore.ferma(voce)
+        tenute = [voce for voce in vecchie if voce.inizio < da]
+        if self.mira.assi[parametro].verso == 0:
+            self._in_fila_degli_assi[parametro] = tenute
+            return
+        nuove, _capo = self._metti_in_fila(parametro, da, self._capi_in_fila.get(parametro))
+        self._in_fila_degli_assi[parametro] = tenute + nuove
+
+    def _accendi_il_puntatore(self, k):
+        """Il puntatore della mira (D31): una voce sola, in PUNTATORE_FORMA, coi parametri di
+        sintesi.parametri_del_puntatore, la direzione nella panoramica, l'alzo nell'altezza e la potenza nel
+        volume, che suona soltanto dove almeno un valore si muove, entrando e uscendo in SFUMATURA_STOP. Nasce
+        dal campione k al primo valore che si muove, e resta fino alla fine della mira o alla pausa: legge lo
+        stato dei tre valori a ogni blocco, così due valori insieme cambiano lo stesso suono, senza voci nuove
+        a ogni tasto. Già acceso non fa niente."""
+        if self._voce_del_puntatore is not None:
+            return
+        assi = [self.mira.assi[parametro] for parametro in PARAMETRI]
+        passo = 1.0 / max(1.0, SFUMATURA_STOP * self.motore.fs)
+        porta = [0.0]
+
+        def parametri(tempi_di_gioco, tempi_audio):
+            frequenze, pan, guadagni, in_moto = _suono_del_puntatore(assi, tempi_audio)
+            inviluppo, porta[0] = _rampa(in_moto, porta[0], passo)
+            return frequenze, pan, guadagni * inviluppo
+
+        voce = VoceTono(parametri, PUNTATORE_FORMA, inizio=k)
+        self.motore.aggiungi(voce)
+        self._voce_del_puntatore = voce
 
     def _ferma_la_mira(self):
         """La mira si ferma senza finire, per la pausa: i tasti valgono come lasciati nell'istante che si
@@ -1054,9 +1135,9 @@ class Partita:
     def _zittisci_la_mira(self):
         for parametro in PARAMETRI:
             self._ferma_in_fila(parametro)
-            voce = self._voci_degli_assi.pop(parametro, None)
-            if voce is not None:
-                self.motore.ferma(voce)
+        if self._voce_del_puntatore is not None:
+            self.motore.ferma(self._voce_del_puntatore)
+            self._voce_del_puntatore = None
         self._ferma_i_tick()
 
     def _chiudi_la_mira(self):

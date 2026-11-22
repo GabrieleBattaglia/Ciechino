@@ -62,7 +62,6 @@ from costanti import (
     CUPOLA_RAGGIO,
     CUPOLA_RAGGIO_INTERNO,
     DB_PER_METRO,
-    DIREZIONE_FREQUENZA,
     DURATA_DELLA_SCALA,
     ELEVAZIONE_MASSIMA,
     ESCURSIONE_A_CASO,
@@ -80,16 +79,15 @@ from costanti import (
     PALESTRA_FINO_AL_LIVELLO,
     PARTENZA_DELLA_MIRA,
     POTENZA_DB_MINIMO,
-    POTENZA_FREQUENZA,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
+    PUNTATORE_FORMA,
     RAGGIO_BONUS_FATTORE,
     RAGGIO_INIZIALE,
     RAGGIO_MINIMO,
     RAGGIO_PROIETTILE,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     RITARDO_DEL_RESOCONTO,
-    SCIVOLATA_FORMA,
     SETTORE_AZIMUT,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
@@ -98,6 +96,7 @@ from costanti import (
     SOMMARIO_SOGLIA_PROFONDITA,
     SOMMARIO_SOGLIA_VERTICALE,
     TACCA_DURATA,
+    TACCA_FORMA,
     TACCA_FREQUENZE,
     TACCHE,
     TEMPO_DELLA_MIRA_MINIMO,
@@ -799,16 +798,21 @@ def test_la_mira_manuale_nei_documenti():
     ]
     mancanti = [frase for frase in frasi if frase not in tasti]
     assert not mancanti, f"frasi dei tasti della mira che il manuale non dice: {mancanti}"
-    assert SCIVOLATA_FORMA["direzione"] == SCIVOLATA_FORMA["alzo"] == "seno", "il manuale dice pure la nota della direzione e quella dell'alzo"
+    # Il puntatore di D31: una voce sola in onda triangolare, che porta la direzione nel punto, l'alzo nella nota e la potenza nel volume.
+    assert PUNTATORE_FORMA == "triangolo", "il manuale dice il puntatore in onda triangolare"
     voci = _sezione(manuale, "suoni-mira")
     frasi = [
-        f"un La a {testi.intero(DIREZIONE_FREQUENZA)} hertz, pura come un fischio",
+        "una voce sola, in onda triangolare, che porta sempre tutti e tre i valori",
+        "La direzione è il punto da cui arriva il puntatore",
         f"da {testi.intero(ALZO_FREQUENZE[0])} a {testi.intero(ALZO_FREQUENZE[1])} hertz, {A_PAROLE[round(math.log2(ALZO_FREQUENZE[1] / ALZO_FREQUENZE[0]))]} ottave",
-        f"una nota fissa a {testi.intero(POTENZA_FREQUENZA)} hertz",
-        f"{testi.intero(-POTENZA_DB_MINIMO)} decibel dal minimo al massimo",
+        f"La potenza è il volume, {testi.intero(-POTENZA_DB_MINIMO)} decibel dal minimo al massimo",
     ]
     mancanti = [frase for frase in frasi if frase not in voci]
     assert not mancanti, f"frasi delle voci della mira che il manuale non dice: {mancanti}"
+    # Le tacche tengono la forma del loro valore, e arrivano dal punto del puntatore, come il suono del capo (D31).
+    assert TACCA_FORMA == {"direzione": "seno", "alzo": "seno", "potenza": "triangolo"}, "il manuale dice le forme delle tacche"
+    assert "in seno per la direzione e per l'alzo e in onda triangolare per la potenza, e arrivano dal punto del puntatore" in _sezione(manuale, "capi-scala")
+    assert "un doppio colpo sordo e grave, anche lui dal punto del puntatore" in _sezione(manuale, "capi-scala")
     # Le nove tacche dei decimi coprono tutta la scala, da TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1], un'ottava (dalle prove del 22 novembre 2026).
     frequenze = frequenze_delle_tacche(TACCHE - 1)
     assert math.isclose(frequenze[-1], TACCA_FREQUENZE[1]) and TACCA_FREQUENZE[1] == 2 * TACCA_FREQUENZE[0], "il manuale dice un'ottava sulle nove tacche"

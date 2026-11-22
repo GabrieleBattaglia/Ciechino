@@ -15,7 +15,8 @@ passaggi delle barre, il proiettile perduto, i bersagli attenuati e il tempo fer
 posto i tre valori che si muovono finché i loro tasti sono giù, con le tacche e il suono del capo,
 l'Invio coi valori dell'istante udibile, il tempo della mira fuori dalla palestra coi suoi tick e la
 scadenza che fa partire il colpo da solo, la pausa che conserva i secondi rimasti, Esc, i bersagli che
-si muovono durante la mira, e i colpi di D30.
+si muovono durante la mira, e i colpi di D30. Dalla 2.0.1 il puntatore di D31, la voce sola che porta i tre
+valori, con le tacche e il capo dal suo punto.
 Autori: Gabriele Battaglia (IZ4APU) & ClaudIA (Claude Opus 5.5, UltraCode).
 Nasce il 2026-11-19 con la 0.1.0; dalla 2.0.0 le prove mirano tenendo giù i tasti dei valori, non più
 con lo spazio sulle scivolate.
@@ -59,15 +60,17 @@ from costanti import (
     PALESTRA_FINO_AL_LIVELLO,
     PARAMETRI,
     PARTENZA_DELLA_MIRA,
+    POTENZA_DB_MINIMO,
     PREMIO_PRECISIONE,
     PROIETTILE_FORMA,
     PROIETTILE_FORME,
+    PUNTATORE_DB,
+    PUNTATORE_FORMA,
     PUNTI_BASE,
     RAGGIO_DI_RIFERIMENTO,
     RAGGIO_PROIETTILE,
     RIDUZIONE_DEL_TEMPO_DELLA_MIRA,
     RITARDO_DEL_RESOCONTO,
-    SCIVOLATA_FORMA,
     SFUMATURA_STOP,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
@@ -82,7 +85,7 @@ from costanti import (
 from fisica import MEZZO_DELLA_CUPOLA, Traiettoria, distanza_dal_punto_piu_lontano, parametri_del_tiro, soluzione
 from motore_audio import VoceTono
 from partita import Messaggio, Partita, punti_del_centro, tempo_della_mira
-from sintesi import parametri_dell_asse, tacca_dell_asse, tick_del_tempo
+from sintesi import parametri_del_puntatore, tacca_mono, tick_del_tempo
 from statistiche import Statistiche
 from suoni import Suoni
 from volo import calcola_volo
@@ -149,6 +152,36 @@ def bonus_sicuro(monkeypatch):
 
 
 # Gli aiuti delle prove.
+
+def assi_della_mira(partita):
+    """I tre Asse della mira in corso, nell'ordine di PARAMETRI, come li legge il puntatore."""
+    return [partita.mira.assi[parametro] for parametro in PARAMETRI]
+
+
+def suono_del_puntatore(partita, campioni):
+    """(frequenze, pan, guadagni, in moto) del puntatore ai campioni dati, senza l'inviluppo che lo apre e lo chiude (D31)."""
+    return modulo_partita._suono_del_puntatore(assi_della_mira(partita), np.asarray(campioni, dtype=float) / FS)
+
+
+def pan_stimato(stereo):
+    """La panoramica di un buffer stereo, da meno uno a uno, rifatta dall'energia dei due lati con la legge di
+    sintesi.panoramica."""
+    dati = np.asarray(stereo, dtype=np.float64)
+    sinistra = np.sqrt(np.mean(dati[:, 0] ** 2))
+    destra = np.sqrt(np.mean(dati[:, 1] ** 2))
+    return float(np.arctan2(destra, sinistra) * 4.0 / np.pi - 1.0)
+
+
+def decimo_della_tacca(partita, parametro, buffer):
+    """Il decimo di una tacca in fila del parametro, riconosciuta dal suono: con la legge a potenza costante la somma dei
+    quadrati dei due lati è il quadrato della tacca mono di quel decimo, qualunque sia il suo pan (D31). None se il buffer
+    non è una di quelle tacche."""
+    energia = np.sum(np.asarray(buffer, dtype=np.float64) ** 2, axis=1)
+    for decimo, mono in partita._tacche[parametro].items():
+        if len(mono) == len(energia) and np.allclose(energia, np.asarray(mono, dtype=np.float64) ** 2, rtol=0, atol=1e-7):
+            return decimo
+    return None
+
 
 def porta_udibile_a(banco, campione):
     """Fa preparare al motore il blocco che contiene il campione, poi sposta l'orologio finto perché
@@ -499,10 +532,10 @@ def test_impatto_al_campione_esatto(banco, monkeypatch):
 def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartella_di_prova):
     """D29: lo spazio nell'ascolto avvia la mira, una sola per i tre valori, tutti al centro della loro scala, fermi e muti.
     Ogni valore si muove finché il suo tasto è giù, alla VELOCITA_DELLA_MIRA, da un capo all'altro in DURATA_DELLA_SCALA
-    secondi, col suono della sua scivolata di D19, e si ferma dove si sentiva quando il tasto sale; con due tasti di valori
-    diversi giù i due valori si muovono insieme; il tasto opposto, premuto col primo ancora giù, lo fa tornare indietro, e
-    lasciato riporta al verso del primo. La ripetizione del tasto tenuto giù non cambia niente, e fuori dalla mira i tasti
-    non fanno niente."""
+    secondi, e si ferma dove si sentiva quando il tasto sale; con due tasti di valori diversi giù i due valori si muovono
+    insieme, nello stesso puntatore di D31, che porta sempre i tre valori e resta per tutta la mira; il tasto opposto,
+    premuto col primo ancora giù, lo fa tornare indietro, e lasciato riporta al verso del primo. La ripetizione del tasto
+    tenuto giù non cambia niente, e fuori dalla mira i tasti non fanno niente."""
     statistiche = Statistiche(percorso=str(cartella_di_prova / "statistiche.json"))
     partita = banco.partita(statistiche=statistiche)
     senti_anche_le_statistiche(banco, statistiche)
@@ -515,51 +548,60 @@ def test_la_mira_parte_dal_centro_e_i_valori_si_muovono_coi_tasti(banco, cartell
     assert statistiche.dati["conti"]["mire_avviate"] == 1 and partita.valori == []
     inizio = banco.motore.campione_udibile()
     assert partita.mira.valori(inizio / FS) == [PARTENZA_DELLA_MIRA] * 3 == [0.5] * 3
-    assert partita._voci_degli_assi == {} and partita.tasti_giu() == []
-    # La direzione verso destra e l'alzo verso il basso, insieme, ognuno con la sua voce.
+    assert partita._voce_del_puntatore is None and partita.tasti_giu() == []
+    # La direzione verso destra e l'alzo verso il basso, insieme, nello stesso puntatore (D31).
     k = banco.motore.prossimo_campione()
     assert partita.muovi("direzione", 1) == [] and partita.muovi("alzo", -1) == []
     assert partita.tasti_giu() == [("direzione", 1), ("alzo", -1)]
-    voce = partita._voci_degli_assi["direzione"]
-    assert isinstance(voce, VoceTono) and voce.forma == SCIVOLATA_FORMA["direzione"] and voce.inizio == k
-    assert partita._voci_degli_assi["alzo"].forma == SCIVOLATA_FORMA["alzo"] and "potenza" not in partita._voci_degli_assi
-    # La voce suona il valore di ogni istante del tempo dell'audio: a 0,3 e a 0,9 secondi dal tasto, il sesto e l'ottavo decimo.
-    frequenze, pan, guadagni = voce.parametri(None, inizio / FS + np.array((0.3, 0.9)))
-    attese = parametri_dell_asse("direzione", np.array((0.6, 0.8)))
+    voce = partita._voce_del_puntatore
+    assert isinstance(voce, VoceTono) and voce.forma == PUNTATORE_FORMA == "triangolo" and voce.inizio == k
+    # Il puntatore porta i tre valori di ogni istante del tempo dell'audio: a 0,3 e a 0,9 secondi dal tasto la direzione al
+    # sesto e all'ottavo decimo, l'alzo al quarto e al secondo, la potenza ferma al centro; e si muove.
+    frequenze, pan, guadagni, in_moto = suono_del_puntatore(partita, inizio + np.array((0.3, 0.9)) * FS)
+    attese = parametri_del_puntatore(np.array((0.6, 0.8)), np.array((0.4, 0.2)), PARTENZA_DELLA_MIRA)
     for avuti, voluti in zip((frequenze, pan, guadagni), attese, strict=True):
         np.testing.assert_allclose(avuti, voluti, atol=1e-9)
+    assert in_moto.tolist() == [True, True]
     # La ripetizione del tasto tenuto giù non cambia niente, e non è una pressione.
-    assert partita.muovi("direzione", 1) == [] and partita._voci_degli_assi["direzione"] is voce and partita.mira.pressioni == 2
+    assert partita.muovi("direzione", 1) == [] and partita._voce_del_puntatore is voce and partita.mira.pressioni == 2
     porta_udibile_a(banco, inizio + 0.6 * FS)
     assert partita.battito() == []
     assert partita.mira.valori(inizio / FS + 0.6) == pytest.approx([0.7, 0.3, 0.5])
-    # Lasciata, la direzione si ferma dove si sentiva, e la sua voce tace; l'alzo va avanti.
-    assert partita.lascia("direzione", 1) == [] and "direzione" not in partita._voci_degli_assi
+    # Lasciata, la direzione si ferma dove si sentiva, e il puntatore resta lì, a destra, mentre l'alzo va avanti nella nota.
+    assert partita.lascia("direzione", 1) == [] and partita._voce_del_puntatore is voce
     porta_udibile_a(banco, inizio + 0.9 * FS)
     assert partita.mira.valori(inizio / FS + 0.9) == pytest.approx([0.7, 0.2, 0.5])
+    _frequenze, pan, _guadagni, in_moto = suono_del_puntatore(partita, inizio + np.array((0.9, 1.0)) * FS)
+    np.testing.assert_allclose(pan, 2.0 * 0.7 - 1.0, atol=1e-9)
+    assert in_moto.tolist() == [True, True]
     # La freccia su, con la giù ancora giù, fa salire l'alzo; lasciata, l'alzo torna a scendere; lasciata anche la giù, si ferma.
-    alzo = partita._voci_degli_assi["alzo"]
-    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [("alzo", -1), ("alzo", 1)] and partita._voci_degli_assi["alzo"] is not alzo
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [("alzo", -1), ("alzo", 1)] and partita._voce_del_puntatore is voce
     porta_udibile_a(banco, inizio + 1.2 * FS)
     assert partita.mira.valori(inizio / FS + 1.2) == pytest.approx([0.7, 0.3, 0.5])
     assert partita.lascia("alzo", 1) == [] and partita.tasti_giu() == [("alzo", -1)]
     porta_udibile_a(banco, inizio + 1.5 * FS)
-    assert partita.lascia("alzo", -1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.lascia("alzo", -1) == [] and partita.tasti_giu() == [] and partita._voce_del_puntatore is voce
     assert partita.mira.valori(inizio / FS + 9.0) == pytest.approx([0.7, 0.2, 0.5])
+    # Coi valori fermi il puntatore tace, ma resta per la mira: il prossimo tasto lo riapre.
+    assert not suono_del_puntatore(partita, inizio + np.array((1.6, 9.0)) * FS)[3].any()
     # Il tasto che non era giù non cambia niente; un parametro o un verso sconosciuti non sono tasti della mira.
     assert partita.lascia("potenza", 1) == [] and partita.mira.pressioni == 3
     with pytest.raises(ValueError):
         partita.muovi("velocita", 1)
     with pytest.raises(ValueError):
         partita.muovi("direzione", 0)
-    # Le voci lasciate finiscono.
+    # Il puntatore resta acceso per tutta la mira, muto coi valori fermi, e finisce con la mira.
     banco.flusso.avanza(4)
-    assert voce.finita and alzo.finita and partita.fase == "mira" and partita.valori == []
+    assert not voce.finita and partita.fase == "mira" and partita.valori == []
+    partita.annulla_mira()
+    banco.flusso.avanza(4)
+    assert voce.finita and partita._voce_del_puntatore is None
 
 
 def test_le_tacche_e_il_suono_del_capo(banco, monkeypatch):
     """D29: il valore che si muove suona una tacca a ogni decimo della scala che attraversa, in tutte e due le direzioni, la
-    tacca di quel decimo, e al capo si ferma col suono fine_scala, dove tace anche la sua voce; il suono del capo si conta
+    tacca di quel decimo, dal punto del puntatore (D31), e al capo si ferma col suono fine_scala, dove il puntatore tace; il
+    suono del capo si conta
     quando si sente, al battito, una volta sola, e non si conta, né suona, se il tasto sale prima. Al capo il valore resta,
     e il tasto premuto ancora verso lo stesso capo fa sentire subito fine_scala."""
     suonate = spia_del_motore(monkeypatch, banco.motore)
@@ -569,24 +611,29 @@ def test_le_tacche_e_il_suono_del_capo(banco, monkeypatch):
     inizio = banco.motore.campione_udibile()
     prima = len(suonate)
     partita.muovi("direzione", 1)
-    voce = partita._voci_degli_assi["direzione"]
+    voce = partita._voce_del_puntatore
     nuove = suonate[prima:]
-    # Dal centro verso destra: le tacche del sesto, del settimo, dell'ottavo e del nono decimo, poi il capo.
+    # Dal centro verso destra: le tacche del sesto, del settimo, dell'ottavo e del nono decimo, ognuna dal punto del puntatore,
+    # quello del suo decimo, poi il capo, tutto a destra (D31).
     assert len(nuove) == TACCHE - 5
     for (buffer, campione, _voce), decimo in zip(nuove[:-1], range(6, TACCHE), strict=True):
-        assert buffer is partita._tacche["direzione"][decimo]
+        assert decimo_della_tacca(partita, "direzione", buffer) == decimo
+        assert pan_stimato(buffer) == pytest.approx(2.0 * decimo / TACCHE - 1.0, abs=1e-3)
         assert abs(campione - round((inizio / FS + (decimo / TACCHE - 0.5) / VELOCITA_DELLA_MIRA) * FS)) <= 1
-    np.testing.assert_allclose(partita._tacche["direzione"][7], tacca_dell_asse("direzione", 7))
-    _buffer, capo, voce_del_capo = nuove[-1]
+    np.testing.assert_allclose(partita._tacche["direzione"][7], tacca_mono("direzione", 7))
+    buffer_del_capo, capo, voce_del_capo = nuove[-1]
     assert abs(capo - round((inizio / FS + 0.5 / VELOCITA_DELLA_MIRA) * FS)) <= 1
-    # Il suono del capo si conta quando si sente; la voce del valore tace lì.
+    assert pan_stimato(buffer_del_capo) == pytest.approx(1.0, abs=1e-3)
+    # Il suono del capo si conta quando si sente; lì il puntatore smette di muoversi, e tace.
     porta_udibile_a(banco, capo - 1)
     assert partita.battito() == [] and "fine_scala" not in banco.contati
     porta_udibile_a(banco, capo)
     assert partita.battito() == [] and banco.contati.count("fine_scala") == 1
     porta_udibile_a(banco, capo + 0.5 * FS)
     assert partita.battito() == [] and banco.contati.count("fine_scala") == 1
-    assert voce.finita and voce.finita_al == capo + SFUMATURA and voce_del_capo.finita_al == capo + LUNGHEZZA_FINTA
+    assert suono_del_puntatore(partita, [capo - 2, capo - 1])[3].tolist() == [True, True]
+    assert not suono_del_puntatore(partita, [capo + 1, capo + 0.5 * FS])[3].any()
+    assert not voce.finita and voce_del_capo.finita_al == capo + LUNGHEZZA_FINTA
     assert partita.mira.valori(capo / FS + 5.0)[0] == 1.0 and partita.tasti_giu() == [("direzione", 1)]
     assert partita.lascia("direzione", 1) == []
     # Il tasto premuto di nuovo verso il capo dove il valore sta già: fine_scala subito, senza tacche; lasciato prima che si
@@ -606,8 +653,7 @@ def test_le_tacche_e_il_suono_del_capo(banco, monkeypatch):
     prima = len(suonate)
     partita.muovi("direzione", -1)
     nuove = suonate[prima:]
-    assert [next(decimo for decimo in range(1, TACCHE) if buffer is partita._tacche["direzione"][decimo]) for buffer, _c, _v in nuove[:-1]] == list(
-        range(TACCHE - 1, 0, -1))
+    assert [decimo_della_tacca(partita, "direzione", buffer) for buffer, _c, _v in nuove[:-1]] == list(range(TACCHE - 1, 0, -1))
     porta_udibile_a(banco, partenza + 1.2 * FS)
     assert partita.lascia("direzione", -1) == []
     assert partita.mira.valori(partenza / FS + 5.0)[0] == pytest.approx(0.6)
@@ -617,6 +663,92 @@ def test_le_tacche_e_il_suono_del_capo(banco, monkeypatch):
         assert tacca.finita
         if campione > partenza + 1.2 * FS + 2 * banco.motore.blocco + banco.flusso.latency * FS:
             assert tacca.finita_al == campione
+
+
+def test_il_puntatore_porta_i_tre_valori(banco, monkeypatch):
+    """D31, chiesto da Gabriele il 22 novembre 2026: il suono della mira è il puntatore, una voce sola che porta sempre i tre
+    valori. Muovendo l'alzo il puntatore resta nel punto della direzione e nel volume della potenza, che anche al minimo si
+    sente, e le tacche e il capo dell'alzo arrivano da lì; quando la direzione cambia moto, le tacche e il capo dell'alzo
+    ancora davanti si rimettono in fila negli stessi campioni, col pan della direzione nel loro istante, e quelli di prima
+    tacciono senza suonare."""
+    suonate = spia_del_motore(monkeypatch, banco.motore)
+    partita = banco.partita()
+    partita.nuova()
+    partita.spazio()
+    # La direzione tutta a destra, e la potenza al minimo.
+    inizio = banco.motore.campione_udibile()
+    partita.muovi("direzione", 1)
+    partita.muovi("potenza", -1)
+    porta_udibile_a(banco, inizio + (0.5 / VELOCITA_DELLA_MIRA + OLTRE_IL_CAPO) * FS)
+    assert partita.battito() == []
+    assert partita.lascia("direzione", 1) == [] and partita.lascia("potenza", -1) == []
+    voce = partita._voce_del_puntatore
+    # L'alzo sale: il puntatore resta tutto a destra e al volume più basso, e cambia soltanto la nota.
+    partenza = banco.motore.campione_udibile()
+    prima = len(suonate)
+    assert partita.muovi("alzo", 1) == [] and partita._voce_del_puntatore is voce
+    frequenze, pan, guadagni, in_moto = suono_del_puntatore(partita, partenza + np.array((0.3, 0.9)) * FS)
+    attese = parametri_del_puntatore(1.0, np.array((0.6, 0.8)), 0.0)
+    for avuti, voluti in zip((frequenze, pan, guadagni), attese, strict=True):
+        np.testing.assert_allclose(avuti, voluti, atol=1e-9)
+    assert in_moto.all() and np.all(pan == 1.0)
+    np.testing.assert_allclose(20.0 * np.log10(guadagni), PUNTATORE_DB + POTENZA_DB_MINIMO)
+    davanti = suonate[prima:]
+    assert [decimo_della_tacca(partita, "alzo", buffer) for buffer, _c, _v in davanti[:-1]] == list(range(6, TACCHE))
+    assert all(pan_stimato(buffer) == pytest.approx(1.0, abs=1e-3) for buffer, _c, _v in davanti)
+    # La direzione torna verso sinistra mentre l'alzo sale: le tacche e il capo dell'alzo ancora davanti tornano in fila negli
+    # stessi campioni, ognuno col pan della direzione nel suo istante, che scende da destra verso il centro.
+    porta_udibile_a(banco, partenza + 0.1 * FS)
+    svolta = banco.motore.campione_udibile()
+    prima = len(suonate)
+    assert partita.muovi("direzione", -1) == [] and partita._voce_del_puntatore is voce
+    rimesse = suonate[prima:prima + len(davanti)]
+    assert [campione for _b, campione, _v in rimesse] == [campione for _b, campione, _v in davanti]
+    assert [decimo_della_tacca(partita, "alzo", buffer) for buffer, _c, _v in rimesse[:-1]] == list(range(6, TACCHE))
+    for buffer, campione, _voce in rimesse:
+        direzione = max(0.0, 1.0 - VELOCITA_DELLA_MIRA * (campione - svolta) / FS)
+        assert pan_stimato(buffer) == pytest.approx(2.0 * direzione - 1.0, abs=1e-3), campione
+    # Dopo le rimesse, le tacche della direzione, dal nono decimo al primo, e il suo capo, tutto a sinistra.
+    proprie = suonate[prima + len(davanti):]
+    assert [decimo_della_tacca(partita, "direzione", buffer) for buffer, _c, _v in proprie[:-1]] == list(range(TACCHE - 1, 0, -1))
+    assert pan_stimato(proprie[-1][0]) == pytest.approx(-1.0, abs=1e-3)
+    # Quelle di prima tacciono senza suonare; le rimesse suonano intere.
+    banco.flusso.avanza_fino(davanti[-1][1] + LUNGHEZZA_FINTA + banco.motore.blocco)
+    assert all(vecchia.finita and vecchia.finita_al == campione for _b, campione, vecchia in davanti)
+    assert all(nuova.finita and nuova.finita_al == campione + len(buffer) for buffer, campione, nuova in rimesse)
+
+
+def test_il_puntatore_si_apre_e_si_chiude_senza_click(banco):
+    """D31: il puntatore suona soltanto dove almeno un valore si muove, e il suo inviluppo entra ed esce in SFUMATURA_STOP, un
+    campione alla volta, senza salti, anche a cavallo di due blocchi; coi valori fermi tace. La prova fa leggere da sola la
+    voce, un blocco dopo l'altro, con l'alzo che si muove dal decimo blocco e si ferma al trentesimo, e finisce prima che il
+    motore la suoni."""
+    partita = banco.partita()
+    partita.nuova()
+    partita.spazio()
+    partita.muovi("alzo", 1)
+    voce = partita._voce_del_puntatore
+    assi = assi_della_mira(partita)
+    alzo = partita.mira.assi["alzo"]
+    blocco = banco.motore.blocco
+    sfumatura = round(SFUMATURA_STOP * FS)
+    da, a = 10 * blocco, 30 * blocco
+    alzo.stato = (PARTENZA_DELLA_MIRA, 0, 0.0)
+    pezzi = []
+    for inizio in range(0, 40 * blocco, blocco):
+        if inizio == da:
+            alzo.stato = (PARTENZA_DELLA_MIRA, 1, da / FS)
+        if inizio == a:
+            alzo.stato = (alzo.valore(a / FS), 0, a / FS)
+        tempi = np.arange(inizio, inizio + blocco) / FS
+        _frequenze, _pan, guadagni = voce.parametri(None, tempi)
+        pieni = modulo_partita._suono_del_puntatore(assi, tempi)[2]
+        pezzi.append(guadagni / pieni)
+    inviluppo = np.concatenate(pezzi)
+    assert np.all(inviluppo[:da] == 0.0) and np.all(inviluppo[a + sfumatura:] == 0.0)
+    np.testing.assert_allclose(inviluppo[da + sfumatura:a], 1.0)
+    assert np.max(np.abs(np.diff(inviluppo))) <= 1.0 / (SFUMATURA_STOP * FS) + 1e-12
+    assert 0.0 < inviluppo[da] < inviluppo[da + sfumatura // 2] < 1.0 and 0.0 < inviluppo[a + sfumatura // 2] < 1.0
 
 
 def test_lo_spazio_nella_mira_suona_non_ora(banco):
@@ -650,12 +782,12 @@ def test_l_invio_spara_coi_valori_dell_istante_udibile(banco, cartella_di_prova,
     partita.muovi("direzione", 1)
     partita.muovi("alzo", -1)
     porta_udibile_a(banco, inizio + 0.6 * FS)
-    voci = list(partita._voci_degli_assi.values())
+    voci = [partita._voce_del_puntatore]
     sparo = banco.motore.prossimo_campione() + round(ANTICIPO_DELLO_SPARO * FS)
     assert partita.spara() == []
     valori = [0.5 + 0.6 * VELOCITA_DELLA_MIRA, 0.5 - 0.6 * VELOCITA_DELLA_MIRA, 0.5]
     assert partita.fase == "volo" and partita.valori == pytest.approx(valori, abs=1e-9) and partita.tiri == 1
-    assert partita.mira is None and partita.tasti_giu() == [] and partita.secondi_della_mira() is None and partita._voci_degli_assi == {}
+    assert partita.mira is None and partita.tasti_giu() == [] and partita.secondi_della_mira() is None and partita._voce_del_puntatore is None
     volo = partita.ultimo_volo
     assert volo.partenza == pytest.approx(banco.motore.tempo_di_gioco(sparo)) and volo.partenza > banco.motore.tempo_di_gioco(inizio + 0.6 * FS)
     assert partita._voce_proiettile.inizio == sparo and any(campione == sparo for _b, campione, _v in suonate)
@@ -873,18 +1005,18 @@ def test_la_pausa_nella_mira_a_tempo_conserva_i_secondi(banco, monkeypatch):
     assert partita._mira_dal == k
     porta_udibile_a(banco, k + 3.25 * FS)
     partita.muovi("direzione", -1)
-    asse = partita._voci_degli_assi["direzione"]
+    asse = partita._voce_del_puntatore
     porta_udibile_a(banco, k + 3.4 * FS)
     assert partita.pausa_automatica(True) == [] and partita.in_pausa and partita.fase == "mira"
     rimasti = totale - 3.4
     fermi = [0.5 - 0.15 * VELOCITA_DELLA_MIRA, 0.5, 0.5]
-    assert partita.secondi_della_mira() == pytest.approx(rimasti) and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.secondi_della_mira() == pytest.approx(rimasti) and partita.tasti_giu() == [] and partita._voce_del_puntatore is None
     assert partita.mira.valori(k / FS + 60.0) == pytest.approx(fermi)
     assert partita._tick_in_fila == [] and partita._scadenza is None
     assert partita.righe_della_barra()[-2:] == [resoconti.riga_dei_valori_della_mira(*parametri_del_tiro(*fermi)[:2], fermi[2], rimasti),
                                                 "In pausa: Ctrl+P per riprendere"]
     # In pausa: i tasti non fanno niente, Invio e spazio il non ora.
-    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voce_del_puntatore is None
     prima = len(banco.contati)
     assert partita.spara() == [] and partita.spazio() == [] and banco.contati[prima:] == ["non_ora", "non_ora"] and partita.fase == "mira"
     # Una pausa lunga il doppio della mira: niente scadenza, e passata la rampa del guadagno tutto tace, tick compresi.
@@ -1037,6 +1169,11 @@ def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
     capo_lungo = np.full((round(0.3 * FS), 2), AMPIEZZA_FINTA, dtype=np.float32)
     corto = np.full((LUNGHEZZA_FINTA, 2), AMPIEZZA_FINTA, dtype=np.float32)
     monkeypatch.setattr(suoni, "_rendi_preset", lambda nome: capo_lungo if nome == suoni.EVENTI["fine_scala"] else corto)
+
+    def e_il_capo(buffer):
+        # Il capo arriva dal punto del puntatore, qui il centro: lo stesso suono, collocato di nuovo (D31).
+        return len(buffer) == len(capo_lungo) and np.allclose(buffer, capo_lungo, rtol=0, atol=1e-6)
+
     suonate = spia_del_motore(monkeypatch, banco.motore)
     partita = banco.partita()
     partita.nuova()
@@ -1046,7 +1183,7 @@ def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
     assert partita.muovi("potenza", 1) == []
     buffer, capo, voce_del_capo = suonate[-1]
     tacche = suonate[prima:-1]
-    assert buffer is capo_lungo and len(tacche) == TACCHE - 6
+    assert e_il_capo(buffer) and len(tacche) == TACCHE - 6
     porta_udibile_a(banco, capo + OLTRE_IL_CAPO * FS)
     contati = banco.contati.count("fine_scala")
     assert partita.lascia("potenza", 1) == [] and partita.mira.valori(capo / FS + 1.0)[2] == 1.0
@@ -1060,7 +1197,7 @@ def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
     k = banco.motore.prossimo_campione()
     assert partita.muovi("potenza", 1) == []
     buffer, inizio, di_nuovo = suonate[-1]
-    assert buffer is capo_lungo and inizio == k
+    assert e_il_capo(buffer) and inizio == k
     porta_udibile_a(banco, k + 0.05 * FS)
     assert partita.lascia("potenza", 1) == []
     banco.flusso.avanza_fino(k + len(capo_lungo) + banco.motore.blocco)
@@ -1069,7 +1206,7 @@ def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
     k = banco.motore.prossimo_campione()
     assert partita.muovi("potenza", 1) == []
     ancora = suonate[-1][2]
-    assert suonate[-1][0] is capo_lungo and partita.lascia("potenza", 1) == []
+    assert e_il_capo(suonate[-1][0]) and partita.lascia("potenza", 1) == []
     banco.flusso.avanza_fino(k + banco.motore.blocco)
     assert ancora.finita and ancora.finita_al == k
     # Il suono del capo che non è partito non si conta.
@@ -1078,9 +1215,9 @@ def test_i_suoni_della_mira_gia_partiti_finiscono(banco, monkeypatch):
     prima = len(suonate)
     assert partita.muovi("potenza", -1) == []
     davanti = suonate[prima:]
-    assert davanti[-1][0] is capo_lungo and len(davanti) == TACCHE
+    assert e_il_capo(davanti[-1][0]) and len(davanti) == TACCHE
     tacca, campione, prima_tacca = davanti[0]
-    assert tacca is partita._tacche["potenza"][TACCHE - 1]
+    assert decimo_della_tacca(partita, "potenza", tacca) == TACCHE - 1
     porta_udibile_a(banco, campione + len(tacca) // 2)
     assert partita.muovi("potenza", 1) == [] and partita.lascia("potenza", -1) == [] and partita.lascia("potenza", 1) == []
     banco.flusso.avanza_fino(davanti[-1][1] + banco.motore.blocco)
@@ -1164,7 +1301,7 @@ def test_esc_annulla_la_mira_e_conserva_il_proiettile(banco, cartella_di_prova, 
     inizio = banco.motore.campione_udibile()
     partita.muovi("direzione", 1)
     porta_udibile_a(banco, inizio + 0.3 * FS)
-    asse = partita._voci_degli_assi["direzione"]
+    asse = partita._voce_del_puntatore
     tempo = banco.motore.tempo_di_gioco()
     sentiti = len(banco.contati)
     messaggi = partita.annulla_mira()
@@ -1487,12 +1624,12 @@ def test_pausa_nella_mira(banco, cartella_di_prova):
     partita.muovi("direzione", -1)
     partita.muovi("potenza", 1)
     porta_udibile_a(banco, inizio + 0.45 * FS)
-    assi = list(partita._voci_degli_assi.values())
+    assi = [partita._voce_del_puntatore]
     orologio.valore = 5.0
     messaggi = partita.pausa()
     assert partita.in_pausa and partita.fase == "mira" and banco.contati[-1] == "pausa"
     assert [m.annuncio for m in messaggi] == ["Pausa."] and "i valori restano dove sono" in messaggi[0].testo
-    assert partita.tasti_giu() == [] and partita._voci_degli_assi == {} and partita.secondi_della_mira() is None
+    assert partita.tasti_giu() == [] and partita._voce_del_puntatore is None and partita.secondi_della_mira() is None
     fermi = [0.5 - 0.45 * VELOCITA_DELLA_MIRA, 0.5, 0.5 + 0.45 * VELOCITA_DELLA_MIRA]
     assert partita.mira.valori(inizio / FS + 60.0) == pytest.approx(fermi)
     assert partita.righe_della_barra()[-1] == "In pausa: Ctrl+P per riprendere"
@@ -1505,7 +1642,7 @@ def test_pausa_nella_mira(banco, cartella_di_prova):
         assert partita.battito() == []
     assert partita.fase == "mira" and banco.motore.tempo_di_gioco() == fermo
     # In pausa i tasti dei valori non fanno niente; l'Invio e lo spazio fanno sentire il non ora.
-    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voci_degli_assi == {}
+    assert partita.muovi("alzo", 1) == [] and partita.tasti_giu() == [] and partita._voce_del_puntatore is None
     prima = len(banco.contati)
     assert partita.spara() == [] and partita.spazio() == [] and banco.contati[prima:] == ["non_ora", "non_ora"]
     assert partita.fase == "mira" and partita.tiri == 0
@@ -1575,7 +1712,7 @@ def test_pausa_automatica(banco, cartella_di_prova):
     inizio = banco.motore.campione_udibile()
     partita.muovi("alzo", 1)
     porta_udibile_a(banco, inizio + 0.3 * FS)
-    asse = partita._voci_degli_assi["alzo"]
+    asse = partita._voce_del_puntatore
     sentiti = len(banco.contati)
     partita.pausa_automatica(True)
     banco.flusso.avanza(3)
@@ -1656,7 +1793,7 @@ def test_abbandona(banco, cartella_di_prova):
     partita.nuova()
     partita.spazio()
     partita.muovi("direzione", 1)
-    asse = partita._voci_degli_assi["direzione"]
+    asse = partita._voce_del_puntatore
     messaggi = partita.nuova()
     assert [m.annuncio for m in messaggi] == ["Partita abbandonata.", "Partita nuova: Spazio per mirare."]
     assert partita.fase == "ascolto" and partita.mira is None and partita.tasti_giu() == []
@@ -2396,9 +2533,9 @@ def test_ctrl_p_soltanto_nella_palestra(banco, cartella_di_prova):
     partita.spazio()
     inizio = banco.motore.campione_udibile()
     partita.muovi("direzione", 1)
-    asse = partita._voci_degli_assi["direzione"]
+    asse = partita._voce_del_puntatore
     assert partita.pausa()[0].testo == rifiuto and not partita.in_pausa and partita.fase == "mira"
-    assert partita.tasti_giu() == [("direzione", 1)] and partita._voci_degli_assi["direzione"] is asse
+    assert partita.tasti_giu() == [("direzione", 1)] and partita._voce_del_puntatore is asse
     secondi = partita.secondi_della_mira()
     porta_udibile_a(banco, inizio + 0.6 * FS)
     assert partita.battito() == [] and partita.secondi_della_mira() < secondi and not asse.finita

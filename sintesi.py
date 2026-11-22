@@ -18,15 +18,13 @@ import numpy as np
 
 from costanti import (
     ALZO_FREQUENZE,
-    DIREZIONE_FREQUENZA,
     FS,
     PARAMETRI,
     POTENZA_DB_MINIMO,
-    POTENZA_FREQUENZA,
-    SCIVOLATA_DB,
-    SCIVOLATA_FORMA,
+    PUNTATORE_DB,
     TACCA_DB,
     TACCA_DURATA,
+    TACCA_FORMA,
     TACCA_FREQUENZE,
     TACCHE,
     TICK_DB,
@@ -211,36 +209,47 @@ def _controlla_il_parametro(parametro):
         raise ValueError(f"parametro sconosciuto: {parametro!r}")
 
 
-def parametri_dell_asse(parametro, valori):
-    """(frequenze, pan, guadagni lineari) del suono di un valore della mira manuale che si muove, per i
-    valori da 0 a 1 (D29), nella forma SCIVOLATA_FORMA del parametro: i suoni delle scivolate di D19. La
-    direzione suona DIREZIONE_FREQUENZA a SCIVOLATA_DB, da tutto a sinistra a tutto a destra; l'alzo, al
-    centro, sale da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] su scala esponenziale; la potenza, al centro,
-    a POTENZA_FREQUENZA, cresce da POTENZA_DB_MINIMO sotto SCIVOLATA_DB fino a SCIVOLATA_DB, lineare in
-    decibel. Tre array lunghi come i valori."""
-    _controlla_il_parametro(parametro)
-    valori = np.clip(np.atleast_1d(np.asarray(valori, dtype=float)), 0.0, 1.0)
-    uno = np.ones_like(valori)
-    livello = db_in_lineare(SCIVOLATA_DB) * uno
-    if parametro == "direzione":
-        return DIREZIONE_FREQUENZA * uno, 2.0 * valori - 1.0, livello
-    if parametro == "alzo":
-        basso, alto = ALZO_FREQUENZE
-        return basso * (alto / basso) ** valori, 0.0 * uno, livello
-    return POTENZA_FREQUENZA * uno, 0.0 * uno, db_in_lineare(SCIVOLATA_DB + POTENZA_DB_MINIMO * (1.0 - valori))
+def pan_della_direzione(direzione):
+    """La panoramica del puntatore per la direzione da 0 a 1: da meno uno, tutto a sinistra, a uno, tutto a
+    destra, la stessa scala della panoramica dei bersagli. Uno scalare per un numero, un array per un array."""
+    pan = 2.0 * np.clip(np.asarray(direzione, dtype=float), 0.0, 1.0) - 1.0
+    return float(pan) if pan.ndim == 0 else pan
 
 
-def tacca_dell_asse(parametro, k, fs=FS):
-    """La tacca k, da 1 a TACCHE meno 1, di un valore della mira manuale: il bip stereo float32 di
+def parametri_del_puntatore(direzione, alzo, potenza):
+    """(frequenze, pan, guadagni lineari) del puntatore della mira manuale, la voce sola che porta sempre i
+    tre valori da 0 a 1 (D31, dalla 2.0.1): la panoramica dalla direzione, con pan_della_direzione;
+    l'altezza dall'alzo, da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] su scala esponenziale; il volume dalla
+    potenza, da POTENZA_DB_MINIMO sotto PUNTATORE_DB fino a PUNTATORE_DB, lineare in decibel. I valori sono
+    numeri o array, che si allargano l'uno sull'altro; tre array della stessa forma, di almeno un elemento.
+    Fino alla 2.0.0 ogni valore aveva una voce sua, e gli altri due non si sentivano."""
+    direzione, alzo, potenza = np.broadcast_arrays(*(np.clip(np.atleast_1d(np.asarray(valore, dtype=float)), 0.0, 1.0)
+                                                     for valore in (direzione, alzo, potenza)))
+    basso, alto = ALZO_FREQUENZE
+    guadagni = db_in_lineare(PUNTATORE_DB + POTENZA_DB_MINIMO * (1.0 - potenza))
+    return basso * (alto / basso) ** alzo, pan_della_direzione(direzione), guadagni
+
+
+def tacca_mono(parametro, k, fs=FS):
+    """La tacca k, da 1 a TACCHE meno 1, di un valore della mira manuale, mono float32: un bip di
     TACCA_DURATA a TACCA_DB, alla frequenza k-esima di frequenze_delle_tacche(TACCHE - 1), cioè le nove
-    tacche dei decimi su tutta la scala da TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1], nella forma del
-    parametro, al centro, e per la direzione con la panoramica di quel decimo (D29)."""
+    tacche dei decimi su tutta la scala da TACCA_FREQUENZE[0] a TACCA_FREQUENZE[1], nella forma TACCA_FORMA
+    del parametro (D29). La partita le prepara una volta sola, e le colloca nel punto del puntatore quando
+    le mette in fila (D31)."""
     _controlla_il_parametro(parametro)
     if not 1 <= int(k) < TACCHE:
         raise ValueError(f"le tacche vanno da 1 a {TACCHE - 1}, non {k!r}")
     frequenza = float(frequenze_delle_tacche(TACCHE - 1)[int(k) - 1])
-    pan = 2.0 * int(k) / TACCHE - 1.0 if parametro == "direzione" else 0.0
-    mono = _bip(frequenza, round(TACCA_DURATA * fs), TACCA_DB, SCIVOLATA_FORMA[parametro], int(fs))
+    return _bip(frequenza, round(TACCA_DURATA * fs), TACCA_DB, TACCA_FORMA[parametro], int(fs)).astype(np.float32)
+
+
+def tacca_dell_asse(parametro, k, fs=FS, pan=None):
+    """La tacca k di tacca_mono, stereo float32, col pan dato, da meno uno a uno: quello del puntatore
+    nell'istante della tacca (D31). Senza pan, quello del puntatore con gli altri valori al centro: per la
+    direzione la panoramica del suo decimo, per l'alzo e la potenza il centro."""
+    mono = tacca_mono(parametro, k, fs)
+    if pan is None:
+        pan = pan_della_direzione(int(k) / TACCHE) if parametro == "direzione" else 0.0
     return panoramica(mono, pan).astype(np.float32)
 
 

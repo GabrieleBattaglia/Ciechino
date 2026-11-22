@@ -25,7 +25,7 @@ import pytest
 from GBUtils import Acusticator, parse_banda, scomponi_nota
 
 import suoni
-from costanti import DIREZIONE_FREQUENZA, FS, POTENZA_FREQUENZA, TACCA_FREQUENZE
+from costanti import ALZO_FREQUENZE, FS, TACCA_FREQUENZE
 from strumenti import crea_preset, elenco_suoni
 
 # Gli eventi della 0.1.0, come li elenca docs/progetto.txt: per il gioco, poi per la finestra. Il valore preso è
@@ -334,7 +334,7 @@ def test_il_suono_del_fine_scala(creata):
     assert len(note) == 2
     assert all(quartina[2] == 0 for quartina in preset["score"])
     hertz = [_hertz(altezza) for quartina in note for altezza in _altezze(quartina[0], False)]
-    assert max(hertz) < min(TACCA_FREQUENZE[0], DIREZIONE_FREQUENZA, POTENZA_FREQUENZA)
+    assert max(hertz) < min(TACCA_FREQUENZE[0], ALZO_FREQUENZE[0])
     # Due re 3, dalle prove del 22 novembre 2026: prima erano due mi 3. Il re 3, circa 147 hertz, sta anche sotto i 150 dell'alzo
     # al minimo, come dice la descrizione.
     assert [quartina[0] for quartina in note] == ["d3", "d3"]

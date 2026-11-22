@@ -89,20 +89,23 @@ PARAMETRI = ("direzione", "alzo", "potenza")
 PARTENZA_DELLA_MIRA = 0.5
 DURATA_DELLA_SCALA = 3.0
 VELOCITA_DELLA_MIRA = 1.0 / DURATA_DELLA_SCALA
-# Il suono di un valore che si muove, quello delle scivolate di D19: la direzione 440 hertz in seno, da
-# tutto a sinistra a tutto a destra; l'alzo una nota in seno che sale da 150 a 2400 hertz, quattro
-# ottave, su scala esponenziale; la potenza 330 hertz in triangolo, che cresce dal quasi silenzio al
-# massimo, linearmente in decibel, col minimo POTENZA_DB_MINIMO sotto SCIVOLATA_DB.
-SCIVOLATA_DB = -9.0
-SCIVOLATA_FORMA = {"direzione": "seno", "alzo": "seno", "potenza": "triangolo"}
-DIREZIONE_FREQUENZA = 440.0
+# Il puntatore (D31, dalla 2.0.1; Gabriele il 22 novembre 2026: «Quando muovo il mirino, gli altri
+# parametri devono rimanere nel suono di puntamento: volume e altezza se muovo il pan eccetera. In pratica
+# quel suono è il mio puntatore.»): una voce sola, in PUNTATORE_FORMA, che suona mentre almeno un valore
+# si muove e porta sempre tutti e tre: la direzione nella panoramica, da tutto a sinistra a tutto a
+# destra; l'alzo nell'altezza, da ALZO_FREQUENZE[0] a ALZO_FREQUENZE[1] hertz, quattro ottave, su scala
+# esponenziale; la potenza nel volume, linearmente in decibel, da POTENZA_DB_MINIMO sotto PUNTATORE_DB
+# fino a PUNTATORE_DB, così anche al minimo il puntatore si sente. Fino alla 2.0.0 ogni valore aveva la
+# voce della sua scivolata di D19, e gli altri due tacevano.
+PUNTATORE_DB = -9.0
+PUNTATORE_FORMA = "triangolo"
 ALZO_FREQUENZE = (150.0, 2400.0)
-POTENZA_FREQUENZA = 330.0
-POTENZA_DB_MINIMO = -40.0
+POTENZA_DB_MINIMO = -20.0
 # Le tacche: ogni valore ne suona una a ogni decimo della scala che attraversa, in tutte e due le
-# direzioni, piccolissimi bip che salgono di frequenza dal primo decimo al nono, nella forma del suo
-# valore e, per la direzione, con la sua panoramica. Ai capi, 0 e 100%, il valore si ferma col suono
-# fine_scala.
+# direzioni, piccolissimi bip che salgono di frequenza dal primo decimo al nono, nella forma TACCA_FORMA
+# del suo valore e dal punto del puntatore, con la panoramica della direzione di quell'istante. Ai capi,
+# 0 e 100%, il valore si ferma col suono fine_scala, anche lui dal punto del puntatore.
+TACCA_FORMA = {"direzione": "seno", "alzo": "seno", "potenza": "triangolo"}
 TACCHE = 10
 TACCA_DURATA = 0.006
 TACCA_FREQUENZE = (1200.0, 2400.0)
@@ -283,12 +286,12 @@ ASCOLTI_PAUSA = 0.6
 ASCOLTI_SUONO = 2.5
 # Il test stereo (D23): un suono fermo tutto a sinistra per ASCOLTI_STEREO_SOSTA secondi, poi la scivolata fino a
 # tutto a destra in ASCOLTI_STEREO_VIAGGIO, poi fermo lì; la forma d'onda, fra quelle di sintesi.FORME_PORTANTI,
-# la nota in hertz e il livello in decibel, quello dei suoni della mira.
+# la nota in hertz e il livello in decibel, quello del puntatore della mira con la potenza al massimo.
 ASCOLTI_STEREO_SOSTA = 1.0
 ASCOLTI_STEREO_VIAGGIO = 4.0
 ASCOLTI_STEREO_FORMA = "triangolo"
 ASCOLTI_STEREO_FREQUENZA = 440.0
-ASCOLTI_STEREO_DB = SCIVOLATA_DB
+ASCOLTI_STEREO_DB = PUNTATORE_DB
 # Il bersaglio degli Ascolti (D23): grande come quelli del primo livello, con la forma dell'LFO più regolare, che
 # oscilla a metà dell'intervallo del gioco.
 ASCOLTI_RAGGIO = RAGGIO_INIZIALE
