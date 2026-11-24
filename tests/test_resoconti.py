@@ -31,6 +31,7 @@ from costanti import (
     COLPI_BONUS,
     COLPI_INIZIALI,
     COLPI_PER_LIVELLO,
+    POSTI_IN_CLASSIFICA,
     SOMMARIO_NUMERI_FINO_AL_LIVELLO,
     SOMMARIO_PAROLE_FINO_AL_LIVELLO,
     SOMMARIO_SOGLIA_INCLINAZIONE,
@@ -630,6 +631,89 @@ def test_la_mira_annullata():
     assert not hasattr(resoconti, "proiettile_perduto")
 
 
+# Una classifica per le prove della situazione di D33, ordinata per punteggio, con due voci a pari punti.
+VOCI = [{"nome": "Gabry", "punteggio": 1570}, {"nome": "Bea", "punteggio": 1230}, {"nome": "Leo", "punteggio": 1230}, {"nome": "Ugo", "punteggio": 120}]
+
+
+def test_la_riga_del_livello():
+    """D33: i colpi sparati nel livello, la riserva, i bersagli presi e quanti ne mancano al livello seguente, coi singolari, la
+    riserva vuota e il centro che chiude il livello."""
+    assert resoconti.riga_del_livello(3, 4, 8, 2) == f"Sparati 4 colpi nel livello, 8 in riserva; presi 2 bersagli, ne mancano {CENTRI_PER_LIVELLO - 2} al livello 4."
+    assert resoconti.riga_del_livello(1, 1, 1, 1) == f"Sparato 1 colpo nel livello, 1 in riserva; preso 1 bersaglio, ne mancano {CENTRI_PER_LIVELLO - 1} al livello 2."
+    assert resoconti.riga_del_livello(5, 12, 0, CENTRI_PER_LIVELLO - 1) == (f"Sparati 12 colpi nel livello, riserva vuota; presi {CENTRI_PER_LIVELLO - 1} bersagli, "
+                                                                           "ne manca 1 al livello 6.")
+    assert resoconti.riga_del_livello(2, 1234, 1500, CENTRI_PER_LIVELLO) == f"Sparati 1.234 colpi nel livello, 1.500 in riserva; presi {CENTRI_PER_LIVELLO} bersagli, livello superato."
+    assert resoconti.riga_del_livello(1, 0, COLPI_INIZIALI, 0).startswith("Sparati 0 colpi nel livello, ")
+
+
+def test_il_posto_in_classifica():
+    """D33: il posto di classifica.posizione, dietro chi ha punti uguali o più alti, con chi sta davanti e il distacco; al primo
+    posto il vantaggio su chi segue; fuori dalla classifica l'ultima voce; e l'annuncio breve."""
+    posto = resoconti.posto_in_classifica
+    assert posto(1000, VOCI) == ("in classifica 4°, dietro Leo, 1.230 punti, distacco 230", "4°, a 230")
+    assert posto(1230, VOCI) == ("in classifica 4°, dietro Leo, 1.230 punti, a pari punti", "4°, a pari punti")
+    assert posto(1300, VOCI) == ("in classifica 2°, dietro Gabry, 1.570 punti, distacco 270", "2°, a 270")
+    assert posto(1900, VOCI) == ("in classifica 1°, davanti a Gabry, 1.570 punti, di 330", "1°, più 330")
+    assert posto(50, VOCI) == ("in classifica 5°, dietro Ugo, 120 punti, distacco 70", "5°, a 70")
+    assert posto(1, [{"nome": "Ugo", "punteggio": 1}]) == ("in classifica 2°, dietro Ugo, 1 punto, a pari punti", "2°, a pari punti")
+    # Senza punti la partita non entra, e davanti ha l'ultima voce.
+    assert posto(0, VOCI) == ("fuori classifica, dietro Ugo, 120 punti, distacco 120", "Fuori classifica, a 120")
+    assert posto(3, []) == ("in classifica 1°: per ora è vuota", "1°")
+    assert posto(0, []) == ("fuori classifica: per entrare serve almeno un punto", "Fuori classifica")
+    # Nella classifica piena un pari punti con l'ultima voce resta fuori; un punto in più entra all'ultimo posto.
+    piena = [{"nome": f"N{n}", "punteggio": 1000 - n} for n in range(POSTI_IN_CLASSIFICA)]
+    ultima = 1000 - (POSTI_IN_CLASSIFICA - 1)
+    assert posto(ultima, piena) == (f"fuori classifica, dietro N{POSTI_IN_CLASSIFICA - 1}, {ultima} punti, a pari punti", "Fuori classifica, a pari punti")
+    assert posto(ultima + 1, piena) == (f"in classifica {POSTI_IN_CLASSIFICA}°, dietro N{POSTI_IN_CLASSIFICA - 2}, {ultima + 1} punti, a pari punti",
+                                        f"{POSTI_IN_CLASSIFICA}°, a pari punti")
+
+
+def test_la_riga_del_tempo_e_del_posto():
+    """D33: il tempo di gioco in cifre, come la colonna Tempo della classifica, e il posto; senza le voci soltanto il tempo."""
+    assert resoconti.riga_del_tempo_e_del_posto(205.7, 1000, VOCI) == "Tempo 03:25; in classifica 4°, dietro Leo, 1.230 punti, distacco 230."
+    assert resoconti.riga_del_tempo_e_del_posto(3725.0, 1900, VOCI) == "Tempo 01:02:05; in classifica 1°, davanti a Gabry, 1.570 punti, di 330."
+    assert resoconti.riga_del_tempo_e_del_posto(42.0, 0, None) == "Tempo 00:42."
+    assert resoconti.riga_del_tempo_e_del_posto(0.0, 0, None) == "Tempo 00:00."
+
+
+def test_la_situazione_nel_resoconto():
+    """D33: la situazione sta dopo il sommario, coi numeri o a parole, e prima della riga dell'esito; dove il sommario tace apre il
+    resoconto. L'annuncio ha il posto subito dopo l'esito, e senza le voci della classifica lo tace; i dati portano i conti."""
+    tiro = mancato(misure=misure())
+    tempo = "Tempo 03:25; in classifica 4°, dietro Leo, 1.230 punti, distacco 230."
+    situazione = resoconti.Situazione(4, 2, 205.0, VOCI)
+
+    def livello_(n):
+        return f"Sparati 4 colpi nel livello, 8 in riserva; presi 2 bersagli, ne mancano {CENTRI_PER_LIVELLO - 2} al livello {n + 1}."
+
+    def esito(n, globale=""):
+        return f"Tiro 12, livello {n}: a vuoto{globale}; nella riserva restano 8 colpi."
+
+    coi_numeri = raccogli(resoconti.resoconto_del_tiro(12, 1, tiro, VALORI, totale=1000, riserva=8, situazione=situazione))
+    senza = resoconti.resoconto_del_tiro(12, 1, tiro, VALORI, totale=1000, riserva=8)
+    assert coi_numeri.testo.split("\n") == [NUMERI, livello_(1), tempo, *senza.testo.split("\n")[1:]]
+    assert coi_numeri.annuncio == f"A vuoto, riserva 8. 4°, a 230. {NUMERI_ANNUNCIO}"
+    assert coi_numeri.dati == {**senza.dati, "tiri_del_livello": 4, "centri_del_livello": 2, "durata_s": 205.0, "posizione": 4}
+    n = SOMMARIO_PAROLE_FINO_AL_LIVELLO
+    a_parole = raccogli(resoconti.resoconto_del_tiro(12, n, tiro, VALORI, totale=1000, riserva=8, situazione=situazione))
+    assert a_parole.testo.split("\n")[:5] == [PAROLE_SOLE, SOTTO_LE_PAROLE, livello_(n), tempo, esito(n)]
+    assert a_parole.annuncio.startswith("A vuoto, riserva 8. 4°, a 230. ") and a_parole.annuncio.endswith(PAROLE_ANNUNCIO)
+    n = SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1
+    in_testa = raccogli(resoconti.resoconto_del_tiro(12, n, tiro, VALORI, totale=1000, riserva=8, situazione=situazione))
+    assert in_testa.testo.split("\n")[:3] == [livello_(n), tempo, esito(n, f", precisione globale {G_DEL_MANCATO}")]
+    assert in_testa.annuncio == f"A vuoto, riserva 8. 4°, a 230. Precisione globale {G_DEL_MANCATO}."
+    # Senza le voci della classifica, il tempo da solo, e l'annuncio com'era.
+    senza_voci = raccogli(resoconti.resoconto_del_tiro(12, 1, tiro, VALORI, totale=1000, riserva=8, situazione=resoconti.Situazione(4, 2, 205.0)))
+    assert senza_voci.testo.split("\n")[1:3] == [livello_(1), "Tempo 03:25."]
+    assert senza_voci.annuncio == senza.annuncio and senza_voci.dati["posizione"] is None
+    # Il centro che chiude il livello, al primo posto.
+    chiude = raccogli(resoconti.resoconto_del_tiro(30, 3, volo(bersaglio(), misure=misure(0.3, 0.04, -0.06, 12.0)), VALORI, punti=400, totale=1900, riserva=5,
+                                                   situazione=resoconti.Situazione(25, CENTRI_PER_LIVELLO, 900.0, VOCI)))
+    assert chiude.testo.split("\n")[1:3] == [f"Sparati 25 colpi nel livello, 5 in riserva; presi {CENTRI_PER_LIVELLO} bersagli, livello superato.",
+                                             "Tempo 15:00; in classifica 1°, davanti a Gabry, 1.570 punti, di 330."]
+    assert chiude.annuncio.startswith("Colpito, 400 punti. 1°, più 330. L:+0,3 ")
+
+
 def test_messaggio_di_tipo_sconosciuto():
     with pytest.raises(ValueError):
         Messaggio("strano", "testo")
@@ -660,6 +744,12 @@ def _campionario():
         resoconti.pausa_solo_in_palestra(3), resoconti.attesa_della_palestra(0), resoconti.attesa_della_palestra(1), resoconti.attesa_della_palestra(4),
         resoconti.mira_annullata(12), resoconti.mira_annullata(1, in_pausa=True),
         resoconti.resoconto_del_tiro(10, SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, volo(bersaglio()), VALORI, punti=200, totale=400, riserva=7),
+        # La situazione di D33, in ogni sua forma.
+        *(resoconti.resoconto_del_tiro(11, livello, mancato(misure=misure()), VALORI, totale=totale, riserva=riserva,
+                                       situazione=resoconti.Situazione(tiri, centri, durata, voci))
+          for livello, totale, riserva, tiri, centri, durata, voci in ((1, 1000, 8, 4, 2, 205.0, VOCI), (SOMMARIO_PAROLE_FINO_AL_LIVELLO, 1900, 0, 1, 1, 3725.0, VOCI),
+                                                                      (SOMMARIO_PAROLE_FINO_AL_LIVELLO + 1, 0, 1, 1234, CENTRI_PER_LIVELLO, 0.0, []),
+                                                                      (2, 0, 3, 2, 0, 12.0, VOCI), (3, 1230, 3, 2, 0, 12.0, VOCI), (3, 5, 3, 2, 0, 12.0, None))),
     ]
     testi_ = [*TESTI]
     for messaggio in messaggi:

@@ -2,6 +2,12 @@
 
 Tutti i cambiamenti e le novità introdotte nelle versioni di Ciechino.
 
+## [2.1.0] - 2026-11-24
+
+Dopo ogni tiro il resoconto dice la situazione, come ha chiesto Gabriele: due righe nuove, subito dopo il sommario, o in testa al resoconto dal settimo livello, dove il sommario non c'è. La prima dice il livello: quanti colpi hai sparato nel livello, quanti ne restano nella riserva, quanti bersagli hai preso nel livello e quanti ne mancano per passare al seguente, per esempio Sparati 4 colpi nel livello, 18 in riserva; presi 2 bersagli, ne mancano 8 al livello 2. Col centro che chiude il livello dice livello superato. La seconda dice il tempo di gioco fin lì, senza le pause e le attese della palestra, come la colonna Tempo della classifica, e il posto che avresti in classifica coi punti di quel momento, con il nome, i punti e il distacco di chi ti sta davanti, per esempio Tempo 03:25; in classifica 4°, dietro Gabry, 1.570 punti, distacco 340. A pari punti resta davanti chi c'era prima, come in classifica. Al primo posto dice il vantaggio su chi segue; finché la partita resta fuori, perché non ha ancora punti o non supera la centesima voce, dice fuori classifica, con l'ultima voce e il distacco.
+
+Anche l'annuncio per la sintesi dice il posto, subito dopo l'esito: per esempio A vuoto, riserva 18. 4°, a 340, e poi il sommario come prima; al primo posto 1°, più 330.
+
 ## [2.0.3] - 2026-11-22
 
 Il puntatore della mira prende adesso il timbro del tuo proiettile, quello che scegli con Proiettile nel menu Impostazioni, il seno se non l'hai cambiato. Nella 2.0.1 era in onda triangolare, il timbro di molti bersagli: muovendo l'alzo vicino alla nota di un bersaglio in triangolo, l'orecchio poteva fondere i due suoni e sentire il puntatore da un punto sbagliato, come ha notato Gabriele. Il timbro del proiettile nessun bersaglio lo usa, e puntatore e proiettile non suonano mai insieme.

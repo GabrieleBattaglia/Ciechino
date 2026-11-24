@@ -624,11 +624,20 @@ def _centro(tavolo, numero, totale):
     assert resoconto.dati["punti"] == punti and resoconto.dati["totale"] == totale == partita.punti
     # Al livello 1 il resoconto comincia col sommario dei numeri (D21), coi valori nel primo blocco e la legenda dal carattere 41 (D24),
     # e la precisione globale (D26); nell'annuncio l'esito, poi il primo blocco, senza la legenda.
-    sommario, esito = resoconto.testo.splitlines()[:2]
+    # D33: fra il sommario e l'esito la situazione, il livello, poi il tempo e il posto nella classifica che la finestra ha in memoria;
+    # il posto va anche nell'annuncio, subito dopo l'esito.
+    sommario, livello, tempo, esito = resoconto.testo.splitlines()[:4]
     atteso = resoconti.sommario_del_tiro(volo, "numeri")
+    voci = tavolo.finestra._voci_della_classifica
+    posto, posto_detto = resoconti.posto_in_classifica(totale, voci)
     assert sommario == atteso.riga and sommario.startswith("L:") and "L laterale, V verticale" in sommario and " G:" in atteso.annuncio
+    # Il centro che chiude il livello lo dice superato: i conti del livello sono quelli di prima del livello nuovo, nei dati del resoconto.
+    dati = resoconto.dati
+    assert livello == resoconti.riga_del_livello(1, dati["tiri_del_livello"], dati["riserva"], dati["centri_del_livello"]) and dati["tiri_del_livello"] >= 1
+    assert livello.endswith("livello superato." if dati["centri_del_livello"] == CENTRI_PER_LIVELLO else " al livello 2.")
+    assert tempo.startswith("Tempo ") and tempo.endswith(f"; {posto}.") and dati["posizione"] == classifica.posizione(voci, totale)
     assert esito.startswith(f"Tiro {numero}, livello 1: colpito un bersaglio, forma ")
-    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {atteso.annuncio}"
+    assert resoconto.annuncio == f"Colpito, {testi.intero(punti)} punti. {posto_detto}. {atteso.annuncio}"
     tavolo.cursore_sul_nuovo()
     return totale, nuovi
 
@@ -727,7 +736,9 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
             # Anche il livello 2 è della palestra (D22): dopo il tiro a vuoto lo spazio riporta all'ascolto.
             if partita.riserva > 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "info"] and partita.fase == "attesa"
-                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}. {VUOTO} G:")
+                # D33: dopo l'esito il posto nella classifica della finestra, poi il sommario.
+                posto = resoconti.posto_in_classifica(totale, finestra._voci_della_classifica)[1]
+                assert resoconto.annuncio.startswith(f"A vuoto, riserva {partita.riserva}. {posto}. {VUOTO} G:")
                 assert nuovi[-1].testo == "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
             elif partita.riserva == 1:
                 assert [m.tipo for m in nuovi] == ["resoconto", "avviso", "info"] and nuovi[1].annuncio == "Ultimo colpo."
@@ -739,7 +750,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
 
         # La fine: il resoconto, la fine col riepilogo, il nome e la classifica in coda alla vista.
         assert partita.fase == "finita" and not partita.in_corso()
-        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.startswith(f"A vuoto, riserva vuota. {VUOTO} G:")
+        posto = resoconti.posto_in_classifica(totale, finestra._voci_della_classifica)[1]
+        assert [m.tipo for m in nuovi] == ["resoconto", "fine"] and nuovi[0].annuncio.startswith(f"A vuoto, riserva vuota. {posto}. {VUOTO} G:")
         tiri = CENTRI_PER_LIVELLO + riserva
         # La durata non conta né la pausa né le attese della palestra, una dopo ogni tiro tranne l'ultimo (D22).
         assert tavolo.in_attesa > 0
@@ -794,7 +806,8 @@ def test_una_partita_intera_nella_finestra_vera(app_wx, preset_finti, messaggi_w
         # La sintesi ha letto ogni annuncio, nell'ordine, e alla fine la voce nuova della classifica, a parole.
         assert voce_finta == [m.annuncio for m in tavolo.ricevuti if m.annuncio] + [classifica.annuncio(voci[0], 1)]
         assert voce_finta[0] == "Partita nuova: Spazio per mirare."
-        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. L:" in detto and " G:" in detto) == CENTRI_PER_LIVELLO
+        # D33: fra i punti e il sommario il posto in classifica, che in questa prova, a classifica vuota, è il primo.
+        assert sum(1 for detto in voce_finta if detto.startswith("Colpito, ") and " punti. 1°. L:" in detto and " G:" in detto) == CENTRI_PER_LIVELLO
 
         # Le statistiche, sul disco, coi numeri della partita.
         statistiche = _leggi(costanti.FILE_STATISTICHE)

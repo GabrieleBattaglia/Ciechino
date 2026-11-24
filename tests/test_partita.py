@@ -480,7 +480,12 @@ def test_mira_completa_sul_centro_del_bersaglio(banco):
     assert volo.misure.inclinazione < 0.0 and volo.precisione_globale > 0.99
     assert sommario.primo.startswith("L:0,0 V:0,0 P:0,0 I:-") and sommario.primo.endswith(f" G:{testi.percento(volo.precisione_globale, 1)}")
     assert len(sommario.primo) < BLOCCO_DEL_BRAILLE and sommario.riga[BLOCCO_DEL_BRAILLE:].startswith("L laterale, V verticale")
-    assert resoconto.testo.split("\n")[0] == sommario.riga and resoconto.testo.split("\n")[1].startswith("Tiro 1, livello 1: colpito un bersaglio, ")
+    # D33: dopo il sommario la situazione, il livello e il tempo; senza la classifica, come qui, il posto tace, anche nell'annuncio.
+    righe = resoconto.testo.split("\n")
+    assert righe[0] == sommario.riga and righe[3].startswith("Tiro 1, livello 1: colpito un bersaglio, ")
+    assert righe[1] == f"Sparato 1 colpo nel livello, {COLPI_INIZIALI} in riserva; preso 1 bersaglio, ne mancano {CENTRI_PER_LIVELLO - 1} al livello 2."
+    assert righe[2] == resoconti.riga_del_tempo_e_del_posto(resoconto.dati["durata_s"], attesi, None) and righe[2].startswith("Tempo ")
+    assert resoconto.dati["tiri_del_livello"] == 1 and resoconto.dati["centri_del_livello"] == 1 and resoconto.dati["posizione"] is None
     assert resoconto.tipo == "resoconto" and resoconto.annuncio == f"Colpito, {attesi} punti. {sommario.annuncio}"
     assert resoconto.dati["colpito"] and resoconto.dati["punti"] == attesi and resoconto.dati["totale"] == attesi
     # D29: la mira manuale non ha più il suono del valore preso; i valori del centro stanno lontani dai capi.
@@ -1512,6 +1517,14 @@ def test_il_bonus_colpito_da_i_colpi_e_annulla_l_uscita(banco, bonus_sicuro, mon
     assert not evento.scattato
 
 
+def righe_della_situazione(messaggio):
+    """Le due righe della situazione di D33 che il resoconto deve avere, dai numeri dei suoi dati; senza
+    la classifica, come nelle prove della partita, la seconda dice soltanto il tempo."""
+    dati = messaggio.dati
+    return [resoconti.riga_del_livello(dati["livello"], dati["tiri_del_livello"], dati["riserva"], dati["centri_del_livello"]),
+            resoconti.riga_del_tempo_e_del_posto(dati["durata_s"], dati["totale"], None)]
+
+
 def tiro_lungo(banco, partita):
     """Un tiro a vuoto vicino, coi valori del tiro giusto sul primo bersaglio normale, un poco più a
     destra e molto più potente: passa a destra, ricade oltre, e ha tutte le misure dell'artigliere
@@ -1544,6 +1557,8 @@ def test_il_sommario_in_testa_al_resoconto_ai_tre_gradi(banco, monkeypatch):
         volo = partita.ultimo_volo
         righe = messaggi[0].testo.split("\n")
         esito = f"Tiro {partita.tiri}, livello {livello}: a vuoto; nella riserva restano {partita.riserva} colpi."
+        situazione = righe_della_situazione(messaggi[0])
+        assert situazione[0].endswith(f"; presi 0 bersagli, ne mancano {CENTRI_PER_LIVELLO} al livello {livello + 1}.")
         sommario = resoconti.riga_del_sommario(volo, grado)
         pezzi = resoconti.sommario_del_tiro(volo, grado)
         assert resoconti.grado_della_palestra(livello) == grado
@@ -1555,7 +1570,9 @@ def test_il_sommario_in_testa_al_resoconto_ai_tre_gradi(banco, monkeypatch):
         if grado == "niente":
             # Dove il sommario tace, la precisione globale di D26 sta nella riga dell'esito e nell'annuncio.
             assert sommario == "" and pezzi is None
-            assert righe[0] == f"Tiro {partita.tiri}, livello {livello}: a vuoto, precisione globale {globale}; nella riserva restano {partita.riserva} colpi."
+            # D33: dove il sommario tace la situazione apre il resoconto.
+            assert righe[:2] == situazione
+            assert righe[2] == f"Tiro {partita.tiri}, livello {livello}: a vuoto, precisione globale {globale}; nella riserva restano {partita.riserva} colpi."
             assert messaggi[0].annuncio == resoconti.resoconto_del_tiro(partita.tiri, livello, volo, partita.valori, riserva=partita.riserva, palestra="niente").annuncio
             assert messaggi[0].annuncio.endswith(f" Precisione globale {globale}.")
             continue
@@ -1563,15 +1580,56 @@ def test_il_sommario_in_testa_al_resoconto_ai_tre_gradi(banco, monkeypatch):
         assert messaggi[0].annuncio.startswith(f"A vuoto, riserva {partita.riserva}") and messaggi[0].annuncio.endswith(f". {pezzi.annuncio}")
         if grado == "numeri":
             # Una riga sola, coi valori e G nel primo blocco, senza spazio dopo i due punti (0.11.8).
-            assert righe[:2] == [sommario, esito] and not pezzi.a_capo
+            assert righe[:4] == [sommario, *situazione, esito] and not pezzi.a_capo
             assert pezzi.primo.startswith("L:+") and " P:+" in pezzi.primo and pezzi.primo.endswith(f" G:{globale}") and pezzi.annuncio == pezzi.primo
             assert len(pezzi.primo) < BLOCCO_DEL_BRAILLE and sommario[BLOCCO_DEL_BRAILLE:].startswith("L laterale, ")
             assert messaggi[0].annuncio == f"A vuoto, riserva {partita.riserva}. {pezzi.annuncio}"
         else:
             # Le parole su una riga, la precisione globale e la legenda sempre sotto, su una riga loro (0.11.8).
             parole = ", ".join(resoconti.parole_delle_misure(volo.misure))
-            assert pezzi.a_capo and righe[:3] == [pezzi.primo, pezzi.secondo, esito]
+            assert pezzi.a_capo and righe[:5] == [pezzi.primo, pezzi.secondo, *situazione, esito]
             assert pezzi.primo == f"{parole[0].upper()}{parole[1:]}." and pezzi.secondo.startswith(f"Precisione globale {globale}. Dal bersaglio: ")
+
+
+def test_la_situazione_dopo_ogni_tiro(banco, monkeypatch):
+    """D33: dopo ogni tiro il resoconto dice la situazione, dopo il sommario: i colpi sparati nel livello, che ripartono da zero
+    col livello nuovo, la riserva, i centri del livello, il tempo vero di gioco e, con la classifica che la finestra mette nella
+    partita, il posto e il distacco, anche nell'annuncio. La prova chiude il livello a mano, coi centri a uno dalla fine."""
+    monkeypatch.setattr(modulo_partita, "PROBABILITA_BONUS", 0.0)
+    orologio = Orologio(0.0)
+    partita = banco.partita(orologio=orologio)
+    voci = [{"nome": "Gabry", "punteggio": 1_000_000}, {"nome": "Bea", "punteggio": 5}]
+    letture = []
+
+    def classifica():
+        letture.append(len(voci))
+        return voci
+
+    partita.classifica = classifica
+    partita.nuova()
+    orologio.valore = 205.0
+    resoconto = tiro_a_vuoto(banco, partita)[0]
+    righe = resoconto.testo.split("\n")
+    assert righe[1:3] == [f"Sparato 1 colpo nel livello, {COLPI_INIZIALI - 1} in riserva; presi 0 bersagli, ne mancano {CENTRI_PER_LIVELLO} al livello 2.",
+                          "Tempo 03:25; fuori classifica, dietro Bea, 5 punti, distacco 5."]
+    assert righe[3].startswith("Tiro 1, livello 1: a vuoto") and resoconto.annuncio.startswith(f"A vuoto, riserva {COLPI_INIZIALI - 1}. Fuori classifica, a 5. L:")
+    assert letture == [2] and partita.tiri_del_livello == 1
+    fuori_dall_attesa(banco, partita)
+    partita.centri_del_livello = CENTRI_PER_LIVELLO - 1
+    colpisci(banco, partita)
+    messaggi = fino_alla_risoluzione(banco, partita)
+    resoconto = messaggi[0]
+    punti = partita.punti
+    righe = resoconto.testo.split("\n")
+    assert [m.tipo for m in messaggi][:2] == ["resoconto", "livello"] and partita.livello == 2
+    assert righe[1:3] == [f"Sparati 2 colpi nel livello, {COLPI_INIZIALI - 1} in riserva; presi {CENTRI_PER_LIVELLO} bersagli, livello superato.",
+                          f"Tempo 03:25; in classifica 2°, dietro Gabry, 1.000.000 punti, distacco {testi.intero(1_000_000 - punti)}."]
+    assert resoconto.annuncio.startswith(f"Colpito, {testi.intero(punti)} punti. 2°, a {testi.intero(1_000_000 - punti)}. L:")
+    assert resoconto.dati["posizione"] == 2 and resoconto.dati["tiri_del_livello"] == 2
+    # Il livello nuovo riparte da zero, e così la partita nuova.
+    assert partita.tiri_del_livello == 0 and partita.centri_del_livello == 0 and partita.tiri == 2
+    partita.nuova()
+    assert partita.tiri_del_livello == 0
 
 
 def test_il_sommario_del_bonus_segue_il_livello_del_tiro(banco, bonus_sicuro, monkeypatch):
@@ -1603,11 +1661,13 @@ def test_il_sommario_del_bonus_segue_il_livello_del_tiro(banco, bonus_sicuro, mo
         # Il sommario a parole ha due righe, quello coi numeri una (0.11.8).
         quante = sommario.riga.count("\n") + 1
         assert quante == (2 if grado == "parole" else 1)
-        assert "\n".join(righe[:quante]) == sommario.riga and righe[quante].startswith(esito)
+        assert "\n".join(righe[:quante]) == sommario.riga and righe[quante:quante + 2] == righe_della_situazione(messaggi[0])
+        assert righe[quante + 2].startswith(esito)
         assert messaggi[0].annuncio.startswith("Colpito il bonus, ") and messaggi[0].annuncio.endswith(f" punti. {sommario.annuncio}")
         assert sommario.riga != resoconti.riga_del_sommario(volo, nato)
     else:
-        assert righe[0].startswith(esito) and messaggi[0].annuncio.startswith("Colpito il bonus, ") and " L:" not in messaggi[0].annuncio
+        assert righe[:2] == righe_della_situazione(messaggi[0])
+        assert righe[2].startswith(esito) and messaggi[0].annuncio.startswith("Colpito il bonus, ") and " L:" not in messaggi[0].annuncio
 
 
 def test_pausa_e_ripresa_nell_ascolto(banco):

@@ -253,7 +253,9 @@ class Partita:
     Gli attributi pubblici sono quelli del contratto: fase, in_pausa, livello, punti, riserva,
     centri_del_livello, tiri, centri, bersagli (il bonus compreso), valori, i tre valori dell'ultimo
     tiro, e ultimo_volo; e in più serie, bonus, il bersaglio bonus in volo o None, e mira, la
-    mira.Mira in corso o None.
+    mira.Mira in corso o None. Da D33 tiri_del_livello conta i colpi sparati nel livello, e
+    classifica, se la finestra ce la mette, è la funzione che dà le voci della classifica, per il
+    posto nella situazione del resoconto di ogni tiro.
     Oltre ai metodi del contratto ci sono pausa_automatica, la pausa silenziosa che mette e toglie la
     finestra (D14), e dopo_gli_avvisi, che dice alla finestra da quale campione far partire l'esito
     della classifica, in fila dopo il suono della fine.
@@ -288,9 +290,13 @@ class Partita:
         self.punti = 0
         self.riserva = 0
         self.centri_del_livello = 0
+        self.tiri_del_livello = 0
         self.tiri = 0
         self.centri = 0
         self.serie = 0
+        # Chi dà le voci della classifica, ordinate, per il posto nella situazione del resoconto (D33):
+        # una funzione senza argomenti, che la finestra mette qui; None, come nelle prove, tace il posto.
+        self.classifica = None
         self.bersagli = []
         self.valori = []
         self.ultimo_volo = None
@@ -416,7 +422,7 @@ class Partita:
         self.proiettile = self.proiettile_scelto
         self.livello = 1
         self.riserva = COLPI_INIZIALI
-        self.punti = self.tiri = self.centri = self.serie = self.centri_del_livello = 0
+        self.punti = self.tiri = self.centri = self.serie = self.centri_del_livello = self.tiri_del_livello = 0
         self.valori = []
         self.ultimo_volo = None
         self.mira = None
@@ -1236,6 +1242,7 @@ class Partita:
         self._voce_proiettile = proiettile
         self.ultimo_volo = volo
         self.tiri += 1
+        self.tiri_del_livello += 1
         self.fase = "volo"
         return []
 
@@ -1302,8 +1309,11 @@ class Partita:
             self._serie_detta = False
         # Il livello del tiro decide anche il grado del sommario (D21), bonus compreso: conta il livello
         # in cui si spara, non quello in cui il bonus è nato; le misure le porta il volo.
+        # La situazione di D33 si fotografa adesso, prima che il livello nuovo azzeri i suoi conti.
+        situazione = resoconti.Situazione(self.tiri_del_livello, self.centri_del_livello, self._durata_adesso(),
+                                          self.classifica() if self.classifica is not None else None)
         messaggi = [resoconti.resoconto_del_tiro(self.tiri, livello_del_tiro, volo, self.valori, punti=punti, totale=self.punti, riserva=self.riserva,
-                                                 colpi_bonus=colpi_bonus)]
+                                                 colpi_bonus=colpi_bonus, situazione=situazione)]
         battuti = self._statistiche_del_tiro(volo, punti)
         # Il bonus uscito durante il volo si dice e si conta prima che il livello nuovo o la fine
         # svuotino il cielo: la sua uscita si è già sentita, e senza il messaggio sparirebbe dai conti.
@@ -1397,7 +1407,7 @@ class Partita:
         i bersagli, il bonus compreso, lasciano il posto a quelli del livello nuovo, che nascono subito,
         o con subito falso, nella palestra delle attese (D22), allo spazio che chiude l'attesa."""
         self.livello += 1
-        self.centri_del_livello = 0
+        self.centri_del_livello = self.tiri_del_livello = 0
         self.riserva += COLPI_PER_LIVELLO
         self._conta("livelli_superati")
         self._conta("colpi_guadagnati", COLPI_PER_LIVELLO)
@@ -1425,6 +1435,7 @@ class Partita:
             # Il tiro in volo non si è risolto, e le statistiche contano i tiri alla risoluzione: esce
             # anche dal riepilogo, così la partita e le statistiche dicono lo stesso numero di tiri.
             self.tiri = max(0, self.tiri - 1)
+            self.tiri_del_livello = max(0, self.tiri_del_livello - 1)
         self._ferma_voci()
         self._durata = self._durata_adesso()
         self._azzera_la_pausa()

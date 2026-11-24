@@ -28,11 +28,16 @@ Nella palestra delle attese di D22 i messaggi di un tiro finiscono con la riga c
 lo spazio, e la barra di stato lo ripete; fuori dalla palestra Ctrl+P ha il suo messaggio di rifiuto.
 La mira annullata con Esc ha il suo messaggio (D25), e da D29 la barra di stato della mira manuale dice i
 tre valori, in gradi e in percentuale, e i secondi che restano alla mira a tempo.
+Da D33, dopo il sommario e prima della riga dell'esito, la situazione: una riga per il livello, coi colpi
+sparati nel livello, la riserva, i bersagli presi e quelli che mancano al livello seguente, e una per il
+tempo di gioco e il posto in classifica, col distacco da chi sta davanti, o dal primo il vantaggio sul
+secondo; l'annuncio aggiunge il posto dopo l'esito.
 """
 
 import math
 from dataclasses import dataclass, field
 
+import classifica
 import testi
 from bersagli import durata_del_bonus, quanti_bersagli, raggio_del_livello, velocita_del_livello
 from costanti import (
@@ -574,7 +579,113 @@ def riga_del_mancato(volo):
                                                                                                                               scarti=testi.elenco(parti))
 
 
-def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva=0, colpi_bonus=None, aiuto=None, palestra=None):
+# La situazione dopo un tiro (D33).
+
+@dataclass
+class Situazione:
+    """La situazione della partita dopo un tiro, per il resoconto (D33): tiri_del_livello sono i colpi
+    sparati nel livello del tiro, questo compreso, e centri_del_livello i bersagli presi nel livello,
+    anche lui compreso; durata_s i secondi veri di gioco fino a qui, senza le pause, come la durata
+    della classifica; voci le voci della classifica, ordinate per punteggio come le dà classifica.carica,
+    o None se non si conoscono, e allora la situazione tace il posto."""
+
+    tiri_del_livello: int
+    centri_del_livello: int
+    durata_s: float
+    voci: list | None = None
+
+
+def riga_del_livello(livello, tiri_del_livello, riserva, centri_del_livello):
+    """La prima riga della situazione (D33): i colpi sparati nel livello, la riserva, i bersagli presi nel
+    livello e quanti ne mancano al livello seguente, come «Sparati 4 colpi nel livello, 8 in riserva;
+    presi 2 bersagli, ne mancano 8 al livello 4.». Dopo il centro che chiude il livello, al posto di
+    quelli che mancano, «livello superato»; il livello nuovo e i suoi colpi li dice il messaggio che segue."""
+    # Traduttori: nella situazione dopo un tiro (D33), i colpi sparati nel livello; n è un numero.
+    sparati = ngettext("Sparato {n} colpo nel livello", "Sparati {n} colpi nel livello", tiri_del_livello).format(n=testi.intero(tiri_del_livello))
+    if riserva > 0:
+        # Traduttori: nella situazione dopo un tiro (D33), i colpi rimasti; n è un numero.
+        nella_riserva = _("{n} in riserva").format(n=testi.intero(riserva))
+    else:
+        # Traduttori: nella situazione dopo un tiro (D33), al posto dei colpi rimasti quando non ne resta nessuno.
+        nella_riserva = _("riserva vuota")
+    # Traduttori: nella situazione dopo un tiro (D33), i bersagli colpiti nel livello; n è un numero.
+    presi = ngettext("preso {n} bersaglio", "presi {n} bersagli", centri_del_livello).format(n=testi.intero(centri_del_livello))
+    mancano = max(0, CENTRI_PER_LIVELLO - centri_del_livello)
+    if mancano:
+        # Traduttori: nella situazione dopo un tiro (D33), i centri che mancano per passare al livello seguente; n è un numero, livello il numero del livello seguente.
+        resto = ngettext("ne manca {n} al livello {livello}", "ne mancano {n} al livello {livello}", mancano).format(n=testi.intero(mancano),
+                                                                                                                   livello=testi.intero(livello + 1))
+    else:
+        # Traduttori: nella situazione dopo il centro che chiude il livello (D33), al posto dei centri che mancano.
+        resto = _("livello superato")
+    # Traduttori: la prima riga della situazione dopo un tiro (D33), come «Sparati 4 colpi nel livello, 8 in riserva; presi 2 bersagli, ne mancano 8 al livello 4.».
+    return _("{sparati}, {riserva}; {presi}, {resto}.").format(sparati=sparati, riserva=nella_riserva, presi=presi, resto=resto)
+
+
+def _posto(n):
+    # Traduttori: un posto in classifica; n è un numero, come «4°».
+    return _("{n}°").format(n=testi.intero(n))
+
+
+def _dietro(voce, totale):
+    """Chi sta davanti, col nome, i punti e il distacco, e il distacco per l'annuncio: (testo, annuncio)."""
+    distacco = max(0, round(voce["punteggio"] - totale))
+    if distacco:
+        # Traduttori: nella situazione (D33), chi sta davanti in classifica; nome è il suo nome, punti come «1.570 punti», distacco un numero, i punti che mancano per raggiungerlo.
+        testo = _("dietro {nome}, {punti}, distacco {distacco}").format(nome=voce["nome"], punti=_punti(voce["punteggio"]), distacco=testi.intero(distacco))
+        # Traduttori: nell'annuncio del tiro (D33), il distacco da chi sta davanti in classifica; distacco è un numero di punti.
+        return testo, _("a {distacco}").format(distacco=testi.intero(distacco))
+    # Traduttori: nella situazione (D33), chi sta davanti in classifica con gli stessi punti, che restano davanti.
+    testo = _("dietro {nome}, {punti}, a pari punti").format(nome=voce["nome"], punti=_punti(voce["punteggio"]))
+    # Traduttori: nell'annuncio del tiro (D33), con gli stessi punti di chi sta davanti in classifica.
+    return testo, _("a pari punti")
+
+
+def posto_in_classifica(totale, voci):
+    """Il posto in classifica della partita in corso, con totale punti, fra le voci della classifica,
+    ordinate per punteggio (D33): (testo, annuncio). Il posto è quello di classifica.posizione, dietro chi
+    ha punti uguali o più alti. Il testo dice chi sta davanti, «in classifica 4°, dietro Gabry, 1.570
+    punti, distacco 340», o «a pari punti»; al primo posto chi segue, col vantaggio, «in classifica 1°,
+    davanti a Gabry, 1.230 punti, di 340»; fuori dalla classifica l'ultima voce, quella da superare per
+    entrare. L'annuncio è breve, e comincia una frase: «4°, a 340», «1°, più 340», «Fuori classifica, a 120»."""
+    dove = classifica.posizione(voci, totale)
+    if dove is not None and dove > 1:
+        testo, distacco = _dietro(voci[dove - 2], totale)
+        # Traduttori: nella situazione (D33), il posto in classifica, posto come «4°», e chi sta davanti, come «dietro Gabry, 1.570 punti, distacco 340».
+        return _("in classifica {posto}, {davanti}").format(posto=_posto(dove), davanti=testo), _("{posto}, {distacco}").format(posto=_posto(dove), distacco=distacco)
+    if dove == 1 and voci:
+        secondo = voci[0]
+        vantaggio = testi.intero(max(0, round(totale - secondo["punteggio"])))
+        # Traduttori: nella situazione (D33), il primo posto in classifica, posto è «1°», col vantaggio su chi segue: nome è il suo nome, punti come «1.230 punti», vantaggio un numero di punti.
+        testo = _("in classifica {posto}, davanti a {nome}, {punti}, di {vantaggio}").format(posto=_posto(dove), nome=secondo["nome"],
+                                                                                           punti=_punti(secondo["punteggio"]), vantaggio=vantaggio)
+        # Traduttori: nell'annuncio del tiro (D33), il primo posto in classifica, posto è «1°», col vantaggio su chi segue, un numero di punti.
+        return testo, _("{posto}, più {vantaggio}").format(posto=_posto(dove), vantaggio=vantaggio)
+    if dove == 1:
+        # Traduttori: nella situazione (D33), il primo posto di una classifica ancora vuota; posto è «1°».
+        return _("in classifica {posto}: per ora è vuota").format(posto=_posto(dove)), _posto(dove)
+    if voci:
+        testo, distacco = _dietro(voci[-1], totale)
+        # Traduttori: nella situazione (D33), la partita che per ora resta fuori dalla classifica, e l'ultima voce, come «dietro Gabry, 120 punti, distacco 80».
+        # Traduttori: nell'annuncio del tiro (D33), che comincia una frase: la partita fuori dalla classifica, col distacco dall'ultima voce, come «a 80».
+        return _("fuori classifica, {davanti}").format(davanti=testo), _("Fuori classifica, {distacco}").format(distacco=distacco)
+    # Traduttori: nella situazione (D33), la partita ancora senza punti con la classifica vuota; l'annuncio, che comincia una frase, ha la maiuscola.
+    return _("fuori classifica: per entrare serve almeno un punto"), _("Fuori classifica")
+
+
+def riga_del_tempo_e_del_posto(durata_s, totale, voci):
+    """La seconda riga della situazione (D33): il tempo di gioco, in cifre come la colonna Tempo della
+    classifica, e il posto in classifica di posto_in_classifica, come «Tempo 03:25; in classifica 4°,
+    dietro Gabry, 1.570 punti, distacco 340.»; con voci None soltanto il tempo."""
+    tempo = testi.durata_in_cifre(durata_s, vuoto="00:00")
+    if voci is None:
+        # Traduttori: la seconda riga della situazione dopo un tiro (D33), senza la classifica; tempo è il tempo di gioco, come «03:25».
+        return _("Tempo {tempo}.").format(tempo=tempo)
+    # Traduttori: la seconda riga della situazione dopo un tiro (D33); tempo è il tempo di gioco, come «03:25», posto come «in classifica 4°, dietro Gabry, 1.570 punti, distacco 340».
+    return _("Tempo {tempo}; {posto}.").format(tempo=tempo, posto=posto_in_classifica(totale, voci)[0])
+
+
+def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva=0, colpi_bonus=None, aiuto=None, palestra=None, situazione=None):
     """Il messaggio «resoconto» dopo un tiro: il sommario (D21), la riga dell'esito, la mira, la
     traiettoria, e dopo un centro dove stava il bersaglio, dopo un tiro a vuoto di quanto si è
     mancato il più vicino.
@@ -589,7 +700,11 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
     per la voce e il braille dice prima l'esito, poi i valori o le parole del sommario, senza la legenda,
     per scelta di Gabriele, con la precisione globale; col sommario coi numeri l'esito non ripete lo scarto principale, che il
     sommario dice già. Senza sommario l'annuncio è l'esito e la precisione globale. Nei dati c'è anche
-    precisione_globale, None senza un bersaglio vivo vicino."""
+    precisione_globale, None senza un bersaglio vivo vicino.
+    situazione, una Situazione, aggiunge dopo il sommario, o in testa dove il sommario tace, le due righe
+    di D33, riga_del_livello e riga_del_tempo_e_del_posto, e con le voci della classifica il posto
+    nell'annuncio, subito dopo l'esito; nei dati porta tiri_del_livello, centri_del_livello, durata_s e
+    posizione."""
     if aiuto is None:
         aiuto = livello <= AIUTO_MANCATO_FINO_AL_LIVELLO
     if palestra is None:
@@ -601,6 +716,9 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
     sommario = sommario_del_tiro(volo, palestra)
     esito = _riga_dell_esito(numero, livello, volo, punti, totale, riserva, colpi_bonus, globale=globale if sommario is None else None)
     righe = [esito, riga_della_mira(volo.traiettoria, valori), riga_della_traiettoria(volo)]
+    if situazione is not None:
+        righe[0:0] = [riga_del_livello(livello, situazione.tiri_del_livello, riserva, situazione.centri_del_livello),
+                      riga_del_tempo_e_del_posto(situazione.durata_s, totale, situazione.voci)]
     if sommario is not None:
         righe.insert(0, sommario.riga)
     if colpito is not None:
@@ -625,6 +743,9 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
         else:
             # Traduttori: l'annuncio breve di un tiro a vuoto; riserva è un numero.
             annuncio = _("A vuoto, riserva {riserva}.").format(riserva=testi.intero(riserva))
+    if situazione is not None and situazione.voci is not None:
+        # Traduttori: l'annuncio di un tiro col posto in classifica (D33): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi il posto, come «4°, a 340».
+        annuncio = _("{annuncio} {posto}.").format(annuncio=annuncio, posto=posto_in_classifica(totale, situazione.voci)[1])
     if sommario is not None:
         # Traduttori: l'annuncio di un tiro col sommario (D21, D24): prima l'esito, annuncio, come «A vuoto, riserva 8.», poi il primo blocco del sommario, come «L:+1,9 V:+15,8 P:+24,7 I:-18,5 G:61,2%».
         annuncio = _("{annuncio} {sommario}").format(annuncio=annuncio, sommario=sommario.annuncio)
@@ -633,6 +754,9 @@ def resoconto_del_tiro(numero, livello, volo, valori, punti=0, totale=0, riserva
         annuncio = _("{annuncio} {globale}").format(annuncio=annuncio, globale=frase_della_globale(globale))
     dati = {"tiro": numero, "livello": livello, "colpito": colpito is not None, "bonus": bool(colpito is not None and colpito.bonus), "punti": punti,
             "totale": totale, "riserva": riserva, "precisione": volo.precisione, "precisione_globale": globale}
+    if situazione is not None:
+        dati.update(tiri_del_livello=situazione.tiri_del_livello, centri_del_livello=situazione.centri_del_livello, durata_s=situazione.durata_s,
+                    posizione=classifica.posizione(situazione.voci, totale) if situazione.voci is not None else None)
     return Messaggio("resoconto", "\n".join(righe), annuncio, dati)
 
 

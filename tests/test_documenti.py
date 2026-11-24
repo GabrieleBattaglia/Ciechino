@@ -306,6 +306,10 @@ def _volo_d_esempio_del_sommario():
                 misure=misure)
 
 
+# La classifica d'esempio del manuale per la situazione di D33: coi punti 1230 si è quarti, dietro Gabry di 340.
+VOCI_D_ESEMPIO = [{"nome": "Bruno", "punteggio": 2400}, {"nome": "Carla", "punteggio": 1800}, {"nome": "Gabry", "punteggio": 1570}]
+
+
 class _ComandiFinti:
     """Al posto della finestra, per leggere la tabella dei menu e i tasti della guida senza aprirla: ogni comando vale None."""
 
@@ -538,7 +542,9 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
     globale = testi.percento(1.0 - volo.distanza_dal_centro / fisica.distanza_dal_punto_piu_lontano(volo.centro_nel_passaggio), 1)
     assert sommario.primo.endswith(f" G:{globale}") and len(sommario.primo) < BLOCCO_DEL_BRAILLE
     legenda = sommario.secondo.rstrip(".")
-    annunci = [resoconti.resoconto_del_tiro(2, livello, volo, [0.5, 0.5, 0.5], riserva=18).annuncio for livello in (1, 5, 8)]
+    # D33: gli annunci d'esempio hanno il posto in classifica, con la classifica d'esempio del manuale.
+    situazione = resoconti.Situazione(4, 2, 205.0, VOCI_D_ESEMPIO)
+    annunci = [resoconti.resoconto_del_tiro(2, livello, volo, [0.5, 0.5, 0.5], totale=1230, riserva=18, situazione=situazione).annuncio for livello in (1, 5, 8)]
     frasi = [
         RITARDI_A_PAROLE[RITARDO_DEL_RESOCONTO],
         f"a blocchi di {BLOCCO_DEL_BRAILLE} caratteri",
@@ -547,6 +553,11 @@ def test_il_secondo_collaudo_nel_manuale_e_nel_changelog():
         f"al primo livello: {annunci[0]}. Al quinto: {annunci[1]} All'ottavo: {annunci[2]}",
         f"I:-45,8 G:{testi.percento(1.0 - 0.4 / fisica.distanza_dal_punto_piu_lontano(MEZZO), 1)}, un centro quasi pieno nel mezzo della cupola",
         resoconti.mira_annullata(COLPI_INIZIALI).testo,
+        f"per esempio: {resoconti.riga_del_livello(1, 4, 18, 2)} Col centro",
+        f"per esempio: {resoconti.riga_del_tempo_e_del_posto(205.0, 1230, VOCI_D_ESEMPIO)} A pari punti",
+        f"per esempio: {resoconti.posto_in_classifica(2730, VOCI_D_ESEMPIO)[0]}. Finché",
+        f"come {resoconti.posto_in_classifica(1230, VOCI_D_ESEMPIO)[1]}, o al primo posto il vantaggio su chi segue, come "
+        f"{resoconti.posto_in_classifica(2730, VOCI_D_ESEMPIO)[1]};",
         '<li><kbd>Esc</kbd>: durante la mira annulla il tiro',
         '<h3 id="precisione-globale">La precisione globale</h3>',
     ]

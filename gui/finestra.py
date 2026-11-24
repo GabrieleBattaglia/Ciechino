@@ -331,6 +331,9 @@ class FinestraPrincipale(wx.Frame):
         # Tutti i preset si sintetizzano adesso, così il primo sparo non aspetta la sintesi di un rumore.
         self.suoni.precarica()
         self.partita = (fabbrica_della_partita or _partita_vera)(self.motore, self.suoni, self.statistiche)
+        # Il posto in classifica nella situazione dopo ogni tiro (D33) si misura sulla classifica di
+        # adesso, quella in memoria, che la fine di ogni partita rilegge.
+        self.partita.classifica = lambda: self._voci_della_classifica
         # La forma del proiettile delle Impostazioni (D17), e la voce del suo esempio, quando suona.
         self._esempio_del_proiettile = None
         self._dai_il_proiettile(self.impostazioni["proiettile"])

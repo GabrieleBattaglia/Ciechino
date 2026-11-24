@@ -1028,6 +1028,17 @@ def test_la_voce_nuova_in_mezzo_alla_classifica(finestra, monkeypatch):
     assert colonna == 0 and riga.startswith("  2 Gabry   800 ") and riga.endswith(" nuova")
 
 
+def test_la_partita_misura_il_posto_sulla_classifica_della_finestra(finestra, monkeypatch):
+    """D33: la finestra dà alla partita la sua classifica in memoria, per il posto nella situazione dopo ogni tiro; dopo una voce
+    nuova la partita vede la classifica nuova."""
+    assert finestra.partita.classifica() is finestra._voci_della_classifica and finestra._voci_della_classifica == []
+    monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: (dialogo.conferma(), dialogo.GetReturnCode())[-1])
+    finestra.impostazioni["ultimo_nome"] = "Gabry"
+    finestra.partita.in_arrivo = [_fine(800)]
+    finestra._al_battito()
+    assert [(v["nome"], v["punteggio"]) for v in finestra.partita.classifica()] == [("Gabry", 800)]
+
+
 def test_fuori_classifica_e_nome_annullato(finestra, sentiti, monkeypatch):
     aperti = []
     monkeypatch.setattr(dialoghi.Nome, "ShowModal", lambda dialogo: aperti.append(dialogo) or wx.ID_CANCEL)

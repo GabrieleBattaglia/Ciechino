@@ -6,10 +6,10 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Ciechino 2.0.3\n"
+"Project-Id-Version: Ciechino 2.1.0\n"
 "Report-Msgid-Bugs-To: "
 "https://github.com/GabrieleBattaglia/Ciechino/issues\n"
-"POT-Creation-Date: 2026-11-22 14:55+0100\n"
+"POT-Creation-Date: 2026-11-24 23:45+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -176,8 +176,8 @@ msgid ""
 " destra o a sinistra, in alto o in basso, vicino o lontano."
 msgstr ""
 
-#: ascolti.py:357 classifica.py:472 gui/finestra.py:512 gui/finestra.py:1310
-#: resoconti.py:148 statistiche.py:567
+#: ascolti.py:357 classifica.py:472 gui/finestra.py:515 gui/finestra.py:1313
+#: resoconti.py:153 statistiche.py:567
 #, python-brace-format
 msgid "{n} punto"
 msgid_plural "{n} punti"
@@ -392,7 +392,7 @@ msgstr ""
 msgid "È l'ultimo passo: gli Ascolti si ritrovano quando vuoi, nel menu Aiuto."
 msgstr ""
 
-#: ascolti.py:502 resoconti.py:160 resoconti.py:171
+#: ascolti.py:502 resoconti.py:165 resoconti.py:176
 msgid "al centro"
 msgstr ""
 
@@ -606,14 +606,14 @@ msgid ""
 "{precisione}, {tempo}, nuova."
 msgstr ""
 
-#: classifica.py:473 resoconti.py:767 statistiche.py:771
+#: classifica.py:473 resoconti.py:891 statistiche.py:771
 #, python-brace-format
 msgid "{n} tiro"
 msgid_plural "{n} tiri"
 msgstr[0] ""
 msgstr[1] ""
 
-#: classifica.py:474 resoconti.py:766 statistiche.py:770
+#: classifica.py:474 resoconti.py:890 statistiche.py:770
 #, python-brace-format
 msgid "{n} centro"
 msgid_plural "{n} centri"
@@ -936,7 +936,7 @@ msgstr ""
 msgid "Poi spediscila tu: Ciechino non spedisce niente da solo. {iscriviti}"
 msgstr ""
 
-#: resoconti.py:128
+#: resoconti.py:133
 #, python-brace-format
 msgid "{n} metro al secondo"
 msgid_plural "{n} metri al secondo"
@@ -944,12 +944,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. Traduttori: una velocità con i decimali, come «27,5 metri al secondo».
-#: resoconti.py:130
+#: resoconti.py:135
 #, python-brace-format
 msgid "{n} metri al secondo"
 msgstr ""
 
-#: resoconti.py:138 resoconti.py:901 testi.py:153 testi.py:158
+#: resoconti.py:143 resoconti.py:1025 testi.py:153 testi.py:158
 #, python-brace-format
 msgid "{n} secondo"
 msgid_plural "{n} secondi"
@@ -957,12 +957,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. Traduttori: una durata breve con i decimali, come «2,8 secondi».
-#: resoconti.py:140
+#: resoconti.py:145
 #, python-brace-format
 msgid "{n} secondi"
 msgstr ""
 
-#: resoconti.py:144
+#: resoconti.py:149
 #, python-brace-format
 msgid "{n} colpo"
 msgid_plural "{n} colpi"
@@ -970,78 +970,78 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. Traduttori: misura è come «3,1 metri».
-#: resoconti.py:157
+#: resoconti.py:162
 #, python-brace-format
 msgid "{misura} a destra del centro"
 msgstr ""
 
-#: resoconti.py:159
+#: resoconti.py:164
 #, python-brace-format
 msgid "{misura} a sinistra del centro"
 msgstr ""
 
 #. Traduttori: angolo è come «12,4 gradi».
-#: resoconti.py:168
+#: resoconti.py:173
 #, python-brace-format
 msgid "{angolo} a destra"
 msgstr ""
 
-#: resoconti.py:170
+#: resoconti.py:175
 #, python-brace-format
 msgid "{angolo} a sinistra"
 msgstr ""
 
 #. Traduttori: da qui, le parti dello scarto di un tiro a vuoto, dette
 #. nell'ordine laterale, verticale, profondità; misura è come «0,8 metri».
-#: resoconti.py:184
+#: resoconti.py:189
 #, python-brace-format
 msgid "a destra di {misura}"
 msgstr ""
 
-#: resoconti.py:186
+#: resoconti.py:191
 #, python-brace-format
 msgid "a sinistra di {misura}"
 msgstr ""
 
-#: resoconti.py:188
+#: resoconti.py:193
 #, python-brace-format
 msgid "sopra di {misura}"
 msgstr ""
 
-#: resoconti.py:190
+#: resoconti.py:195
 #, python-brace-format
 msgid "sotto di {misura}"
 msgstr ""
 
-#: resoconti.py:192
+#: resoconti.py:197
 #, python-brace-format
 msgid "lungo di {misura}"
 msgstr ""
 
-#: resoconti.py:194
+#: resoconti.py:199
 #, python-brace-format
 msgid "corto di {misura}"
 msgstr ""
 
 #. Traduttori: da qui, il tipo di un bersaglio; forma è come «dente di sega»,
 #. raggio come «2,9 metri».
-#: resoconti.py:248
+#: resoconti.py:253
 #, python-brace-format
 msgid "forma {forma}, raggio {raggio}"
 msgstr ""
 
 #. Traduttori: velocita è come «2,3 metri al secondo».
-#: resoconti.py:251
+#: resoconti.py:256
 #, python-brace-format
 msgid "forma {forma}, raggio {raggio}, mobile a {velocita}"
 msgstr ""
 
-#: resoconti.py:252
+#: resoconti.py:257
 #, python-brace-format
 msgid "forma {forma}, raggio {raggio}, fermo"
 msgstr ""
 
-#: resoconti.py:262
+#: resoconti.py:267
 #, python-brace-format
 msgid "{n} bersaglio mobile"
 msgid_plural "{n} bersagli mobili"
@@ -1050,12 +1050,12 @@ msgstr[1] ""
 
 #. Traduttori: bersagli è come «2 bersagli mobili», velocita come «4,5 metri al
 #. secondo», raggio come «1,9 metri».
-#: resoconti.py:264
+#: resoconti.py:269
 #, python-brace-format
 msgid "{bersagli} a {velocita}, raggio {raggio}"
 msgstr ""
 
-#: resoconti.py:265
+#: resoconti.py:270
 #, python-brace-format
 msgid "{n} bersaglio fermo"
 msgid_plural "{n} bersagli fermi"
@@ -1063,7 +1063,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. Traduttori: bersagli è come «1 bersaglio fermo», raggio come «5 metri».
-#: resoconti.py:267
+#: resoconti.py:272
 #, python-brace-format
 msgid "{bersagli}, raggio {raggio}"
 msgstr ""
@@ -1071,83 +1071,83 @@ msgstr ""
 #. Traduttori: da qui, le dodici parole del sommario di un tiro (D21), che
 #. dicono dove il proiettile è passato rispetto al centro del bersaglio, e come
 #. andava in quel punto. Di lato: passato a destra del bersaglio.
-#: resoconti.py:307
+#: resoconti.py:312
 msgid "a destra"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, di lato: passato a sinistra del bersaglio.
-#: resoconti.py:309
+#: resoconti.py:314
 msgid "a sinistra"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, di lato: né a destra né a sinistra del
 #. bersaglio.
-#: resoconti.py:311
+#: resoconti.py:316
 msgid "in linea"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in altezza: passato più in alto del centro
 #. del bersaglio.
-#: resoconti.py:314
+#: resoconti.py:319
 msgid "sopra"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in altezza: passato più in basso del centro
 #. del bersaglio.
-#: resoconti.py:316
+#: resoconti.py:321
 msgid "sotto"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in altezza: né sopra né sotto il bersaglio.
-#: resoconti.py:318
+#: resoconti.py:323
 msgid "all'altezza giusta"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato
 #. oltre il bersaglio visto dal cannone, non la preposizione.
-#: resoconti.py:321
+#: resoconti.py:326
 msgid "lungo"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in profondità: aggettivo del tiro, passato
 #. prima del bersaglio visto dal cannone.
-#: resoconti.py:323
+#: resoconti.py:328
 msgid "corto"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, in profondità: né lungo né corto.
-#: resoconti.py:325
+#: resoconti.py:330
 msgid "alla distanza giusta"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile
 #. saliva.
-#: resoconti.py:328
+#: resoconti.py:333
 msgid "in salita"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile
 #. scendeva.
-#: resoconti.py:330
+#: resoconti.py:335
 msgid "in discesa"
 msgstr ""
 
 #. Traduttori: sommario di un tiro, l'inclinazione: in quel punto il proiettile
 #. era nel tratto quasi piano vicino alla cima della sua curva.
-#: resoconti.py:332
+#: resoconti.py:337
 msgid "in cima"
 msgstr ""
 
 #. Traduttori: la precisione globale di un tiro (D26), quanto il proiettile si
 #. è avvicinato al bersaglio in tutta la cupola; percentuale è come «61,2%».
-#: resoconti.py:358
+#: resoconti.py:363
 #, python-brace-format
 msgid "Precisione globale {percentuale}."
 msgstr ""
 
 #. Traduttori: al posto del numero di una misura che manca, nel sommario coi
 #. numeri: «L:manca»; la legenda dice perché.
-#: resoconti.py:369
+#: resoconti.py:374
 msgid "manca"
 msgstr ""
 
@@ -1155,26 +1155,26 @@ msgstr ""
 #. sua iniziale e i due punti, senza spazio, perché stiano nel primo blocco del
 #. display braille; valore è come «+1,9», «-18,5», «0,0» o «manca». L, il
 #. laterale, in metri, positivo a destra del bersaglio.
-#: resoconti.py:374
+#: resoconti.py:379
 #, python-brace-format
 msgid "L:{valore}"
 msgstr ""
 
 #. Traduttori: V, il verticale, in metri, positivo sopra il bersaglio.
-#: resoconti.py:376
+#: resoconti.py:381
 #, python-brace-format
 msgid "V:{valore}"
 msgstr ""
 
 #. Traduttori: P, la profondità, in metri, positiva se il tiro è lungo, oltre
 #. il bersaglio visto dal cannone.
-#: resoconti.py:378
+#: resoconti.py:383
 #, python-brace-format
 msgid "P:{valore}"
 msgstr ""
 
 #. Traduttori: I, l'inclinazione del proiettile, in gradi, positiva in salita.
-#: resoconti.py:380
+#: resoconti.py:385
 #, python-brace-format
 msgid "I:{valore}"
 msgstr ""
@@ -1182,41 +1182,41 @@ msgstr ""
 #. Traduttori: la legenda del sommario coi numeri (D24), dal 41° carattere
 #. della riga: le iniziali dei valori del primo blocco, con le loro unità; le
 #. misure sono viste dal bersaglio.
-#: resoconti.py:388
+#: resoconti.py:393
 msgid ""
 "L laterale, V verticale, P profondità, in metri; I inclinazione, in "
 "gradi; dal bersaglio"
 msgstr ""
 
 #. Traduttori: la voce della legenda per G, la precisione globale (D26).
-#: resoconti.py:392
+#: resoconti.py:397
 msgid "G precisione globale"
 msgstr ""
 
 #. Traduttori: la voce della legenda per il tiro che cade a terra prima di
 #. arrivare alla distanza del bersaglio dal cannone, e così non ha laterale,
 #. verticale né inclinazione.
-#: resoconti.py:395
+#: resoconti.py:400
 msgid "L, V e I mancano: il tiro cade prima della distanza del bersaglio"
 msgstr ""
 
 #. Traduttori: la voce della legenda per il tiro che, scendendo, non ripassa
 #. mai all'altezza del centro del bersaglio, e così non ha la profondità.
-#: resoconti.py:398
+#: resoconti.py:403
 msgid "P manca: scendendo, il tiro resta sempre sotto il centro del bersaglio"
 msgstr ""
 
 #. Traduttori: la precisione globale nel sommario coi numeri (D26), con la sua
 #. iniziale G e i due punti, senza spazio come gli altri valori; percentuale è
 #. come «61,2%».
-#: resoconti.py:412
+#: resoconti.py:417
 #, python-brace-format
 msgid "G:{percentuale}"
 msgstr ""
 
 #. Traduttori: il sommario a parole di un tiro nei livelli di mezzo (D21), come
 #. «a destra, sopra, lungo, in discesa.»; la maiuscola la mette il programma.
-#: resoconti.py:425
+#: resoconti.py:430
 #, python-brace-format
 msgid "{laterale}, {verticale}, {profondita}, {inclinazione}."
 msgstr ""
@@ -1224,7 +1224,7 @@ msgstr ""
 #. Traduttori: il sommario a parole di un tiro che, scendendo, resta sempre
 #. sotto il centro del bersaglio, come «a destra, sotto, profondità non
 #. misurabile, in salita.».
-#: resoconti.py:429
+#: resoconti.py:434
 #, python-brace-format
 msgid "{laterale}, {verticale}, profondità non misurabile, {inclinazione}."
 msgstr ""
@@ -1232,7 +1232,7 @@ msgstr ""
 #. Traduttori: il sommario a parole di un tiro che cade a terra prima di
 #. arrivare alla distanza del bersaglio dal cannone, come «cade prima della sua
 #. distanza, corto.».
-#: resoconti.py:432
+#: resoconti.py:437
 #, python-brace-format
 msgid "cade prima della sua distanza, {profondita}."
 msgstr ""
@@ -1240,20 +1240,20 @@ msgstr ""
 #. Traduttori: il sommario a parole di un tiro che cade prima di arrivare alla
 #. distanza del bersaglio dal cannone e, scendendo, resta sempre sotto il suo
 #. centro: non ha nessuna misura.
-#: resoconti.py:435
+#: resoconti.py:440
 msgid "cade prima della sua distanza, profondità non misurabile."
 msgstr ""
 
 #. Traduttori: la seconda riga del sommario a parole (D24), sotto le parole: il
 #. punto di vista e l'ordine delle quattro parole della riga sopra.
-#: resoconti.py:446
+#: resoconti.py:451
 msgid "Dal bersaglio: lato, altezza, profondità, inclinazione."
 msgstr ""
 
 #. Traduttori: il resoconto di un centro sul bonus dove il sommario tace, con
 #. la precisione globale (D26), globale come «99,4%»; il resto come nel
 #. resoconto senza.
-#: resoconti.py:500
+#: resoconti.py:505
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: colpito il bonus, {bersaglio}; {punti}, "
@@ -1264,7 +1264,7 @@ msgstr ""
 #. Traduttori: il resoconto di un centro sul bonus; bersaglio è come «forma
 #. seno, raggio 2,9 metri», punti e totale come «1.150 punti», precisione come
 #. «64%», colpi come «5 colpi».
-#: resoconti.py:504
+#: resoconti.py:509
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: colpito il bonus, {bersaglio}; {punti}, "
@@ -1274,7 +1274,7 @@ msgstr ""
 #. Traduttori: il resoconto di un centro dove il sommario tace, con la
 #. precisione globale (D26), globale come «99,4%»; il resto come nel resoconto
 #. senza.
-#: resoconti.py:508
+#: resoconti.py:513
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: colpito un bersaglio, {bersaglio}; "
@@ -1285,14 +1285,14 @@ msgstr ""
 #. Traduttori: il resoconto di un centro; bersaglio è come «forma dente di
 #. sega, raggio 3,6 metri, fermo», punti e totale come «230 punti», precisione
 #. come «64%».
-#: resoconti.py:512
+#: resoconti.py:517
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: colpito un bersaglio, {bersaglio}; "
 "{punti}, precisione {precisione}, totale {totale}."
 msgstr ""
 
-#: resoconti.py:515
+#: resoconti.py:520
 #, python-brace-format
 msgid "resta {n} colpo"
 msgid_plural "restano {n} colpi"
@@ -1302,7 +1302,7 @@ msgstr[1] ""
 #. Traduttori: il resoconto di un tiro a vuoto dove il sommario tace, con la
 #. precisione globale (D26); globale è come «93,2%», restano come «restano 8
 #. colpi».
-#: resoconti.py:518
+#: resoconti.py:523
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: a vuoto, precisione globale {globale}; "
@@ -1311,21 +1311,21 @@ msgstr ""
 
 #. Traduttori: il resoconto di un tiro a vuoto; restano è come «restano 8
 #. colpi».
-#: resoconti.py:521
+#: resoconti.py:526
 #, python-brace-format
 msgid "Tiro {tiro}, livello {livello}: a vuoto; nella riserva {restano}."
 msgstr ""
 
 #. Traduttori: il resoconto dell'ultimo tiro a vuoto dove il sommario tace, con
 #. la precisione globale (D26), come «93,2%».
-#: resoconti.py:524
+#: resoconti.py:529
 #, python-brace-format
 msgid ""
 "Tiro {tiro}, livello {livello}: a vuoto, precisione globale {globale}; la"
 " riserva è vuota."
 msgstr ""
 
-#: resoconti.py:525
+#: resoconti.py:530
 #, python-brace-format
 msgid "Tiro {tiro}, livello {livello}: a vuoto; la riserva è vuota."
 msgstr ""
@@ -1333,7 +1333,7 @@ msgstr ""
 #. Traduttori: la mira di un tiro; direzione è come «12,4 gradi a destra» o «al
 #. centro», alzo come «38,2 gradi», potenza come «27,5 metri al secondo», e
 #. ognuno ha dopo la percentuale della sua scala, come «64%».
-#: resoconti.py:533
+#: resoconti.py:538
 #, python-brace-format
 msgid ""
 "Mira: direzione {direzione}, {quanto_direzione} della scala; alzo {alzo},"
@@ -1343,7 +1343,7 @@ msgstr ""
 #. Traduttori: la traiettoria di un centro; altezza e distanza sono come «23,4
 #. metri», lato come «3,1 metri a destra del centro» o «al centro», durata come
 #. «2,8 secondi».
-#: resoconti.py:544
+#: resoconti.py:549
 #, python-brace-format
 msgid ""
 "Traiettoria: altezza massima {altezza}; impatto a {distanza} dal cannone,"
@@ -1352,7 +1352,7 @@ msgstr ""
 
 #. Traduttori: la traiettoria di un tiro a vuoto, con le stesse parti di quella
 #. di un centro.
-#: resoconti.py:546
+#: resoconti.py:551
 #, python-brace-format
 msgid ""
 "Traiettoria: altezza massima {altezza}; a terra a {distanza} dal cannone,"
@@ -1361,7 +1361,7 @@ msgstr ""
 
 #. Traduttori: distanza e altezza sono come «48,3 metri», lato come «5,2 metri
 #. a sinistra del centro» o «al centro».
-#: resoconti.py:555
+#: resoconti.py:560
 #, python-brace-format
 msgid ""
 "Il bersaglio stava a {distanza} dal cannone, a {altezza} d'altezza, "
@@ -1369,54 +1369,224 @@ msgid ""
 msgstr ""
 
 #. Traduttori: distanza è come «2,3 metri».
-#: resoconti.py:571
+#: resoconti.py:576
 #, python-brace-format
 msgid "Il bersaglio più vicino è stato mancato di {distanza}."
 msgstr ""
 
 #. Traduttori: distanza è come «2,3 metri»; scarti è un elenco come «a sinistra
 #. di 0,8 metri, sopra di 1,7 metri e lungo di 1,2 metri».
-#: resoconti.py:573
+#: resoconti.py:578
 #, python-brace-format
 msgid ""
 "Il bersaglio più vicino è stato mancato di {distanza}: rispetto al suo "
 "centro il tiro è passato {scarti}."
 msgstr ""
 
+#. Traduttori: nella situazione dopo un tiro (D33), i colpi sparati nel
+#. livello; n è un numero.
+#: resoconti.py:604
+#, python-brace-format
+msgid "Sparato {n} colpo nel livello"
+msgid_plural "Sparati {n} colpi nel livello"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Traduttori: nella situazione dopo un tiro (D33), i colpi rimasti; n è un
+#. numero.
+#: resoconti.py:607
+#, python-brace-format
+msgid "{n} in riserva"
+msgstr ""
+
+#. Traduttori: nella situazione dopo un tiro (D33), al posto dei colpi rimasti
+#. quando non ne resta nessuno.
+#: resoconti.py:610
+msgid "riserva vuota"
+msgstr ""
+
+#. Traduttori: nella situazione dopo un tiro (D33), i bersagli colpiti nel
+#. livello; n è un numero.
+#: resoconti.py:612
+#, python-brace-format
+msgid "preso {n} bersaglio"
+msgid_plural "presi {n} bersagli"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Traduttori: nella situazione dopo un tiro (D33), i centri che mancano per
+#. passare al livello seguente; n è un numero, livello il numero del livello
+#. seguente.
+#: resoconti.py:616
+#, python-brace-format
+msgid "ne manca {n} al livello {livello}"
+msgid_plural "ne mancano {n} al livello {livello}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Traduttori: nella situazione dopo il centro che chiude il livello (D33), al
+#. posto dei centri che mancano.
+#: resoconti.py:620
+msgid "livello superato"
+msgstr ""
+
+#. Traduttori: la prima riga della situazione dopo un tiro (D33), come «Sparati
+#. 4 colpi nel livello, 8 in riserva; presi 2 bersagli, ne mancano 8 al livello
+#. 4.».
+#: resoconti.py:622
+#, python-brace-format
+msgid "{sparati}, {riserva}; {presi}, {resto}."
+msgstr ""
+
+#. Traduttori: un posto in classifica; n è un numero, come «4°».
+#: resoconti.py:627
+#, python-brace-format
+msgid "{n}°"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), chi sta davanti in classifica; nome è il
+#. suo nome, punti come «1.570 punti», distacco un numero, i punti che mancano
+#. per raggiungerlo.
+#: resoconti.py:635
+#, python-brace-format
+msgid "dietro {nome}, {punti}, distacco {distacco}"
+msgstr ""
+
+#. Traduttori: nell'annuncio del tiro (D33), il distacco da chi sta davanti in
+#. classifica; distacco è un numero di punti.
+#: resoconti.py:637
+#, python-brace-format
+msgid "a {distacco}"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), chi sta davanti in classifica con gli
+#. stessi punti, che restano davanti.
+#: resoconti.py:639
+#, python-brace-format
+msgid "dietro {nome}, {punti}, a pari punti"
+msgstr ""
+
+#. Traduttori: nell'annuncio del tiro (D33), con gli stessi punti di chi sta
+#. davanti in classifica.
+#: resoconti.py:641
+msgid "a pari punti"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), il posto in classifica, posto come «4°»,
+#. e chi sta davanti, come «dietro Gabry, 1.570 punti, distacco 340».
+#: resoconti.py:655
+#, python-brace-format
+msgid "in classifica {posto}, {davanti}"
+msgstr ""
+
+#: resoconti.py:655
+#, python-brace-format
+msgid "{posto}, {distacco}"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), il primo posto in classifica, posto è
+#. «1°», col vantaggio su chi segue: nome è il suo nome, punti come «1.230
+#. punti», vantaggio un numero di punti.
+#: resoconti.py:660
+#, python-brace-format
+msgid "in classifica {posto}, davanti a {nome}, {punti}, di {vantaggio}"
+msgstr ""
+
+#. Traduttori: nell'annuncio del tiro (D33), il primo posto in classifica,
+#. posto è «1°», col vantaggio su chi segue, un numero di punti.
+#: resoconti.py:663
+#, python-brace-format
+msgid "{posto}, più {vantaggio}"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), il primo posto di una classifica ancora
+#. vuota; posto è «1°».
+#: resoconti.py:666
+#, python-brace-format
+msgid "in classifica {posto}: per ora è vuota"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), la partita che per ora resta fuori dalla
+#. classifica, e l'ultima voce, come «dietro Gabry, 120 punti, distacco 80».
+#. Traduttori: nell'annuncio del tiro (D33), che comincia una frase: la partita
+#. fuori dalla classifica, col distacco dall'ultima voce, come «a 80».
+#: resoconti.py:671
+#, python-brace-format
+msgid "fuori classifica, {davanti}"
+msgstr ""
+
+#: resoconti.py:671
+#, python-brace-format
+msgid "Fuori classifica, {distacco}"
+msgstr ""
+
+#. Traduttori: nella situazione (D33), la partita ancora senza punti con la
+#. classifica vuota; l'annuncio, che comincia una frase, ha la maiuscola.
+#: resoconti.py:673
+msgid "fuori classifica: per entrare serve almeno un punto"
+msgstr ""
+
+#: resoconti.py:673
+msgid "Fuori classifica"
+msgstr ""
+
+#. Traduttori: la seconda riga della situazione dopo un tiro (D33), senza la
+#. classifica; tempo è il tempo di gioco, come «03:25».
+#: resoconti.py:683
+#, python-brace-format
+msgid "Tempo {tempo}."
+msgstr ""
+
+#. Traduttori: la seconda riga della situazione dopo un tiro (D33); tempo è il
+#. tempo di gioco, come «03:25», posto come «in classifica 4°, dietro Gabry,
+#. 1.570 punti, distacco 340».
+#: resoconti.py:685
+#, python-brace-format
+msgid "Tempo {tempo}; {posto}."
+msgstr ""
+
 #. Traduttori: l'annuncio breve di un centro sul bonus; punti è come «1.150
 #. punti».
-#: resoconti.py:610
+#: resoconti.py:728
 #, python-brace-format
 msgid "Colpito il bonus, {punti}."
 msgstr ""
 
 #. Traduttori: l'annuncio breve di un centro; punti è come «230 punti».
-#: resoconti.py:613
+#: resoconti.py:731
 #, python-brace-format
 msgid "Colpito, {punti}."
 msgstr ""
 
-#: resoconti.py:621
+#: resoconti.py:739
 msgid "A vuoto, riserva vuota."
 msgstr ""
 
 #. Traduttori: l'annuncio breve di un tiro a vuoto nei livelli bassi; riserva è
 #. un numero, scarto come «corto di 3,4 metri».
-#: resoconti.py:624
+#: resoconti.py:742
 #, python-brace-format
 msgid "A vuoto, riserva {riserva}, {scarto}."
 msgstr ""
 
 #. Traduttori: l'annuncio breve di un tiro a vuoto; riserva è un numero.
-#: resoconti.py:627
+#: resoconti.py:745
 #, python-brace-format
 msgid "A vuoto, riserva {riserva}."
+msgstr ""
+
+#. Traduttori: l'annuncio di un tiro col posto in classifica (D33): prima
+#. l'esito, annuncio, come «A vuoto, riserva 8.», poi il posto, come «4°, a
+#. 340».
+#: resoconti.py:748
+#, python-brace-format
+msgid "{annuncio} {posto}."
 msgstr ""
 
 #. Traduttori: l'annuncio di un tiro col sommario (D21, D24): prima l'esito,
 #. annuncio, come «A vuoto, riserva 8.», poi il primo blocco del sommario, come
 #. «L:+1,9 V:+15,8 P:+24,7 I:-18,5 G:61,2%».
-#: resoconti.py:630
+#: resoconti.py:751
 #, python-brace-format
 msgid "{annuncio} {sommario}"
 msgstr ""
@@ -1424,78 +1594,78 @@ msgstr ""
 #. Traduttori: l'annuncio di un tiro senza sommario (D26): prima l'esito,
 #. annuncio, come «A vuoto, riserva 8.», poi la precisione globale, come
 #. «Precisione globale 93,2%.».
-#: resoconti.py:633
+#: resoconti.py:754
 #, python-brace-format
 msgid "{annuncio} {globale}"
 msgstr ""
 
 #. Traduttori: colpi è come «10 colpi».
-#: resoconti.py:645
+#: resoconti.py:769
 #, python-brace-format
 msgid "Partita nuova, livello {livello}: nella riserva {colpi}."
 msgstr ""
 
 #. Traduttori: bersagli è come «1 bersaglio fermo, raggio 5 metri».
-#: resoconti.py:647 resoconti.py:662
+#: resoconti.py:771 resoconti.py:786
 #, python-brace-format
 msgid "In volo: {bersagli}."
 msgstr ""
 
-#: resoconti.py:648
+#: resoconti.py:772
 msgid ""
 "Ascolta i bersagli e premi Spazio per mirare: le frecce orizzontali "
 "muovono la direzione, quelle verticali l'alzo, Home e Fine la potenza, "
 "finché le tieni giù; Invio spara, Esc annulla."
 msgstr ""
 
-#: resoconti.py:651
+#: resoconti.py:775
 msgid "Partita nuova: Spazio per mirare."
 msgstr ""
 
 #. Traduttori: precedente è il numero del livello appena chiuso.
-#: resoconti.py:659
+#: resoconti.py:783
 #, python-brace-format
 msgid "Livello {livello}! Il livello {precedente} è superato."
 msgstr ""
 
 #. Traduttori: colpi è come «10 colpi», riserva è un numero.
-#: resoconti.py:661
+#: resoconti.py:785
 #, python-brace-format
 msgid "{colpi} in più nella riserva, che ora ne ha {riserva}."
 msgstr ""
 
 #. Traduttori: l'annuncio breve del livello nuovo; livello e riserva sono
 #. numeri.
-#: resoconti.py:665
+#: resoconti.py:789
 #, python-brace-format
 msgid "Livello {livello}, riserva {riserva}."
 msgstr ""
 
-#: resoconti.py:675
+#: resoconti.py:799
 msgid "da sinistra"
 msgstr ""
 
-#: resoconti.py:675
+#: resoconti.py:799
 msgid "da destra"
 msgstr ""
 
 #. Traduttori: da è «da sinistra» o «da destra», descrizione come «forma seno,
 #. raggio 2,9 metri».
-#: resoconti.py:678
+#: resoconti.py:802
 #, python-brace-format
 msgid "È apparso un bersaglio bonus, che entra {da}: {descrizione}."
 msgstr ""
 
 #. Traduttori: durata è come «14 secondi», volte come «5 volte», colpi come «5
 #. colpi».
-#: resoconti.py:680
+#: resoconti.py:804
 #, python-brace-format
 msgid ""
 "Attraversa lo spazio dei bersagli in {durata}, poi esce; colpito vale "
 "{volte} i punti di un bersaglio di questo livello e dà {colpi} in più."
 msgstr ""
 
-#: resoconti.py:681
+#: resoconti.py:805
 #, python-brace-format
 msgid "{n} volta"
 msgid_plural "{n} volte"
@@ -1504,93 +1674,93 @@ msgstr[1] ""
 
 #. Traduttori: l'annuncio breve del bonus apparso; da è «da sinistra» o «da
 #. destra».
-#: resoconti.py:684
+#: resoconti.py:808
 #, python-brace-format
 msgid "Bonus {da}."
 msgstr ""
 
-#: resoconti.py:689
+#: resoconti.py:813
 msgid "Il bersaglio bonus è uscito senza essere colpito."
 msgstr ""
 
-#: resoconti.py:689
+#: resoconti.py:813
 msgid "Bonus uscito."
 msgstr ""
 
-#: resoconti.py:694
+#: resoconti.py:818
 msgid "Nella riserva resta l'ultimo colpo: se va a vuoto, la partita finisce."
 msgstr ""
 
-#: resoconti.py:694
+#: resoconti.py:818
 msgid "Ultimo colpo."
 msgstr ""
 
 #. Traduttori: misura è come «0,05 metri».
-#: resoconti.py:701
+#: resoconti.py:825
 #, python-brace-format
 msgid "{misura} dal centro"
 msgstr ""
 
 #. Traduttori: da qui, i nomi dei primati, dopo «Nuovo primato: ».
-#: resoconti.py:708
+#: resoconti.py:832
 msgid "il punteggio più alto in una partita"
 msgstr ""
 
-#: resoconti.py:709
+#: resoconti.py:833
 msgid "il livello più alto raggiunto"
 msgstr ""
 
-#: resoconti.py:710
+#: resoconti.py:834
 msgid "la serie più lunga di centri consecutivi"
 msgstr ""
 
-#: resoconti.py:711
+#: resoconti.py:835
 msgid "il centro più preciso"
 msgstr ""
 
 #. Traduttori: i due primati della precisione globale (D26), quella di un tiro
 #. e la media di una partita.
-#: resoconti.py:713
+#: resoconti.py:837
 msgid "la precisione globale migliore in un tiro"
 msgstr ""
 
-#: resoconti.py:714
+#: resoconti.py:838
 msgid "la precisione globale media migliore in una partita"
 msgstr ""
 
-#: resoconti.py:715
+#: resoconti.py:839
 msgid "più punti in un tiro"
 msgstr ""
 
-#: resoconti.py:716
+#: resoconti.py:840
 msgid "più centri in una partita"
 msgstr ""
 
-#: resoconti.py:717
+#: resoconti.py:841
 msgid "la partita più lunga"
 msgstr ""
 
-#: resoconti.py:718
+#: resoconti.py:842
 msgid "il tiro passato più vicino al centro di un bersaglio"
 msgstr ""
 
-#: resoconti.py:719
+#: resoconti.py:843
 msgid "il tiro a vuoto passato più vicino al centro di un bersaglio"
 msgstr ""
 
 #. Traduttori: nome è come «il centro più preciso».
-#: resoconti.py:729
+#: resoconti.py:853
 #, python-brace-format
 msgid "Nuovo primato: {nome}."
 msgstr ""
 
 #. Traduttori: nome è come «il centro più preciso», valore come «98%».
-#: resoconti.py:731
+#: resoconti.py:855
 #, python-brace-format
 msgid "Nuovo primato: {nome}, {valore}."
 msgstr ""
 
-#: resoconti.py:756
+#: resoconti.py:880
 #, python-brace-format
 msgid "{n} nuovo primato."
 msgid_plural "{n} nuovi primati."
@@ -1599,91 +1769,91 @@ msgstr[1] ""
 
 #. Traduttori: centri è come «12 centri», tiri come «20 tiri», percentuale come
 #. «60%».
-#: resoconti.py:766
+#: resoconti.py:890
 #, python-brace-format
 msgid "{centri} su {tiri}, {percentuale}"
 msgstr ""
 
-#: resoconti.py:770
+#: resoconti.py:894
 msgid "nessun tiro"
 msgstr ""
 
 #. Traduttori: punti è come «1.230 punti», tiri come «12 centri su 20 tiri,
 #. 60%», durata come «4 minuti e 12 secondi».
-#: resoconti.py:772
+#: resoconti.py:896
 #, python-brace-format
 msgid "{punti}, livello {livello}, {tiri}, in {durata}"
 msgstr ""
 
-#: resoconti.py:779
+#: resoconti.py:903
 #, python-brace-format
 msgid "Partita finita: {sommario}."
 msgstr ""
 
 #. Traduttori: l'annuncio breve della fine; punti è come «1.230 punti».
-#: resoconti.py:781
+#: resoconti.py:905
 #, python-brace-format
 msgid "Partita finita, {punti}."
 msgstr ""
 
-#: resoconti.py:787
+#: resoconti.py:911
 #, python-brace-format
 msgid "Partita abbandonata: {sommario}."
 msgstr ""
 
-#: resoconti.py:788
+#: resoconti.py:912
 msgid "Partita abbandonata."
 msgstr ""
 
-#: resoconti.py:797
+#: resoconti.py:921
 msgid ""
 "Partita in pausa: la mira è sospesa, i valori restano dove sono e i "
 "bersagli tacciono. Alla ripresa i valori si muovono di nuovo coi loro "
 "tasti. Ctrl+P per riprendere."
 msgstr ""
 
-#: resoconti.py:798 resoconti.py:799
+#: resoconti.py:922 resoconti.py:923
 msgid "Pausa."
 msgstr ""
 
-#: resoconti.py:799
+#: resoconti.py:923
 msgid ""
 "Partita in pausa: il tempo è fermo e i bersagli tacciono. Ctrl+P per "
 "riprendere."
 msgstr ""
 
-#: resoconti.py:803
+#: resoconti.py:927
 msgid "La partita riprende."
 msgstr ""
 
-#: resoconti.py:803
+#: resoconti.py:927
 msgid "Si riprende."
 msgstr ""
 
-#: resoconti.py:807
+#: resoconti.py:931
 msgid "Nessuna partita in corso: Spazio per cominciare."
 msgstr ""
 
-#: resoconti.py:807
+#: resoconti.py:931
 msgid "Nessuna partita in corso."
 msgstr ""
 
 #. Traduttori: livello è un numero, l'ultimo livello della palestra, dove dopo
 #. ogni tiro la partita aspetta lo Spazio.
-#: resoconti.py:814
+#: resoconti.py:938
 #, python-brace-format
 msgid ""
 "La pausa con Ctrl+P c'è soltanto nei livelli della palestra, fino al "
 "livello {livello}."
 msgstr ""
 
-#: resoconti.py:815
+#: resoconti.py:939
 msgid "Pausa solo in palestra."
 msgstr ""
 
 #. Traduttori: Esc nella mira messa in pausa con Ctrl+P (D25); colpi è come «10
 #. colpi».
-#: resoconti.py:826
+#: resoconti.py:950
 #, python-brace-format
 msgid ""
 "Mira annullata con Esc: il proiettile resta nella riserva, che ha "
@@ -1692,102 +1862,102 @@ msgstr ""
 
 #. Traduttori: Esc nella mira (D25): il colpo non parte, e si torna ad
 #. ascoltare; colpi è come «10 colpi».
-#: resoconti.py:830
+#: resoconti.py:954
 #, python-brace-format
 msgid ""
 "Mira annullata con Esc: il proiettile resta nella riserva, che ha "
 "{colpi}. Spazio per mirare di nuovo."
 msgstr ""
 
-#: resoconti.py:831
+#: resoconti.py:955
 msgid "Mira annullata."
 msgstr ""
 
-#: resoconti.py:842
+#: resoconti.py:966
 msgid "Palestra: la partita aspetta lo Spazio, che chiama il bersaglio nuovo."
 msgstr ""
 
 #. Traduttori: n è un numero, almeno 2: i bersagli del livello nuovo, che
 #. nascono allo Spazio.
-#: resoconti.py:845
+#: resoconti.py:969
 #, python-brace-format
 msgid "Palestra: la partita aspetta lo Spazio, che chiama {n} bersaglio nuovo."
 msgid_plural "Palestra: la partita aspetta lo Spazio, che chiama {n} bersagli nuovi."
 msgstr[0] ""
 msgstr[1] ""
 
-#: resoconti.py:848
+#: resoconti.py:972
 msgid "Palestra: la partita aspetta lo Spazio, che ti riporta all'ascolto."
 msgstr ""
 
-#: resoconti.py:856
+#: resoconti.py:980
 msgid "Palestra: ascolta l'esito del tiro"
 msgstr ""
 
-#: resoconti.py:858
+#: resoconti.py:982
 msgid "Palestra: Spazio per il bersaglio nuovo"
 msgstr ""
 
 #. Traduttori: n è un numero, almeno 2; la riga sta nella barra di stato, e
 #. deve restare breve.
-#: resoconti.py:861
+#: resoconti.py:985
 #, python-brace-format
 msgid "Palestra: Spazio per {n} bersaglio nuovo"
 msgid_plural "Palestra: Spazio per {n} bersagli nuovi"
 msgstr[0] ""
 msgstr[1] ""
 
-#: resoconti.py:862
+#: resoconti.py:986
 msgid "Palestra: Spazio per tornare all'ascolto"
 msgstr ""
 
-#: resoconti.py:871
+#: resoconti.py:995
 msgid "Nessuna partita: Spazio per cominciare"
 msgstr ""
 
-#: resoconti.py:873
+#: resoconti.py:997
 msgid "Partita finita: Spazio per ricominciare"
 msgstr ""
 
-#: resoconti.py:875
+#: resoconti.py:999
 msgid "In pausa: Ctrl+P per riprendere"
 msgstr ""
 
-#: resoconti.py:879
+#: resoconti.py:1003
 msgid "Ascolto: Spazio per mirare"
 msgstr ""
 
-#: resoconti.py:881
+#: resoconti.py:1005
 msgid "Mira: Invio spara, Esc annulla"
 msgstr ""
 
-#: resoconti.py:882
+#: resoconti.py:1006
 msgid "Volo"
 msgstr ""
 
 #. Traduttori: la direzione della mira dritta davanti, nella barra di stato.
-#: resoconti.py:892
+#: resoconti.py:1016
 msgid "direzione davanti"
 msgstr ""
 
 #. Traduttori: gradi è come «12,5 gradi», sempre col decimale.
-#: resoconti.py:895
+#: resoconti.py:1019
 #, python-brace-format
 msgid "direzione {gradi} a sinistra"
 msgstr ""
 
-#: resoconti.py:897
+#: resoconti.py:1021
 #, python-brace-format
 msgid "direzione {gradi} a destra"
 msgstr ""
 
-#: resoconti.py:899
+#: resoconti.py:1023
 msgid "senza tempo"
 msgstr ""
 
 #. Traduttori: la riga della mira nella barra di stato: «Direzione 12,5 gradi a
 #. sinistra, alzo 45,0 gradi, potenza 63%, 24 secondi».
-#: resoconti.py:903
+#: resoconti.py:1027
 #, python-brace-format
 msgid "{direzione}, alzo {alzo}, potenza {potenza}, {tempo}"
 msgstr ""
@@ -1795,30 +1965,30 @@ msgstr ""
 #. Traduttori: un angolo con un decimale, nella barra di stato della mira, come
 #. «12,5 gradi» o «45,0 gradi».
 #. Traduttori: un angolo con i decimali, come «12,4 gradi».
-#: resoconti.py:912 testi.py:74
+#: resoconti.py:1036 testi.py:74
 #, python-brace-format
 msgid "{n} gradi"
 msgstr ""
 
 #. Traduttori: punti è come «1.230 punti».
-#: resoconti.py:926
+#: resoconti.py:1050
 #, python-brace-format
 msgid "Livello {livello}, {punti}"
 msgstr ""
 
 #. Traduttori: riserva, centri e su sono numeri: «Riserva 8, centri 4 su 10».
-#: resoconti.py:928
+#: resoconti.py:1052
 #, python-brace-format
 msgid "Riserva {riserva}, centri {centri} su {su}"
 msgstr ""
 
 #. Traduttori: n è il numero dei bersagli normali.
-#: resoconti.py:933
+#: resoconti.py:1057
 #, python-brace-format
 msgid "Bersagli in volo: {n} e il bonus"
 msgstr ""
 
-#: resoconti.py:935
+#: resoconti.py:1059
 #, python-brace-format
 msgid "Bersagli in volo: {n}"
 msgstr ""
@@ -3211,7 +3381,7 @@ msgstr ""
 msgid "Nessuna nota scritta per questa versione."
 msgstr ""
 
-#: gui/dialoghi.py:358 gui/finestra.py:1856
+#: gui/dialoghi.py:358 gui/finestra.py:1859
 msgid "Aggiornamento di Ciechino"
 msgstr ""
 
@@ -3354,108 +3524,108 @@ msgid ""
 "Aiuto."
 msgstr ""
 
-#: gui/finestra.py:358
+#: gui/finestra.py:361
 msgid "Partita"
 msgstr ""
 
-#: gui/finestra.py:362
+#: gui/finestra.py:365
 msgid "Barra di stato"
 msgstr ""
 
-#: gui/finestra.py:371
+#: gui/finestra.py:374
 msgid "Mira"
 msgstr ""
 
-#: gui/finestra.py:394
+#: gui/finestra.py:397
 msgid "&Partita"
 msgstr ""
 
-#: gui/finestra.py:395
+#: gui/finestra.py:398
 msgid "&Nuova partita"
 msgstr ""
 
-#: gui/finestra.py:396
+#: gui/finestra.py:399
 msgid "&Pausa"
 msgstr ""
 
-#: gui/finestra.py:398
+#: gui/finestra.py:401
 msgid "&Classifica"
 msgstr ""
 
-#: gui/finestra.py:399
+#: gui/finestra.py:402
 msgid "S&tatistiche"
 msgstr ""
 
-#: gui/finestra.py:401
+#: gui/finestra.py:404
 msgid "&Esci"
 msgstr ""
 
-#: gui/finestra.py:403
+#: gui/finestra.py:406
 msgid "&Impostazioni"
 msgstr ""
 
-#: gui/finestra.py:404
+#: gui/finestra.py:407
 msgid "&Volume..."
 msgstr ""
 
-#: gui/finestra.py:406
+#: gui/finestra.py:409
 msgid "Scheda &audio..."
 msgstr ""
 
-#: gui/finestra.py:407
+#: gui/finestra.py:410
 msgid "&Proiettile..."
 msgstr ""
 
-#: gui/finestra.py:408
+#: gui/finestra.py:411
 msgid "&Leggi i resoconti con la sintesi"
 msgstr ""
 
-#: gui/finestra.py:409
+#: gui/finestra.py:412
 msgid "L&ingua..."
 msgstr ""
 
-#: gui/finestra.py:411
+#: gui/finestra.py:414
 msgid "&Aiuto"
 msgstr ""
 
-#: gui/finestra.py:412
+#: gui/finestra.py:415
 msgid "&Guida ai comandi"
 msgstr ""
 
-#: gui/finestra.py:413
+#: gui/finestra.py:416
 msgid "&Manuale"
 msgstr ""
 
-#: gui/finestra.py:414
+#: gui/finestra.py:417
 msgid "&Novità"
 msgstr ""
 
-#: gui/finestra.py:415
+#: gui/finestra.py:418
 msgid "&Informazioni"
 msgstr ""
 
-#: gui/finestra.py:417
+#: gui/finestra.py:420
 msgid "&Ascolti..."
 msgstr ""
 
-#: gui/finestra.py:419
+#: gui/finestra.py:422
 msgid "&Offrimi un caffè..."
 msgstr ""
 
-#: gui/finestra.py:421
+#: gui/finestra.py:424
 msgid "&Entra al PUB, il gruppo di supporto..."
 msgstr ""
 
-#: gui/finestra.py:422
+#: gui/finestra.py:425
 msgid "&Chiedi aiuto al PUB..."
 msgstr ""
 
 #. Traduttori: il nome del tasto, come lo dice la guida.
-#: gui/finestra.py:430
+#: gui/finestra.py:433
 msgid "Spazio"
 msgstr ""
 
-#: gui/finestra.py:430
+#: gui/finestra.py:433
 msgid ""
 "comincia la partita e, mentre ascolti i bersagli, avvia la mira; nei "
 "livelli della palestra, dopo ogni tiro, fa ripartire la partita, che "
@@ -3464,115 +3634,115 @@ msgstr ""
 
 #. Traduttori: da qui, i tasti della mira manuale (D29), che muovono un valore
 #. finché li tieni giù.
-#: gui/finestra.py:433
+#: gui/finestra.py:436
 msgid "Frecce sinistra e destra"
 msgstr ""
 
-#: gui/finestra.py:433
+#: gui/finestra.py:436
 msgid ""
 "nella mira, col fuoco sulla Mira, muovono la direzione, finché le tieni "
 "giù"
 msgstr ""
 
-#: gui/finestra.py:434
+#: gui/finestra.py:437
 msgid "Frecce su e giù"
 msgstr ""
 
-#: gui/finestra.py:434
+#: gui/finestra.py:437
 msgid ""
 "nella mira, col fuoco sulla Mira, alzano e abbassano l'alzo, finché le "
 "tieni giù"
 msgstr ""
 
-#: gui/finestra.py:435
+#: gui/finestra.py:438
 msgid "Home e Fine"
 msgstr ""
 
-#: gui/finestra.py:435
+#: gui/finestra.py:438
 msgid ""
 "nella mira, col fuoco sulla Mira, abbassano e alzano la potenza, finché "
 "le tieni giù"
 msgstr ""
 
-#: gui/finestra.py:436
+#: gui/finestra.py:439
 msgid "Invio"
 msgstr ""
 
-#: gui/finestra.py:436
+#: gui/finestra.py:439
 msgid "nella mira fa partire il colpo coi tre valori di quel momento"
 msgstr ""
 
 #. Traduttori: Esc nella mira (D25); fuori dalla mira chiude le finestre
 #. interne, come sempre.
-#: gui/finestra.py:438
+#: gui/finestra.py:441
 msgid ""
 "durante la mira annulla il tiro: il colpo non parte, e il proiettile "
 "resta nella riserva; nelle finestre interne le chiude"
 msgstr ""
 
-#: gui/finestra.py:439
+#: gui/finestra.py:442
 msgid "porta il fuoco nella vista della partita"
 msgstr ""
 
 #. Traduttori: F6 durante la mira manuale (D29), dopo F5 o F7.
-#: gui/finestra.py:441
+#: gui/finestra.py:444
 msgid ""
 "durante la mira riporta il fuoco sulla Mira, dove le frecce, Home e Fine "
 "muovono i valori"
 msgstr ""
 
-#: gui/finestra.py:442
+#: gui/finestra.py:445
 msgid "porta il fuoco nella barra di stato"
 msgstr ""
 
-#: gui/finestra.py:467
+#: gui/finestra.py:470
 msgid "Maiusc"
 msgstr ""
 
-#: gui/finestra.py:473
+#: gui/finestra.py:476
 msgid "Guida ai comandi di Ciechino."
 msgstr ""
 
-#: gui/finestra.py:473
+#: gui/finestra.py:476
 msgid "I tasti fuori dai menu:"
 msgstr ""
 
 #. Traduttori: una riga della guida, come «F5: porta il fuoco nella vista della
 #. partita.».
-#: gui/finestra.py:476
+#: gui/finestra.py:479
 #, python-brace-format
 msgid "{tasto}: {cosa}."
 msgstr ""
 
-#: gui/finestra.py:479
+#: gui/finestra.py:482
 #, python-brace-format
 msgid "Il menu {menu}, con {n} comando:"
 msgid_plural "Il menu {menu}, con {n} comandi:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/finestra.py:482
+#: gui/finestra.py:485
 #, python-brace-format
 msgid "{voce}: {tasto}."
 msgstr ""
 
-#: gui/finestra.py:484
+#: gui/finestra.py:487
 #, python-brace-format
 msgid "{voce}: dal menu, senza tasto rapido."
 msgstr ""
 
 #. Traduttori: {data} è come «giovedì 19 novembre 2026».
-#: gui/finestra.py:493
+#: gui/finestra.py:496
 #, python-brace-format
 msgid "Oggi è {data}."
 msgstr ""
 
-#: gui/finestra.py:494
+#: gui/finestra.py:497
 msgid "Per cominciare una partita premi Spazio; F1 ti dice tutti i comandi."
 msgstr ""
 
 #. Traduttori: {file} è il percorso del resoconto del crash.
-#: gui/finestra.py:500
+#: gui/finestra.py:503
 #, python-brace-format
 msgid ""
 "La volta scorsa Ciechino si è chiuso per un errore grave, e il resoconto "
@@ -3582,12 +3752,12 @@ msgstr ""
 
 #. Traduttori: «Il record della classifica è di Gabry, con 12.340 punti, 3
 #. giorni fa.».
-#: gui/finestra.py:514
+#: gui/finestra.py:517
 #, python-brace-format
 msgid "Il record della classifica è di {nome}, con {punti}, {eta}."
 msgstr ""
 
-#: gui/finestra.py:534
+#: gui/finestra.py:537
 msgid ""
 "Non trovo una scheda audio che si apra: Ciechino funziona lo stesso, ma "
 "senza suono."
@@ -3595,30 +3765,30 @@ msgstr ""
 
 #. Traduttori: {scheda} è il dispositivo con l'interfaccia, come «Altoparlanti
 #. (Realtek(R) Audio), WASAPI».
-#: gui/finestra.py:540
+#: gui/finestra.py:543
 #, python-brace-format
 msgid "Il suono esce da {scheda}, con una latenza di {latenza}."
 msgstr ""
 
-#: gui/finestra.py:541
+#: gui/finestra.py:544
 #, python-brace-format
 msgid "{n} millesimo di secondo"
 msgid_plural "{n} millesimi di secondo"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/finestra.py:542
+#: gui/finestra.py:545
 #, python-brace-format
 msgid "Il suono esce da {scheda}."
 msgstr ""
 
-#: gui/finestra.py:549
+#: gui/finestra.py:552
 msgid "una scheda senza nome"
 msgstr ""
 
 #. Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4),
 #. WASAPI»: è sparita, e Ciechino suona sulla scelta automatica.
-#: gui/finestra.py:570
+#: gui/finestra.py:573
 #, python-brace-format
 msgid ""
 "La scheda audio scelta, {scheda}, non c'è: Ciechino suona su quella "
@@ -3627,14 +3797,14 @@ msgstr ""
 
 #. Traduttori: {scheda} è la scheda audio scelta, come «Cuffie (WH-1000XM4),
 #. WASAPI»; segue la frase che dice che il gioco è muto.
-#: gui/finestra.py:572
+#: gui/finestra.py:575
 #, python-brace-format
 msgid "La scheda audio scelta, {scheda}, non c'è."
 msgstr ""
 
 #. Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»:
 #. c'è, ma non si apre, e Ciechino suona sulla scelta automatica.
-#: gui/finestra.py:575
+#: gui/finestra.py:578
 #, python-brace-format
 msgid ""
 "La scheda audio scelta, {scheda}, non si apre: Ciechino suona su quella "
@@ -3643,104 +3813,104 @@ msgstr ""
 
 #. Traduttori: {scheda} è la scheda audio scelta, come «Realtek ASIO, ASIO»;
 #. segue la frase che dice che il gioco è muto.
-#: gui/finestra.py:577
+#: gui/finestra.py:580
 #, python-brace-format
 msgid "La scheda audio scelta, {scheda}, non si apre."
 msgstr ""
 
 #. Traduttori: {tipo} è il nome dell'errore, in inglese, {valore} la sua
 #. descrizione, {resoconto} dove sta il resoconto.
-#: gui/finestra.py:1145
+#: gui/finestra.py:1148
 #, python-brace-format
 msgid ""
 "Il comando si è interrotto per un errore imprevisto: {tipo}, {valore}. "
 "{resoconto}"
 msgstr ""
 
-#: gui/finestra.py:1146
+#: gui/finestra.py:1149
 msgid "Errore imprevisto"
 msgstr ""
 
-#: gui/finestra.py:1155
+#: gui/finestra.py:1158
 msgid ""
 "Le statistiche non si sono potute salvare: le ritroverai come erano "
 "all'ultimo salvataggio riuscito."
 msgstr ""
 
-#: gui/finestra.py:1163
+#: gui/finestra.py:1166
 msgid "Le impostazioni non si sono potute salvare: valgono fino all'uscita."
 msgstr ""
 
-#: gui/finestra.py:1176
+#: gui/finestra.py:1179
 msgid "Una partita è in corso: la abbandoni e ne cominci una nuova?"
 msgstr ""
 
-#: gui/finestra.py:1294
+#: gui/finestra.py:1297
 msgid "Il punteggio di questa partita non entra in classifica."
 msgstr ""
 
 #. Traduttori: {punti} è come «1.234 punti», {posizione} un numero.
-#: gui/finestra.py:1312
+#: gui/finestra.py:1315
 #, python-brace-format
 msgid "Con {punti} entri in classifica al posto {posizione}: scrivi il tuo nome."
 msgstr ""
 
-#: gui/finestra.py:1321
+#: gui/finestra.py:1324
 msgid "Il nome non è stato scritto: questa partita resta fuori dalla classifica."
 msgstr ""
 
-#: gui/finestra.py:1338
+#: gui/finestra.py:1341
 msgid "La classifica non si è potuta salvare: la voce nuova vale fino all'uscita."
 msgstr ""
 
-#: gui/finestra.py:1359
+#: gui/finestra.py:1362
 msgid "Classifica"
 msgstr ""
 
-#: gui/finestra.py:1363
+#: gui/finestra.py:1366
 msgid "Statistiche"
 msgstr ""
 
-#: gui/finestra.py:1385
+#: gui/finestra.py:1388
 #, python-brace-format
 msgid "Il volume resta {volume}."
 msgstr ""
 
-#: gui/finestra.py:1392
+#: gui/finestra.py:1395
 #, python-brace-format
 msgid "Il volume è {volume}."
 msgstr ""
 
 #. Traduttori: {errore} è il perché, come lo dice PortAudio, spesso in inglese.
-#: gui/finestra.py:1422
+#: gui/finestra.py:1425
 #, python-brace-format
 msgid ""
 "Non riesco a leggere l'elenco delle schede audio: {errore}. Resta la "
 "scelta automatica."
 msgstr ""
 
-#: gui/finestra.py:1427
+#: gui/finestra.py:1430
 msgid ""
 "Non ho potuto rileggere le schede audio: quelle accese da poco, come "
 "delle cuffie Bluetooth, possono mancare."
 msgstr ""
 
-#: gui/finestra.py:1440
+#: gui/finestra.py:1443
 msgid "La scelta della scheda audio non cambia."
 msgstr ""
 
-#: gui/finestra.py:1447
+#: gui/finestra.py:1450
 msgid "La scelta della scheda audio resta quella di prima."
 msgstr ""
 
-#: gui/finestra.py:1527
+#: gui/finestra.py:1530
 msgid "Ciechino suona sulla scheda automatica, quella di Windows."
 msgstr ""
 
 #. Traduttori: {forma} e {prima} sono nomi di forme d'onda, come «seno» o «sega
 #. morbida»: {forma} vale dalla prossima partita, {prima} è quella della
 #. partita in corso.
-#: gui/finestra.py:1556
+#: gui/finestra.py:1559
 #, python-brace-format
 msgid ""
 "Il proiettile suonerà in {forma} dalla prossima partita: quella in corso "
@@ -3749,152 +3919,152 @@ msgstr ""
 
 #. Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega
 #. morbida».
-#: gui/finestra.py:1586
+#: gui/finestra.py:1589
 #, python-brace-format
 msgid "Il proiettile resta in {forma}."
 msgstr ""
 
 #. Traduttori: {forma} è il nome di una forma d'onda, come «seno» o «sega
 #. morbida».
-#: gui/finestra.py:1598
+#: gui/finestra.py:1601
 #, python-brace-format
 msgid "Il proiettile adesso suona in {forma}: lo senti dalla prossima partita."
 msgstr ""
 
-#: gui/finestra.py:1634
+#: gui/finestra.py:1637
 msgid "La sintesi legge i resoconti della partita."
 msgstr ""
 
-#: gui/finestra.py:1637
+#: gui/finestra.py:1640
 msgid "La sintesi non legge più i resoconti della partita."
 msgstr ""
 
 #. Traduttori: una riga dell'elenco delle lingue, come «italiano, codice it».
-#: gui/finestra.py:1651
+#: gui/finestra.py:1654
 #, python-brace-format
 msgid "{nome}, codice {codice}"
 msgstr ""
 
-#: gui/finestra.py:1660
+#: gui/finestra.py:1663
 msgid "La lingua non cambia."
 msgstr ""
 
-#: gui/finestra.py:1666
+#: gui/finestra.py:1669
 #, python-brace-format
 msgid ""
 "La lingua resta {lingua}: per ora Ciechino parla solo questa, e le altre "
 "arriveranno con le traduzioni."
 msgstr ""
 
-#: gui/finestra.py:1673
+#: gui/finestra.py:1676
 #, python-brace-format
 msgid "La lingua resta {lingua}."
 msgstr ""
 
-#: gui/finestra.py:1678
+#: gui/finestra.py:1681
 #, python-brace-format
 msgid "La lingua sarà {lingua} dal prossimo avvio di Ciechino."
 msgstr ""
 
-#: gui/finestra.py:1680
+#: gui/finestra.py:1683
 msgid "Vuoi riaprire Ciechino adesso, per usare subito la lingua nuova?"
 msgstr ""
 
-#: gui/finestra.py:1697
+#: gui/finestra.py:1700
 #, python-brace-format
 msgid ""
 "Il manuale non c'è: dovrebbe essere il file {percorso}. Reinstallare "
 "Ciechino lo rimette al suo posto."
 msgstr ""
 
-#: gui/finestra.py:1704
+#: gui/finestra.py:1707
 #, python-brace-format
 msgid "Il manuale non si apre nel browser: {errore}. È il file {percorso}."
 msgstr ""
 
-#: gui/finestra.py:1708
+#: gui/finestra.py:1711
 msgid "Il manuale si apre nel browser."
 msgstr ""
 
-#: gui/finestra.py:1718
+#: gui/finestra.py:1721
 #, python-brace-format
 msgid "Il file delle novità non si può leggere: {errore}."
 msgstr ""
 
-#: gui/finestra.py:1722
+#: gui/finestra.py:1725
 msgid "Il file delle novità è vuoto."
 msgstr ""
 
-#: gui/finestra.py:1737
+#: gui/finestra.py:1740
 msgid "Grazie se vorrai offrire un caffè all'autore."
 msgstr ""
 
-#: gui/finestra.py:1752
+#: gui/finestra.py:1755
 msgid "La mail d'iscrizione al PUB è pronta: spediscila tu."
 msgstr ""
 
-#: gui/finestra.py:1752
+#: gui/finestra.py:1755
 msgid "Entra al PUB: niente di preparato."
 msgstr ""
 
-#: gui/finestra.py:1784
+#: gui/finestra.py:1787
 #, python-brace-format
 msgid "Non riesco a scrivere il file dei registri: {errore}."
 msgstr ""
 
-#: gui/finestra.py:1789
+#: gui/finestra.py:1792
 msgid "La mail d'aiuto al PUB è pronta: scrivi la domanda e spediscila tu."
 msgstr ""
 
-#: gui/finestra.py:1789
+#: gui/finestra.py:1792
 msgid "Chiedi aiuto al PUB: niente di preparato."
 msgstr ""
 
-#: gui/finestra.py:1833
+#: gui/finestra.py:1836
 #, python-brace-format
 msgid ""
 "Scarico Ciechino {versione}: quando è pronto, Ciechino si chiude per "
 "installarlo, abbandonando la partita in corso, e si riapre da solo."
 msgstr ""
 
-#: gui/finestra.py:1837
+#: gui/finestra.py:1840
 #, python-brace-format
 msgid ""
 "La proposta di Ciechino {versione} è scaduta: te la ripropongo al "
 "prossimo avvio."
 msgstr ""
 
-#: gui/finestra.py:1840
+#: gui/finestra.py:1843
 #, python-brace-format
 msgid "Ciechino {versione} può aspettare: te lo ripropongo al prossimo avvio."
 msgstr ""
 
 #. Traduttori: {percentuale} è come 45%.
-#: gui/finestra.py:1864
+#: gui/finestra.py:1867
 #, python-brace-format
 msgid "Aggiornamento scaricato al {percentuale}."
 msgstr ""
 
 #. Traduttori: {mega} è come 3,2.
-#: gui/finestra.py:1867
+#: gui/finestra.py:1870
 #, python-brace-format
 msgid "Aggiornamento: {mega} MB scaricati."
 msgstr ""
 
-#: gui/finestra.py:1902
+#: gui/finestra.py:1905
 msgid ""
 "L'aggiornamento non si è installato: Ciechino doveva chiudersi entro 30 "
 "secondi, ma un messaggio è rimasto aperto. Continui con questa versione, "
 "e te lo ripropongo al prossimo avvio."
 msgstr ""
 
-#: gui/finestra.py:1986
+#: gui/finestra.py:1989
 msgid ""
 "La scheda audio non risponde più, forse si è staccata: Ciechino continua "
 "senza suono. Per riavere il suono scegli la scheda con Ctrl+Maiusc+X."
 msgstr ""
 
-#: gui/finestra.py:2032
+#: gui/finestra.py:2035
 msgid "Una partita è in corso: se esci, la partita si abbandona. Esci lo stesso?"
 msgstr ""
 
